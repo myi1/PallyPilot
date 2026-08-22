@@ -89,6 +89,24 @@ B.gear = {
   { slot = "Everything else", target = "Epic (ilvl 213+) in every slot with Strength — also completes the Epic +5% multiplier" },
 }
 
+-- Baked talent templates: target rank per (tab, index). Paladin tabs are
+-- 1=Holy, 2=Protection, 3=Retribution. Ranks are in talent-index order (tier by
+-- tier), taken from the top-rated EbonholdHub build. Verify names with
+-- /pp talents preview before trusting the apply — if Ebonhold reordered its
+-- trees, indices shift and we correct the arrays.
+B.talentTemplates = {
+  ["prot-ret"] = {
+    name = "Prot/Ret Solo Hybrid (44/49)",
+    total = 93,
+    tabs = {
+      [1] = {},
+      [2] = { 0,5,2,0,5,0,3,5,0,0,0,1,5,2,3,0,1,3,2,3,3,1,0,0,0,0 },
+      [3] = { 0,5,2,3,2,1,5,0,2,2,3,3,0,1,3,2,2,1,3,0,0,3,1,3,2,0 },
+    },
+  },
+}
+B.defaultTemplate = "prot-ret"
+
 -- Echoes that FarmQueue should treat as build targets worth farming Tomes for
 -- (locked core + S-tier). Returns a de-duplicated array of names.
 function B.FarmTargets()

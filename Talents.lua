@@ -88,6 +88,53 @@ function T.Apply(silent)
   end
 end
 
+-- Load a baked recommended template into the saved slot (then Apply spends it).
+function T.Recommend(key)
+  key = (key ~= "" and key) or PP.Build.defaultTemplate
+  local tpl = PP.Build.talentTemplates and PP.Build.talentTemplates[key]
+  if not tpl then
+    PP.print("Unknown template '" .. tostring(key) .. "'. Available: prot-ret.")
+    return
+  end
+  local snap = { tabs = {}, names = {}, total = tpl.total or 0, source = tpl.name }
+  for tab = 1, 3 do
+    snap.tabs[tab] = {}
+    for i, rank in ipairs(tpl.tabs[tab] or {}) do snap.tabs[tab][i] = rank end
+  end
+  PP.db.talentBuild = snap
+  PP.print("Loaded recommended build: " .. GOLD .. tpl.name .. R .. ". Run " ..
+    GOLD .. "/pp talents preview" .. R .. " to sanity-check, then " .. GOLD ..
+    "/pp talents apply" .. R .. ".")
+end
+
+-- Print the saved build's non-zero targets with the LIVE in-game talent names,
+-- so you can confirm the indices line up before spending points.
+function T.Preview()
+  local b = PP.db and PP.db.talentBuild
+  if not b then PP.print("No build loaded. Try /pp talents recommend.") return end
+  PP.print("Build preview" .. (b.source and (" — " .. b.source) or "") .. ":")
+  local tabName = { "Holy", "Protection", "Retribution" }
+  for tab = 1, GetNumTalentTabs() do
+    local targets = b.tabs[tab]
+    if targets then
+      local pts = 0
+      for _, r in pairs(targets) do pts = pts + r end
+      if pts > 0 then
+        DEFAULT_CHAT_FRAME:AddMessage(GOLD .. (tabName[tab] or ("Tab " .. tab)) .. " (" .. pts .. ")" .. R)
+        for i = 1, GetNumTalents(tab) do
+          local want = targets[i] or 0
+          if want > 0 then
+            local name, _, _, _, rank, maxRank = GetTalentInfo(tab, i)
+            DEFAULT_CHAT_FRAME:AddMessage("   " .. tostring(name) .. "  " ..
+              (rank or 0) .. "/" .. want .. (maxRank and (" (max " .. maxRank .. ")") or ""))
+          end
+        end
+      end
+    end
+  end
+  PP.print("If those names don't look like a Prot/Ret build, the tree indices differ — tell me and I'll fix the template.")
+end
+
 -- Status / next-to-learn readout.
 function T.Status()
   if not (PP.db and PP.db.talentBuild) then
@@ -117,17 +164,20 @@ end)
 -- Slash sub-command dispatch, called from Core.
 function T.Command(arg)
   arg = string.lower(arg or "")
-  if arg == "save" then T.Save()
-  elseif arg == "apply" then T.Apply(false)
-  elseif arg == "auto" then
+  local sub, rest = string.match(arg, "^(%S*)%s*(.-)$")
+  if sub == "save" then T.Save()
+  elseif sub == "recommend" or sub == "rec" then T.Recommend(rest)
+  elseif sub == "preview" then T.Preview()
+  elseif sub == "apply" then T.Apply(false)
+  elseif sub == "auto" then
     PP.db.options.autoTalents = not PP.db.options.autoTalents
     PP.print("Auto-apply talents on level-up: " .. (PP.db.options.autoTalents and "ON" or "OFF")
-      .. (PP.db.options.autoTalents and (PP.db.talentBuild and "" or " (save a build first!)") or ""))
-  elseif arg == "clear" then
+      .. (PP.db.options.autoTalents and (PP.db.talentBuild and "" or " (save/recommend a build first!)") or ""))
+  elseif sub == "clear" then
     PP.db.talentBuild = nil
     PP.print("Saved talent build cleared.")
   else
     T.Status()
-    PP.print(GOLD .. "/pp talents save|apply|auto|clear" .. R)
+    PP.print(GOLD .. "/pp talents recommend|preview|apply|save|auto|clear" .. R)
   end
 end
