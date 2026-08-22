@@ -93,7 +93,7 @@ function T.Apply(silent)
   if not silent then
     PP.print("Applied build: spent " .. GOLD .. spent .. R .. " point" .. (spent == 1 and "" or "s")
       .. ". Unspent now: " .. UnspentPoints() .. "."
-      .. (spent == 0 and " |cffff5050(LearnTalent appears blocked — tell me and I'll add a guided click-mode.)|r" or ""))
+      .. (spent == 0 and " |cffff5050LearnTalent is blocked on this client — use |r|cffe0b352/pp talents guide|r|cffff5050 to click it in yourself (auto-advances).|r" or ""))
   end
 end
 
@@ -146,6 +146,144 @@ function T.Preview()
   end
 end
 
+-- ============ GUIDED CLICK MODE ============
+-- LearnTalent is protected on this client (throttled after a few calls), so we
+-- guide the player's own clicks instead. Names/indices resolved live; the next
+-- talent needing a point (lowest tier first) is highlighted until the build is done.
+
+local guideFrame, guideText, glow
+
+-- The next talent that still needs a point, in tier order (talent index is
+-- tier-ordered), respecting the live tree so prereqs are naturally satisfied.
+local function NextNeeded()
+  local wants = PP.db and PP.db.talentBuild and PP.db.talentBuild.talents
+  if not wants then return nil end
+  local wantLower = {}
+  for name, rank in pairs(wants) do wantLower[string.lower(name)] = rank end
+  for tab = 1, GetNumTalentTabs() do
+    for i = 1, GetNumTalents(tab) do
+      local name, _, _, _, rank, maxRank = GetTalentInfo(tab, i)
+      local want = name and wantLower[string.lower(name)]
+      if want then
+        local target = math.min(want, maxRank or 0)
+        if (rank or 0) < target then
+          return { tab = tab, index = i, name = name, rank = rank or 0, target = target }
+        end
+      end
+    end
+  end
+  return nil
+end
+
+local function Remaining()
+  local wants = PP.db and PP.db.talentBuild and PP.db.talentBuild.talents
+  if not wants then return 0 end
+  local wantLower, left = {}, 0
+  for name, rank in pairs(wants) do wantLower[string.lower(name)] = rank end
+  for tab = 1, GetNumTalentTabs() do
+    for i = 1, GetNumTalents(tab) do
+      local name, _, _, _, rank, maxRank = GetTalentInfo(tab, i)
+      local want = name and wantLower[string.lower(name)]
+      if want then left = left + math.max(0, math.min(want, maxRank or 0) - (rank or 0)) end
+    end
+  end
+  return left
+end
+
+local TAB_NAME = { "Holy", "Protection", "Retribution" }
+
+local function HideGlow()
+  if glow then glow:Hide(); glow:ClearAllPoints() end
+end
+
+-- Best-effort: glow the Blizzard talent button for this talent, if that tab is shown.
+local function GlowButton(step)
+  if not glow then
+    glow = CreateFrame("Frame", "PallyPilotTalentGlow", UIParent)
+    glow:SetFrameStrata("HIGH")
+    local t = glow:CreateTexture(nil, "OVERLAY")
+    t:SetAllPoints(glow)
+    t:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    t:SetBlendMode("ADD"); t:SetVertexColor(1, 0.85, 0.2)
+    glow.tex = t
+  end
+  HideGlow()
+  local btn = _G["PlayerTalentFrameTalent" .. step.index]
+  -- Only valid if the talent frame is open AND showing this step's tab.
+  local shownTab = PlayerTalentFrame and PlayerTalentFrame.selectedPlayerSpec
+  if btn and btn:IsVisible() then
+    -- Confirm the button currently maps to our talent (name match via tooltip is
+    -- costly; rely on tab check where available, else just glow by index).
+    glow:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    glow:SetWidth((btn:GetWidth() or 36) + 16)
+    glow:SetHeight((btn:GetHeight() or 36) + 16)
+    glow:Show()
+  end
+end
+
+local function GuideUpdate()
+  if not (PP.db and PP.db.talentBuild) then return end
+  local step = NextNeeded()
+  if not step then
+    guideText:SetText("|cff8aa96aBuild complete!|r")
+    HideGlow()
+    PP.print("Guided talents: build complete.")
+    if guideFrame then guideFrame:UnregisterEvent("CHARACTER_POINTS_CHANGED") end
+    guideFrame.done = true
+    return
+  end
+  guideText:SetText("Click |cfff6d888" .. step.name .. "|r\n" ..
+    "|cffb4a586" .. (TAB_NAME[step.tab] or "?") .. " tab · " ..
+    step.rank .. "/" .. step.target .. "|r\n|cffb4a586" .. Remaining() .. " points left in build|r")
+  GlowButton(step)
+end
+
+function T.Guide()
+  if not (PP.db and PP.db.talentBuild) then
+    PP.print("Load a build first: /pp talents recommend (or /pp talents save).")
+    return
+  end
+  if not guideFrame then
+    guideFrame = CreateFrame("Frame", "PallyPilotTalentGuide", UIParent)
+    guideFrame:SetWidth(230); guideFrame:SetHeight(84)
+    guideFrame:SetPoint("TOP", UIParent, "TOP", 0, -140)
+    guideFrame:SetMovable(true); guideFrame:EnableMouse(true); guideFrame:RegisterForDrag("LeftButton")
+    guideFrame:SetScript("OnDragStart", function(s) s:StartMoving() end)
+    guideFrame:SetScript("OnDragStop", function(s) s:StopMovingOrSizing() end)
+    guideFrame:SetBackdrop({
+      bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+      edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+      tile = true, tileSize = 16, edgeSize = 14,
+      insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+    guideFrame:SetBackdropColor(0, 0, 0, 0.85)
+    local head = guideFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    head:SetPoint("TOP", guideFrame, "TOP", 0, -8)
+    head:SetText("|cffe0b352PallyPilot — talent guide|r")
+    guideText = guideFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    guideText:SetPoint("TOP", head, "BOTTOM", 0, -6)
+    guideText:SetWidth(210); guideText:SetJustifyH("CENTER")
+    local close = CreateFrame("Button", nil, guideFrame, "UIPanelCloseButton")
+    close:SetScale(0.8); close:SetPoint("TOPRIGHT", guideFrame, "TOPRIGHT", 2, 2)
+    close:SetScript("OnClick", function() T.GuideStop() end)
+    guideFrame:SetScript("OnEvent", function() PP.safeCall(GuideUpdate) end)
+  end
+  guideFrame.done = nil
+  guideFrame:RegisterEvent("CHARACTER_POINTS_CHANGED")
+  guideFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
+  guideFrame:Show()
+  GuideUpdate()
+  PP.print("Guided talents on — open your talent pane and click the highlighted talent. It advances as you spend.")
+end
+
+function T.GuideStop()
+  if guideFrame then
+    guideFrame:UnregisterEvent("CHARACTER_POINTS_CHANGED")
+    guideFrame:UnregisterEvent("PLAYER_TALENT_UPDATE")
+    guideFrame:Hide()
+  end
+  HideGlow()
+end
+
 -- Status / next-to-learn readout.
 function T.Status()
   if not (PP.db and PP.db.talentBuild) then
@@ -180,6 +318,8 @@ function T.Command(arg)
   elseif sub == "recommend" or sub == "rec" then T.Recommend(rest)
   elseif sub == "preview" then T.Preview()
   elseif sub == "apply" then T.Apply(false)
+  elseif sub == "guide" then T.Guide()
+  elseif sub == "stop" then T.GuideStop()
   elseif sub == "auto" then
     PP.db.options.autoTalents = not PP.db.options.autoTalents
     PP.print("Auto-apply talents on level-up: " .. (PP.db.options.autoTalents and "ON" or "OFF")
@@ -189,6 +329,6 @@ function T.Command(arg)
     PP.print("Saved talent build cleared.")
   else
     T.Status()
-    PP.print(GOLD .. "/pp talents recommend|preview|apply|save|auto|clear" .. R)
+    PP.print(GOLD .. "/pp talents recommend|preview|guide|apply|save|auto|clear" .. R)
   end
 end
