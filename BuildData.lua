@@ -19,15 +19,20 @@ B.statNote = "Strength is king: it gives Attack Power, and AP converts to Spell 
 B.enchants = "Weapons: Flurry + Vulnerability. Talent flex points into Divine "
   .. "Storm for extra Arcane Cadence triggers."
 
--- Seal & rotation (asked a lot; not obvious from the echo list).
-B.seal = "Seal of Corruption / Seal of Vengeance (the stacking-DoT seal)."
+-- Seal, blessing & rotation (asked a lot; not obvious from the echo list).
+B.seal = "Seal of Vengeance (Alliance) / Seal of Corruption (Horde) — the stacking-DoT seal."
 B.sealWhy = "Ebonhold's core echoes are DoT-centric — Pandemic extends your DoTs, "
-  .. "Contagion/Accelerated Decay spread and speed them — and the Vengeance/Corruption "
-  .. "seal IS a stacking DoT, so those echoes multiply it. Use Seal of Command instead "
-  .. "only for pure trash-cleave packs where nothing lives long enough to stack the DoT."
-B.rotation = "Judgement on cooldown (it's an echo TRIGGER — keep it rolling) > "
-  .. "Crusader Strike > Divine Storm (AoE/cleave) > Consecration for packs. Keep the "
-  .. "seal DoT applied on anything that lives, and let Pandemic/Contagion do the rest."
+  .. "Contagion/Accelerated Decay spread and speed them — and Vengeance/Corruption IS a "
+  .. "stacking DoT (Holy Vengeance, 5 stacks), so those echoes multiply it. Swap to Seal of "
+  .. "Command only for pure trash-cleave where nothing lives long enough to stack the DoT."
+B.blessing = "Blessing of Kings (use the Greater version with a Symbol of Kings)."
+B.blessingWhy = "+10% to all stats = +10% Strength (AP -> SP, your damage) AND +10% Stamina "
+  .. "(survival) in one buff. Beats Might (AP only) and Sanctuary (3% DR only) for soloing."
+B.rotation = "Keep Seal of Vengeance stacked. Priority: Judgement (on CD — mana via "
+  .. "Judgements of the Wise, and it TRIGGERS your echoes) > Crusader Strike > Divine Storm > "
+  .. "Consecration > Holy Wrath (huge vs undead/demons — all of Naxx) > Exorcism when The Art "
+  .. "of War procs (instant, free) > Hammer of Wrath below 20% HP. For packs, lead with Divine "
+  .. "Storm + Consecration + Holy Wrath."
 B.talents = "≈ 44 Protection / 49 Retribution hybrid for soloing (survivability "
   .. "under full Ret damage). Pure-damage farmers drop the Prot side once the "
   .. "Soul Ash tree carries survival."
@@ -124,7 +129,7 @@ B.talentTemplates = {
       -- Protection survival
       ["Divinity"] = 5, ["Divine Strength"] = 5, ["Stoicism"] = 3,
       ["Guardian's Favor"] = 2, ["Anticipation"] = 5, ["Improved Righteous Fury"] = 3,
-      ["Toughness"] = 5, ["Blessing of Sanctuary"] = 1, ["Reckoning"] = 5,
+      ["Toughness"] = 5, ["Reckoning"] = 5,
       ["Sacred Duty"] = 2, ["Ardent Defender"] = 3, ["Redoubt"] = 3,
       ["Combat Expertise"] = 3, ["Touched by the Light"] = 3, ["Shield of the Templar"] = 3,
       ["Judgements of the Just"] = 2, ["Spiritual Attunement"] = 2,
