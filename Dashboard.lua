@@ -10,7 +10,7 @@ local EMBER = "|cffd9694a"
 local VERD = "|cff8aa96a"
 local R = "|r"
 
-local frame, fs
+local frame, fs, content
 
 local function H(t) return "\n" .. GOLD .. string.upper(t) .. R .. "\n" end
 local function line(t) return t .. "\n" end
@@ -58,7 +58,9 @@ local function BuildText()
 end
 
 function D.Refresh()
-  if fs then fs:SetText(BuildText()) end
+  if not fs then return end
+  fs:SetText(BuildText())
+  if content then content:SetHeight((fs:GetHeight() or 600) + 20) end
 end
 
 function D.Init()
@@ -97,11 +99,23 @@ function D.Init()
   farmBtn:SetText("Missing tomes to farm")
   farmBtn:SetScript("OnClick", function() if PP.FarmQueue.Toggle then PP.FarmQueue.Toggle() end end)
 
+  local saveT = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  saveT:SetWidth(95); saveT:SetHeight(22)
+  saveT:SetPoint("LEFT", farmBtn, "RIGHT", 8, 0)
+  saveT:SetText("Save talents")
+  saveT:SetScript("OnClick", function() if PP.Talents then PP.Talents.Save() end end)
+
+  local applyT = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  applyT:SetWidth(95); applyT:SetHeight(22)
+  applyT:SetPoint("LEFT", saveT, "RIGHT", 6, 0)
+  applyT:SetText("Apply build")
+  applyT:SetScript("OnClick", function() if PP.Talents then PP.Talents.Apply(false) end end)
+
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -72)
   scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
-  local content = CreateFrame("Frame", nil, scroll)
+  content = CreateFrame("Frame", nil, scroll)
   content:SetWidth(420); content:SetHeight(10)
   scroll:SetScrollChild(content)
 
@@ -110,13 +124,6 @@ function D.Init()
   fs:SetWidth(416); fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
   fs:SetSpacing(2)
   fs:SetText("")
-  fs:SetScript("OnShow", function() D.Refresh() end)
-
-  -- keep content height in sync so the scrollbar works
-  content:SetScript("OnUpdate", function(self)
-    local h = fs:GetStringHeight() + 10
-    if math.abs((self:GetHeight() or 0) - h) > 2 then self:SetHeight(h) end
-  end)
 
   D.Refresh()
   frame:Hide()

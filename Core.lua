@@ -7,7 +7,7 @@ local PP = PallyPilot
 local DB_VERSION = 1
 local DEFAULTS = {
   version = DB_VERSION,
-  options = { winPos = nil, autoDraw = true },
+  options = { winPos = nil, autoDraw = true, autoTalents = false },
 }
 
 local function CopyDefaults(src, dst)
@@ -93,7 +93,9 @@ SlashCmdList["PALLYPILOT"] = function(line)
   elseif cmd == "draw" then
     PP.db.options.autoDraw = not PP.db.options.autoDraw
     PP.print("Draw helper " .. (PP.db.options.autoDraw and "ON" or "OFF"))
+  elseif cmd == "talents" then
+    if PP.Talents and PP.Talents.Command then PP.Talents.Command(arg) end
   else
-    PP.print("/pp (dashboard) | /pp farm (missing tomes) | /pp draw (toggle draw helper) | /pp echoscan (discover the echo-select UI)")
+    PP.print("/pp (dashboard) | /pp farm | /pp talents save|apply|auto | /pp draw | /pp echoscan")
   end
 end
