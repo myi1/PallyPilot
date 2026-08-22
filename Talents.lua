@@ -33,6 +33,94 @@ local function LiveIndex()
   return idx
 end
 
+local function PointsInTab(tab)
+  local n = 0
+  for i = 1, GetNumTalents(tab) do
+    local _, _, _, _, rank = GetTalentInfo(tab, i)
+    n = n + (rank or 0)
+  end
+  return n
+end
+
+-- Priority when points are scarce: Retribution first (fastest solo clears),
+-- then Protection survival, then Holy.
+local function TreeRank(tab)
+  if tab == 3 then return 1 elseif tab == 2 then return 2 else return 3 end
+end
+
+-- All template talents still under target, with live tree info, sorted by
+-- priority: tree, then tier, then column (so it's always tier-legal + best-first).
+local function PlannedSteps()
+  local wants = PP.db and PP.db.talentBuild and PP.db.talentBuild.talents
+  if not wants then return {} end
+  local wl = {}
+  for name, rank in pairs(wants) do wl[string.lower(name)] = rank end
+  local steps = {}
+  for tab = 1, GetNumTalentTabs() do
+    for i = 1, GetNumTalents(tab) do
+      local name, _, tier, column, rank, maxRank = GetTalentInfo(tab, i)
+      local want = name and wl[string.lower(name)]
+      if want then
+        local target = math.min(want, maxRank or 0)
+        if (rank or 0) < target then
+          steps[#steps + 1] = { tab = tab, index = i, name = name,
+            tier = tier or 1, column = column or 1, rank = rank or 0, target = target }
+        end
+      end
+    end
+  end
+  table.sort(steps, function(a, b)
+    local ra, rb = TreeRank(a.tab), TreeRank(b.tab)
+    if ra ~= rb then return ra < rb end
+    if a.tier ~= b.tier then return a.tier < b.tier end
+    return a.column < b.column
+  end)
+  return steps
+end
+
+local function TalentAt(tab, tier, column)
+  for i = 1, GetNumTalents(tab) do
+    local _, _, t, c = GetTalentInfo(tab, i)
+    if t == tier and c == column then return i end
+  end
+end
+
+-- Resolve the actual talent to click to progress toward (tab,index): if an
+-- arrow prerequisite isn't satisfied, walk to that prerequisite (recursively).
+local function ResolveClickable(tab, index, depth)
+  depth = depth or 0
+  if depth > 8 or not GetTalentPrereqs then return tab, index end
+  local reqTier, reqColumn, isLearnable = GetTalentPrereqs(tab, index)
+  if reqTier and reqColumn and isLearnable == false then
+    local pi = TalentAt(tab, reqTier, reqColumn)
+    if pi then return ResolveClickable(tab, pi, depth + 1) end
+  end
+  return tab, index
+end
+
+-- The next talent to actually CLICK: highest-priority template step whose tier
+-- is unlocked, resolved down its prerequisite arrows to a takeable talent.
+local function NextLearnable()
+  local steps = PlannedSteps()
+  local pts = {}
+  for _, s in ipairs(steps) do
+    if not pts[s.tab] then pts[s.tab] = PointsInTab(s.tab) end
+    if pts[s.tab] >= 5 * (s.tier - 1) then
+      local ctab, cindex = ResolveClickable(s.tab, s.index)
+      local name, _, _, _, rank, maxRank = GetTalentInfo(ctab, cindex)
+      -- If we detoured to a prereq, target is its max (arrows need full rank);
+      -- otherwise the template's target.
+      local isPrereq = (ctab ~= s.tab or cindex ~= s.index)
+      local target = isPrereq and (maxRank or 1) or s.target
+      if (rank or 0) < target then
+        return { tab = ctab, index = cindex, name = name, rank = rank or 0,
+          target = target, prereq = isPrereq and s.name or nil }, steps
+      end
+    end
+  end
+  return steps[1], steps
+end
+
 -- A saved build is a name -> desired-rank map (order/index proof).
 -- Snapshot current talents into that shape.
 function T.Save()
@@ -60,34 +148,22 @@ function T.Apply(silent)
     if not silent then PP.print("Can't change talents in combat.") end
     return
   end
-  local wants = PP.db.talentBuild.talents or {}
   local spent, blocked = 0, 0
-  -- Multi-pass: one LearnTalent attempt per under-target talent per pass. Do
-  -- NOT gate on GetUnspentTalentPoints (unreliable on this client); instead
-  -- stop when a whole pass changes no rank (out of points OR fully applied).
-  local changed = true
+  -- Spend in priority order (Ret-first, tier-legal, prereq-resolved), one point
+  -- at a time, until nothing changes (out of points or blocked by protection).
   local guard = 0
-  while changed and guard < 400 do
-    changed = false
+  while guard < 400 do
     guard = guard + 1
-    local live = LiveIndex()  -- ranks/maxrank refresh as we spend
-    for name, want in pairs(wants) do
-      local loc = live[string.lower(name)]
-      if loc then
-        local _, _, _, _, rank = GetTalentInfo(loc.tab, loc.index)
-        local target = math.min(want, loc.maxRank)
-        if (rank or 0) < target then
-          local before = rank or 0
-          local ok = pcall(LearnTalent, loc.tab, loc.index)
-          local _, _, _, _, after = GetTalentInfo(loc.tab, loc.index)
-          if (after or 0) > before then
-            spent = spent + ((after or 0) - before)
-            changed = true
-          elseif not ok then
-            blocked = blocked + 1
-          end
-        end
-      end
+    local step = NextLearnable()
+    if not step then break end
+    local before = step.rank
+    local ok = pcall(LearnTalent, step.tab, step.index)
+    local _, _, _, _, after = GetTalentInfo(step.tab, step.index)
+    if (after or 0) > before then
+      spent = spent + ((after or 0) - before)
+    else
+      if not ok then blocked = blocked + 1 end
+      break -- no progress: out of points or blocked
     end
   end
   if not silent then
@@ -153,40 +229,9 @@ end
 
 local guideFrame, guideText, glow
 
--- The next talent that still needs a point, in tier order (talent index is
--- tier-ordered), respecting the live tree so prereqs are naturally satisfied.
-local function NextNeeded()
-  local wants = PP.db and PP.db.talentBuild and PP.db.talentBuild.talents
-  if not wants then return nil end
-  local wantLower = {}
-  for name, rank in pairs(wants) do wantLower[string.lower(name)] = rank end
-  for tab = 1, GetNumTalentTabs() do
-    for i = 1, GetNumTalents(tab) do
-      local name, _, _, _, rank, maxRank = GetTalentInfo(tab, i)
-      local want = name and wantLower[string.lower(name)]
-      if want then
-        local target = math.min(want, maxRank or 0)
-        if (rank or 0) < target then
-          return { tab = tab, index = i, name = name, rank = rank or 0, target = target }
-        end
-      end
-    end
-  end
-  return nil
-end
-
 local function Remaining()
-  local wants = PP.db and PP.db.talentBuild and PP.db.talentBuild.talents
-  if not wants then return 0 end
-  local wantLower, left = {}, 0
-  for name, rank in pairs(wants) do wantLower[string.lower(name)] = rank end
-  for tab = 1, GetNumTalentTabs() do
-    for i = 1, GetNumTalents(tab) do
-      local name, _, _, _, rank, maxRank = GetTalentInfo(tab, i)
-      local want = name and wantLower[string.lower(name)]
-      if want then left = left + math.max(0, math.min(want, maxRank or 0) - (rank or 0)) end
-    end
-  end
+  local left = 0
+  for _, s in ipairs(PlannedSteps()) do left = left + (s.target - s.rank) end
   return left
 end
 
@@ -223,7 +268,7 @@ end
 
 local function GuideUpdate()
   if not (PP.db and PP.db.talentBuild) then return end
-  local step = NextNeeded()
+  local step = NextLearnable()
   if not step then
     guideText:SetText("|cff8aa96aBuild complete!|r")
     HideGlow()
@@ -232,9 +277,12 @@ local function GuideUpdate()
     guideFrame.done = true
     return
   end
-  guideText:SetText("Click |cfff6d888" .. step.name .. "|r\n" ..
+  local prereqLine = step.prereq
+    and ("\n|cffd9694aprereq for " .. step.prereq .. "|r") or ""
+  guideText:SetText("Click |cfff6d888" .. tostring(step.name) .. "|r\n" ..
     "|cffb4a586" .. (TAB_NAME[step.tab] or "?") .. " tab · " ..
-    step.rank .. "/" .. step.target .. "|r\n|cffb4a586" .. Remaining() .. " points left in build|r")
+    step.rank .. "/" .. step.target .. "|r" .. prereqLine ..
+    "\n|cffb4a586" .. Remaining() .. " points left in build|r")
   GlowButton(step)
 end
 
@@ -245,7 +293,7 @@ function T.Guide()
   end
   if not guideFrame then
     guideFrame = CreateFrame("Frame", "PallyPilotTalentGuide", UIParent)
-    guideFrame:SetWidth(230); guideFrame:SetHeight(84)
+    guideFrame:SetWidth(230); guideFrame:SetHeight(100)
     guideFrame:SetPoint("TOP", UIParent, "TOP", 0, -140)
     guideFrame:SetMovable(true); guideFrame:EnableMouse(true); guideFrame:RegisterForDrag("LeftButton")
     guideFrame:SetScript("OnDragStart", function(s) s:StartMoving() end)
