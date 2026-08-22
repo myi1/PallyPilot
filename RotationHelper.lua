@@ -69,28 +69,53 @@ local function Suggest()
   return nil
 end
 
--- Keybind lookup: scan the standard action bars for the button casting `spell`
--- and read its displayed hotkey.
+-- Map each action slot (1-120) to its keybinding command name (default UI).
+local SLOT_BIND = {}
+do
+  local function set(base, from) for i = 1, 12 do SLOT_BIND[from + i - 1] = base .. i end end
+  set("ACTIONBUTTON", 1)              -- main bar (keys 1-=)
+  set("MULTIACTIONBAR3BUTTON", 25)    -- Right bar
+  set("MULTIACTIONBAR4BUTTON", 37)    -- Left bar
+  set("MULTIACTIONBAR2BUTTON", 49)    -- Bottom Right bar
+  set("MULTIACTIONBAR1BUTTON", 61)    -- Bottom Left bar
+end
+
+local function AbbrevKey(k)
+  if not k then return nil end
+  k = k:gsub("SHIFT%-", "s-"):gsub("CTRL%-", "c-"):gsub("ALT%-", "a-")
+  k = k:gsub("BUTTON", "m"):gsub("NUMPAD", "n")
+  return k
+end
+
+-- Custom-bar fallback frames (Bartender/Dominos reuse these names).
 local BARS = {
   "ActionButton", "MultiBarBottomLeftButton", "MultiBarBottomRightButton",
-  "MultiBarRightButton", "MultiBarLeftButton",
+  "MultiBarRightButton", "MultiBarLeftButton", "BT4Button", "DominosActionButton",
 }
+
+-- Find the keybind for the action slot holding `spell`.
 local function KeybindFor(spell)
+  for slot = 1, 120 do
+    local atype, id = GetActionInfo(slot)
+    if atype == "spell" and id and GetSpellInfo(id) == spell then
+      local bind = SLOT_BIND[slot]
+      if bind then
+        local key = GetBindingKey(bind)
+        if key then return AbbrevKey(key) end
+      end
+    end
+  end
+  -- Fallback: read the displayed HotKey off a named button (custom bar addons).
   for _, prefix in ipairs(BARS) do
     for i = 1, 12 do
       local btn = _G[prefix .. i]
-      local slot = btn and btn.action
+      local slot = btn and (btn.action or (btn.GetAttribute and btn:GetAttribute("action")))
       if slot then
         local atype, id = GetActionInfo(slot)
-        if atype == "spell" and id then
-          local sn = GetSpellInfo(id)
-          if sn == spell then
-            local hk = _G[prefix .. i .. "HotKey"]
-            local txt = hk and hk:GetText()
-            if txt and txt ~= "" and txt ~= RANGE_INDICATOR then
-              return txt
-            end
-          end
+        if atype == "spell" and id and GetSpellInfo(id) == spell then
+          local hk = _G[prefix .. i .. "HotKey"]
+          local txt = hk and hk:GetText()
+          if txt and txt ~= "" and txt ~= RANGE_INDICATOR then return AbbrevKey(txt) end
         end
       end
     end
