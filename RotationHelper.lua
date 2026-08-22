@@ -93,16 +93,27 @@ local BARS = {
   "MultiBarRightButton", "MultiBarLeftButton", "BT4Button", "DominosActionButton",
 }
 
+-- Does action `slot` hold `spell`? Match by icon texture (robust to id quirks
+-- and macros), then by GetActionInfo name as a secondary.
+local function SlotHasSpell(slot, spell, wantTex)
+  if wantTex and GetActionTexture(slot) == wantTex then return true end
+  local atype, id = GetActionInfo(slot)
+  if atype == "spell" and id and GetSpellInfo(id) == spell then return true end
+  return false
+end
+
 -- Find the keybind for the action slot holding `spell`.
 local function KeybindFor(spell)
+  local wantTex = GetSpellTexture(spell)
   for slot = 1, 120 do
-    local atype, id = GetActionInfo(slot)
-    if atype == "spell" and id and GetSpellInfo(id) == spell then
+    if HasAction(slot) and SlotHasSpell(slot, spell, wantTex) then
       local bind = SLOT_BIND[slot]
       if bind then
         local key = GetBindingKey(bind)
         if key then return AbbrevKey(key) end
       end
+      -- slot found but unmapped (custom bar) -> try its button HotKey below
+      break
     end
   end
   -- Fallback: read the displayed HotKey off a named button (custom bar addons).
@@ -110,17 +121,36 @@ local function KeybindFor(spell)
     for i = 1, 12 do
       local btn = _G[prefix .. i]
       local slot = btn and (btn.action or (btn.GetAttribute and btn:GetAttribute("action")))
-      if slot then
-        local atype, id = GetActionInfo(slot)
-        if atype == "spell" and id and GetSpellInfo(id) == spell then
-          local hk = _G[prefix .. i .. "HotKey"]
-          local txt = hk and hk:GetText()
-          if txt and txt ~= "" and txt ~= RANGE_INDICATOR then return AbbrevKey(txt) end
-        end
+      if slot and SlotHasSpell(slot, spell, wantTex) then
+        local hk = _G[prefix .. i .. "HotKey"]
+        local txt = hk and hk:GetText()
+        if txt and txt ~= "" and txt ~= RANGE_INDICATOR then return AbbrevKey(txt) end
       end
     end
   end
   return nil
+end
+
+-- Diagnostic: /pp keyscan — dump where the suggested spell sits on the bars.
+function RH.KeyScan()
+  local spell = Suggest() or "Crusader Strike"
+  PP.print("Keyscan for '" .. spell .. "' (tex=" .. tostring(GetSpellTexture(spell)) .. "):")
+  local hits = 0
+  for slot = 1, 120 do
+    if HasAction(slot) then
+      local atype, id = GetActionInfo(slot)
+      local tex = GetActionTexture(slot)
+      if SlotHasSpell(slot, spell, GetSpellTexture(spell)) then
+        hits = hits + 1
+        DEFAULT_CHAT_FRAME:AddMessage("  slot " .. slot .. " MATCH type=" .. tostring(atype) ..
+          " id=" .. tostring(id) .. " bind=" .. tostring(SLOT_BIND[slot]) ..
+          " key=" .. tostring(SLOT_BIND[slot] and GetBindingKey(SLOT_BIND[slot])))
+      end
+    end
+  end
+  if hits == 0 then
+    PP.print("Not found on any action slot — is it actually on a bar? (drag it onto one)")
+  end
 end
 
 local function OnUpdate(self, elapsed)

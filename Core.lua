@@ -98,6 +98,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.Talents and PP.Talents.Command then PP.Talents.Command(arg) end
   elseif cmd == "rotation" or cmd == "rot" then
     if PP.RotationHelper then PP.RotationHelper.Toggle() end
+  elseif cmd == "keyscan" then
+    if PP.RotationHelper and PP.RotationHelper.KeyScan then PP.RotationHelper.KeyScan() end
   else
     PP.print("/pp (dashboard) | /pp farm | /pp rotation | /pp talents recommend|guide|auto")
   end
