@@ -116,7 +116,7 @@ B.talentTemplates = {
       -- Retribution core (damage)
       ["Deflection"] = 5, ["Benediction"] = 5, ["Improved Blessing of Might"] = 2,
       ["Heart of the Crusader"] = 3, ["Improved Judgements"] = 2, ["Conviction"] = 5,
-      ["Seal of Command"] = 1, ["Crusade"] = 3, ["Two-Handed Weapon Specialization"] = 3,
+      ["Seal of Command"] = 1, ["Crusade"] = 3,
       ["Sanctified Retribution"] = 1, ["Vengeance"] = 3, ["The Art of War"] = 2,
       ["Repentance"] = 1, ["Judgements of the Wise"] = 3, ["Fanaticism"] = 3,
       ["Swift Retribution"] = 3, ["Sheath of Light"] = 3, ["Righteous Vengeance"] = 3,
