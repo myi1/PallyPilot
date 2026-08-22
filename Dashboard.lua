@@ -118,8 +118,14 @@ function D.Init()
   guideT:SetText("Guide talents")
   guideT:SetScript("OnClick", function() if PP.Talents then PP.Talents.Guide() end end)
 
+  local rotT = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  rotT:SetWidth(95); rotT:SetHeight(22)
+  rotT:SetPoint("TOPLEFT", farmBtn, "BOTTOMLEFT", 0, -4)
+  rotT:SetText("Rotation HUD")
+  rotT:SetScript("OnClick", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end)
+
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame, "UIPanelScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -72)
+  scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -100)
   scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
   content = CreateFrame("Frame", nil, scroll)

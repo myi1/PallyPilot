@@ -7,7 +7,7 @@ local PP = PallyPilot
 local DB_VERSION = 1
 local DEFAULTS = {
   version = DB_VERSION,
-  options = { winPos = nil, autoDraw = true, autoTalents = false },
+  options = { winPos = nil, autoDraw = false, autoTalents = false, rotationHelper = true },
 }
 
 local function CopyDefaults(src, dst)
@@ -65,6 +65,7 @@ local function OnEvent(self, event, ...)
   elseif event == "PLAYER_LOGIN" then
     PP.safeCall(PP.Dashboard.Init)
     PP.safeCall(PP.DrawHelper.Init)
+    if PP.RotationHelper then PP.safeCall(PP.RotationHelper.Init) end
     local paladin = select(2, UnitClass("player")) == "PALADIN"
     if not paladin then
       PP.print("Heads up: this build is tuned for Paladins. You're playing "
@@ -95,7 +96,9 @@ SlashCmdList["PALLYPILOT"] = function(line)
     PP.print("Draw helper " .. (PP.db.options.autoDraw and "ON" or "OFF"))
   elseif cmd == "talents" then
     if PP.Talents and PP.Talents.Command then PP.Talents.Command(arg) end
+  elseif cmd == "rotation" or cmd == "rot" then
+    if PP.RotationHelper then PP.RotationHelper.Toggle() end
   else
-    PP.print("/pp (dashboard) | /pp farm | /pp talents save|apply|auto | /pp draw | /pp echoscan")
+    PP.print("/pp (dashboard) | /pp farm | /pp rotation | /pp talents recommend|guide|auto")
   end
 end
