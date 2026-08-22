@@ -18,6 +18,16 @@ B.statNote = "Strength is king: it gives Attack Power, and AP converts to Spell 
 -- Weapon enchants and talent flex notes.
 B.enchants = "Weapons: Flurry + Vulnerability. Talent flex points into Divine "
   .. "Storm for extra Arcane Cadence triggers."
+
+-- Seal & rotation (asked a lot; not obvious from the echo list).
+B.seal = "Seal of Corruption / Seal of Vengeance (the stacking-DoT seal)."
+B.sealWhy = "Ebonhold's core echoes are DoT-centric — Pandemic extends your DoTs, "
+  .. "Contagion/Accelerated Decay spread and speed them — and the Vengeance/Corruption "
+  .. "seal IS a stacking DoT, so those echoes multiply it. Use Seal of Command instead "
+  .. "only for pure trash-cleave packs where nothing lives long enough to stack the DoT."
+B.rotation = "Judgement on cooldown (it's an echo TRIGGER — keep it rolling) > "
+  .. "Crusader Strike > Divine Storm (AoE/cleave) > Consecration for packs. Keep the "
+  .. "seal DoT applied on anything that lives, and let Pandemic/Contagion do the rest."
 B.talents = "≈ 44 Protection / 49 Retribution hybrid for soloing (survivability "
   .. "under full Ret damage). Pure-damage farmers drop the Prot side once the "
   .. "Soul Ash tree carries survival."
@@ -94,14 +104,30 @@ B.gear = {
 -- tier), taken from the top-rated EbonholdHub build. Verify names with
 -- /pp talents preview before trusting the apply — if Ebonhold reordered its
 -- trees, indices shift and we correct the arrays.
+-- Talent templates keyed by talent NAME -> desired rank (order-proof; the
+-- applier resolves names to the live tree). Ebonhold uses standard WotLK
+-- paladin trees. Ebonhold grants far more than 71 points, so these are
+-- generous "take all the good stuff" lists; the applier fills what your points
+-- allow, lowest tiers first.
 B.talentTemplates = {
   ["prot-ret"] = {
-    name = "Prot/Ret Solo Hybrid (44/49)",
-    total = 93,
-    tabs = {
-      [1] = {},
-      [2] = { 0,5,2,0,5,0,3,5,0,0,0,1,5,2,3,0,1,3,2,3,3,1,0,0,0,0 },
-      [3] = { 0,5,2,3,2,1,5,0,2,2,3,3,0,1,3,2,2,1,3,0,0,3,1,3,2,0 },
+    name = "Prot/Ret Solo Hybrid",
+    talents = {
+      -- Retribution core (damage)
+      ["Deflection"] = 5, ["Benediction"] = 5, ["Improved Blessing of Might"] = 2,
+      ["Heart of the Crusader"] = 3, ["Improved Judgements"] = 2, ["Conviction"] = 5,
+      ["Seal of Command"] = 1, ["Crusade"] = 3, ["Two-Handed Weapon Specialization"] = 3,
+      ["Sanctified Retribution"] = 1, ["Vengeance"] = 3, ["The Art of War"] = 2,
+      ["Repentance"] = 1, ["Judgements of the Wise"] = 3, ["Fanaticism"] = 3,
+      ["Swift Retribution"] = 3, ["Sheath of Light"] = 3, ["Righteous Vengeance"] = 3,
+      ["Divine Storm"] = 1, ["Divine Purpose"] = 2, ["Crusader Strike"] = 1,
+      -- Protection survival
+      ["Divinity"] = 5, ["Divine Strength"] = 5, ["Stoicism"] = 3,
+      ["Guardian's Favor"] = 2, ["Anticipation"] = 5, ["Improved Righteous Fury"] = 3,
+      ["Toughness"] = 5, ["Blessing of Sanctuary"] = 1, ["Reckoning"] = 5,
+      ["Sacred Duty"] = 2, ["Ardent Defender"] = 3, ["Redoubt"] = 3,
+      ["Combat Expertise"] = 3, ["Touched by the Light"] = 3, ["Shield of the Templar"] = 3,
+      ["Judgements of the Just"] = 2, ["Spiritual Attunement"] = 2,
     },
   },
 }

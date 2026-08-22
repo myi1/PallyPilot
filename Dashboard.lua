@@ -26,6 +26,11 @@ local function BuildText()
   t[#t+1] = line(DIM .. B.statNote .. R)
   t[#t+1] = line(DIM .. B.enchants .. R)
 
+  t[#t+1] = H("Seal & Rotation")
+  t[#t+1] = line(GOLD .. "Seal: " .. R .. B.seal)
+  t[#t+1] = line(DIM .. B.sealWhy .. R)
+  t[#t+1] = line(BRIGHT .. "Priority: " .. R .. B.rotation)
+
   t[#t+1] = H("Lock These Six Echoes")
   for _, n in ipairs(B.locked) do t[#t+1] = line("  " .. BRIGHT .. "* " .. R .. n) end
 

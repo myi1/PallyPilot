@@ -19,24 +19,34 @@ local function UnspentPoints()
   return 0
 end
 
--- Snapshot current talents into the DB: per tab, target rank by index (+names).
-function T.Save()
-  if not PP.db then return end
-  local snap = { tabs = {}, names = {}, total = 0 }
+-- Build a live index of the current trees: normalized talent name ->
+-- { tab, index, maxRank }. Names are unique across paladin trees.
+local function LiveIndex()
+  local idx = {}
+  if not (GetNumTalentTabs and GetTalentInfo) then return idx end
   for tab = 1, GetNumTalentTabs() do
-    snap.tabs[tab] = {}
-    snap.names[tab] = {}
     for i = 1, GetNumTalents(tab) do
-      local name, _, _, _, rank = GetTalentInfo(tab, i)
-      snap.tabs[tab][i] = rank or 0
-      snap.names[tab][i] = name
-      snap.total = snap.total + (rank or 0)
+      local name, _, _, _, _, maxRank = GetTalentInfo(tab, i)
+      if name then idx[string.lower(name)] = { tab = tab, index = i, maxRank = maxRank or 0 } end
     end
   end
-  PP.db.talentBuild = snap
-  PP.print("Talent build saved (" .. snap.total .. " points). Use " .. GOLD ..
-    "/pp talents apply" .. R .. " to re-apply it, or " .. GOLD .. "/pp talents auto" ..
-    R .. " to auto-apply as you level.")
+  return idx
+end
+
+-- A saved build is a name -> desired-rank map (order/index proof).
+-- Snapshot current talents into that shape.
+function T.Save()
+  if not PP.db then return end
+  local talents, total = {}, 0
+  for tab = 1, GetNumTalentTabs() do
+    for i = 1, GetNumTalents(tab) do
+      local name, _, _, _, rank = GetTalentInfo(tab, i)
+      if name and (rank or 0) > 0 then talents[name] = rank; total = total + rank end
+    end
+  end
+  PP.db.talentBuild = { talents = talents, total = total, source = "Your saved build" }
+  PP.print("Talent build saved (" .. total .. " points). " .. GOLD .. "/pp talents apply" ..
+    R .. " to re-apply, or " .. GOLD .. "/pp talents auto" .. R .. " to auto-apply as you level.")
 end
 
 -- Spend available points toward the saved build. Multi-pass so tier
@@ -50,41 +60,42 @@ function T.Apply(silent)
     if not silent then PP.print("Can't change talents in combat.") end
     return
   end
-  local build = PP.db.talentBuild
-  local spent, blocked = 0, false
+  local wants = PP.db.talentBuild.talents or {}
+  local spent, blocked, unresolved = 0, false, 0
   local changed = true
   local guard = 0
-  while changed and UnspentPoints() > 0 and guard < 200 do
+  while changed and UnspentPoints() > 0 and guard < 300 do
     changed = false
     guard = guard + 1
-    for tab = 1, GetNumTalentTabs() do
-      local targets = build.tabs[tab]
-      if targets then
-        for i = 1, GetNumTalents(tab) do
-          local _, _, _, _, rank = GetTalentInfo(tab, i)
-          local want = targets[i] or 0
-          if (rank or 0) < want and UnspentPoints() > 0 then
-            local before = rank or 0
-            local ok = pcall(LearnTalent, tab, i)
-            if not ok then blocked = true end
-            local _, _, _, _, after = GetTalentInfo(tab, i)
-            if (after or 0) > before then
-              spent = spent + ((after or 0) - before)
-              changed = true
-            end
+    local live = LiveIndex()  -- refresh (ranks change as we spend)
+    for name, want in pairs(wants) do
+      local loc = live[string.lower(name)]
+      if not loc then
+        unresolved = unresolved + 1
+      elseif UnspentPoints() > 0 then
+        local _, _, _, _, rank = GetTalentInfo(loc.tab, loc.index)
+        local target = math.min(want, loc.maxRank)
+        if (rank or 0) < target then
+          local before = rank or 0
+          local ok = pcall(LearnTalent, loc.tab, loc.index)
+          if not ok then blocked = true end
+          local _, _, _, _, after = GetTalentInfo(loc.tab, loc.index)
+          if (after or 0) > before then
+            spent = spent + ((after or 0) - before)
+            changed = true
           end
         end
       end
     end
   end
-  if blocked and spent == 0 then
-    PP.print("|cffff5050LearnTalent was blocked on this client|r — open your talent " ..
-      "pane and I'll fall back to guiding your clicks (tell me if you see this).")
-  elseif spent > 0 then
-    if not silent then PP.print("Applied talent build: spent " .. spent .. " point" ..
-      (spent == 1 and "" or "s") .. ".") end
+  if spent == 0 and blocked then
+    PP.print("|cffff5050LearnTalent is blocked on this client|r (protected). I'll switch to a "
+      .. "guided click-mode instead — tell me you saw this.")
   elseif not silent then
-    PP.print("Talent build already matches (nothing to spend).")
+    local left = UnspentPoints()
+    PP.print("Applied build: spent " .. spent .. " point" .. (spent == 1 and "" or "s")
+      .. ". Unspent left: " .. left .. "."
+      .. (blocked and " (some LearnTalent calls were blocked)" or ""))
   end
 end
 
@@ -96,15 +107,11 @@ function T.Recommend(key)
     PP.print("Unknown template '" .. tostring(key) .. "'. Available: prot-ret.")
     return
   end
-  local snap = { tabs = {}, names = {}, total = tpl.total or 0, source = tpl.name }
-  for tab = 1, 3 do
-    snap.tabs[tab] = {}
-    for i, rank in ipairs(tpl.tabs[tab] or {}) do snap.tabs[tab][i] = rank end
-  end
-  PP.db.talentBuild = snap
-  PP.print("Loaded recommended build: " .. GOLD .. tpl.name .. R .. ". Run " ..
-    GOLD .. "/pp talents preview" .. R .. " to sanity-check, then " .. GOLD ..
-    "/pp talents apply" .. R .. ".")
+  local talents, total = {}, 0
+  for name, rank in pairs(tpl.talents or {}) do talents[name] = rank; total = total + rank end
+  PP.db.talentBuild = { talents = talents, total = total, source = tpl.name }
+  PP.print("Loaded " .. GOLD .. tpl.name .. R .. " (" .. total .. " pts of targets). " ..
+    GOLD .. "/pp talents preview" .. R .. " to check, then " .. GOLD .. "/pp talents apply" .. R .. ".")
 end
 
 -- Print the saved build's non-zero targets with the LIVE in-game talent names,
@@ -113,26 +120,32 @@ function T.Preview()
   local b = PP.db and PP.db.talentBuild
   if not b then PP.print("No build loaded. Try /pp talents recommend.") return end
   PP.print("Build preview" .. (b.source and (" — " .. b.source) or "") .. ":")
+  local live = LiveIndex()
   local tabName = { "Holy", "Protection", "Retribution" }
-  for tab = 1, GetNumTalentTabs() do
-    local targets = b.tabs[tab]
-    if targets then
-      local pts = 0
-      for _, r in pairs(targets) do pts = pts + r end
-      if pts > 0 then
-        DEFAULT_CHAT_FRAME:AddMessage(GOLD .. (tabName[tab] or ("Tab " .. tab)) .. " (" .. pts .. ")" .. R)
-        for i = 1, GetNumTalents(tab) do
-          local want = targets[i] or 0
-          if want > 0 then
-            local name, _, _, _, rank, maxRank = GetTalentInfo(tab, i)
-            DEFAULT_CHAT_FRAME:AddMessage("   " .. tostring(name) .. "  " ..
-              (rank or 0) .. "/" .. want .. (maxRank and (" (max " .. maxRank .. ")") or ""))
-          end
-        end
+  local byTab, missing = { {}, {}, {} }, {}
+  for name, want in pairs(b.talents or {}) do
+    local loc = live[string.lower(name)]
+    if loc then
+      table.insert(byTab[loc.tab], { name = name, want = math.min(want, loc.maxRank),
+        rank = select(5, GetTalentInfo(loc.tab, loc.index)) or 0 })
+    else
+      missing[#missing + 1] = name
+    end
+  end
+  for tab = 1, 3 do
+    if #byTab[tab] > 0 then
+      table.sort(byTab[tab], function(a, b2) return a.name < b2.name end)
+      DEFAULT_CHAT_FRAME:AddMessage(GOLD .. (tabName[tab] or ("Tab " .. tab)) .. R)
+      for _, e in ipairs(byTab[tab]) do
+        DEFAULT_CHAT_FRAME:AddMessage("   " .. e.name .. "  " .. e.rank .. "/" .. e.want)
       end
     end
   end
-  PP.print("If those names don't look like a Prot/Ret build, the tree indices differ — tell me and I'll fix the template.")
+  if #missing > 0 then
+    PP.print("|cffff5050Not found in your tree (name mismatch):|r " .. table.concat(missing, ", "))
+  else
+    PP.print("All template talents matched your tree. /pp talents apply to spend.")
+  end
 end
 
 -- Status / next-to-learn readout.
