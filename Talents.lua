@@ -61,41 +61,39 @@ function T.Apply(silent)
     return
   end
   local wants = PP.db.talentBuild.talents or {}
-  local spent, blocked, unresolved = 0, false, 0
+  local spent, blocked = 0, 0
+  -- Multi-pass: one LearnTalent attempt per under-target talent per pass. Do
+  -- NOT gate on GetUnspentTalentPoints (unreliable on this client); instead
+  -- stop when a whole pass changes no rank (out of points OR fully applied).
   local changed = true
   local guard = 0
-  while changed and UnspentPoints() > 0 and guard < 300 do
+  while changed and guard < 400 do
     changed = false
     guard = guard + 1
-    local live = LiveIndex()  -- refresh (ranks change as we spend)
+    local live = LiveIndex()  -- ranks/maxrank refresh as we spend
     for name, want in pairs(wants) do
       local loc = live[string.lower(name)]
-      if not loc then
-        unresolved = unresolved + 1
-      elseif UnspentPoints() > 0 then
+      if loc then
         local _, _, _, _, rank = GetTalentInfo(loc.tab, loc.index)
         local target = math.min(want, loc.maxRank)
         if (rank or 0) < target then
           local before = rank or 0
           local ok = pcall(LearnTalent, loc.tab, loc.index)
-          if not ok then blocked = true end
           local _, _, _, _, after = GetTalentInfo(loc.tab, loc.index)
           if (after or 0) > before then
             spent = spent + ((after or 0) - before)
             changed = true
+          elseif not ok then
+            blocked = blocked + 1
           end
         end
       end
     end
   end
-  if spent == 0 and blocked then
-    PP.print("|cffff5050LearnTalent is blocked on this client|r (protected). I'll switch to a "
-      .. "guided click-mode instead — tell me you saw this.")
-  elseif not silent then
-    local left = UnspentPoints()
-    PP.print("Applied build: spent " .. spent .. " point" .. (spent == 1 and "" or "s")
-      .. ". Unspent left: " .. left .. "."
-      .. (blocked and " (some LearnTalent calls were blocked)" or ""))
+  if not silent then
+    PP.print("Applied build: spent " .. GOLD .. spent .. R .. " point" .. (spent == 1 and "" or "s")
+      .. ". Unspent now: " .. UnspentPoints() .. "."
+      .. (spent == 0 and " |cffff5050(LearnTalent appears blocked — tell me and I'll add a guided click-mode.)|r" or ""))
   end
 end
 
