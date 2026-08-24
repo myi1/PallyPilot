@@ -26,6 +26,10 @@ local function BuildText()
   local t = {}
   t[#t+1] = BRIGHT .. raid.name .. R .. "\n"
   t[#t+1] = DIM .. raid.note .. R .. "\n"
+  if raid.route then
+    t[#t+1] = "\n" .. GOLD .. "ROUTE" .. R .. "\n"
+    t[#t+1] = raid.route .. "\n"
+  end
   for _, boss in ipairs(raid.bosses) do
     t[#t+1] = "\n" .. GOLD .. string.upper(boss.n) .. R .. "\n"
     t[#t+1] = EMBER .. boss.t .. R .. "\n"

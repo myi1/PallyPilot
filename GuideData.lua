@@ -18,6 +18,12 @@ G.raids = {
     key = "naxx", name = "Naxxramas", zone = "Naxxramas",
     note = "All undead: Exorcism always crits, Holy Wrath stuns every add pack. "
       .. "This raid is paladin home turf. AotC I = Kel'Thuzad on 25.",
+    route = "Hub room with FOUR wings off the center. Solo order: SPIDER "
+      .. "(Anub'Rekhan > Faerlina > Maexxna) > PLAGUE (Noth > Heigan > Loatheb) "
+      .. "> MILITARY (Razuvious > Gothik > Horsemen) > CONSTRUCT (Patchwerk > "
+      .. "Grobbulus > Gluth > Thaddius; the sewer pipe after Patchwerk drops to "
+      .. "Grobbulus). Each cleared wing lights its teleporter back at the hub; "
+      .. "all four done = center teleporter opens to Sapphiron > Kel'Thuzad.",
     bosses = {
       { n = "Anub'Rekhan", t = "Face-tank in the middle, AoE the scarabs.",
         tips = {
@@ -156,6 +162,15 @@ G.raids = {
   {
     key = "ulduar", name = "Ulduar", zone = "Ulduar",
     note = "The mechanics tier. Several fights ignore raw power — read before pulling.",
+    route = "Grab a Siege Engine and drive the gauntlet to FLAME LEVIATHAN "
+      .. "(kill 4 towers en route for easy mode). On foot after: RAZORSCALE "
+      .. "left side of the field, IGNIS right side, XT at the far end. Through "
+      .. "XT's scrapyard into the ANTECHAMBER: Iron Council in the left hall, "
+      .. "then KOLOGARN's bridge (he IS the bridge), AURIAYA in the cat garden "
+      .. "past him. Beyond: the KEEPER teleporter ring — Hodir/Thorim/Freya/"
+      .. "Mimiron each up their own wing. All four down > DESCENT INTO MADNESS "
+      .. "elevator: Vezax > Yogg-Saron. Algalon's door is off the Observation "
+      .. "Ring (needs the key quest).",
     bosses = {
       { n = "Flame Leviathan", t = "Vehicle fight — take a Siege Engine, kill towers first for easy mode.",
         tips = {
@@ -285,6 +300,16 @@ G.raids = {
   {
     key = "icc", name = "Icecrown Citadel", zone = "Icecrown Citadel",
     note = "Undead again — Exorcism/Holy Wrath territory. Several fights have hard solo timers; they're marked.",
+    route = "Light's Hammer entrance > straight up the stairs to MARROWGAR > "
+      .. "through his room to DEATHWHISPER > elevator up to the ramparts for "
+      .. "GUNSHIP > cross the deck to SAURFANG. Past Saurfang, use the Light's "
+      .. "Hammer TELEPORTER PADS (they unlock per boss): PLAGUEWORKS is the "
+      .. "orange/green wing (trash hall > Festergut's door on the RIGHT, "
+      .. "Rotface's on the LEFT, both balconies feed Putricide's lab below) · "
+      .. "CRIMSON HALL is the red wing (Blood Princes > Lana'thel) · FROSTWING "
+      .. "is the blue wing (Valithria portal room; EXIT through the far side of "
+      .. "her room, up the dragon trash to Sindragosa) · FROZEN THRONE "
+      .. "teleporter lights when Putricide + Lana'thel + Sindragosa are dead.",
     bosses = {
       { n = "Lord Marrowgar", t = "Bubble is reserved for Bone Spike impale. Everything else is footwork.",
         tips = {
