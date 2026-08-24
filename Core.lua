@@ -8,6 +8,9 @@ local DB_VERSION = 1
 local DEFAULTS = {
   version = DB_VERSION,
   options = { winPos = nil, autoDraw = false, autoTalents = false, rotationHelper = true },
+  -- Diagnostic captures (gear tooltips, UI frame dumps). Written here so they
+  -- land in SavedVariables on /reload and can be read from WTF directly.
+  scans = {},
 }
 
 local function CopyDefaults(src, dst)
@@ -92,24 +95,72 @@ function PP.GearScan()
   local tip = PPScanTooltip
     or CreateFrame("GameTooltip", "PPScanTooltip", nil, "GameTooltipTemplate")
   tip:SetOwner(UIParent, "ANCHOR_NONE")
-  PP.print("Gear scan — screenshot this output for the affix auditor:")
+  local dump, items = {}, 0
   for slot = 1, 19 do
     local link = GetInventoryItemLink("player", slot)
     if link then
       tip:ClearLines()
       tip:SetInventoryItem("player", slot)
       local itemName = GetItemInfo(link)
-      DEFAULT_CHAT_FRAME:AddMessage("|cffe0b352[" .. (SLOT_NAMES[slot] or slot)
-        .. "]|r " .. (itemName or "?"))
+      items = items + 1
+      dump[#dump + 1] = "== [" .. (SLOT_NAMES[slot] or slot) .. "] " .. (itemName or "?")
       for i = 2, tip:NumLines() do
         local line = _G["PPScanTooltipTextLeft" .. i]
         local txt = line and line:GetText()
-        if txt and txt ~= "" then
-          DEFAULT_CHAT_FRAME:AddMessage("    " .. txt)
-        end
+        if txt and txt ~= "" then dump[#dump + 1] = txt end
       end
     end
   end
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.gear = dump
+  PP.db.scans.gearTime = date("%Y-%m-%d %H:%M")
+  PP.print("Gear scan captured " .. items
+    .. " equipped items. /reload to save it, then tell Claude — no screenshot needed.")
+end
+
+-- Diagnostic: capture all visible named frames (and anonymous buttons with
+-- text) into SavedVariables. Run with the Echoes window open to map the
+-- reroll UI for one-click automation.
+local function NearestNamedAncestor(f)
+  local p = f:GetParent()
+  local depth = 0
+  while p and depth < 8 do
+    if p.GetName and p:GetName() then return p:GetName() end
+    p = p:GetParent(); depth = depth + 1
+  end
+  return nil
+end
+
+function PP.UiScan()
+  local out, count = {}, 0
+  local f = EnumerateFrames()
+  while f do
+    local ok = pcall(function()
+      if f.IsVisible and f:IsVisible() then
+        local name = f.GetName and f:GetName() or nil
+        local ftype = f.GetObjectType and f:GetObjectType() or "?"
+        local label
+        if ftype == "Button" then
+          local fs = f.GetFontString and f:GetFontString()
+          label = fs and fs:GetText() or nil
+          if not label and f.GetText then label = f:GetText() end
+        end
+        if name or label then
+          count = count + 1
+          out[count] = ftype .. " | " .. (name or "(anon)")
+            .. (label and (" | txt=" .. label) or "")
+            .. " | parent=" .. (NearestNamedAncestor(f) or "?")
+        end
+      end
+    end)
+    if not ok then count = count end
+    f = EnumerateFrames(f)
+  end
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.ui = out
+  PP.db.scans.uiTime = date("%Y-%m-%d %H:%M")
+  PP.print("UI scan captured " .. count
+    .. " visible frames. /reload to save it, then tell Claude — no screenshot needed.")
 end
 
 SLASH_PALLYPILOT1 = "/pp"
@@ -140,6 +191,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.RotationHelper and PP.RotationHelper.KeyScan then PP.RotationHelper.KeyScan() end
   elseif cmd == "gearscan" then
     PP.safeCall(PP.GearScan)
+  elseif cmd == "uiscan" then
+    PP.safeCall(PP.UiScan)
   else
     PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
   end
