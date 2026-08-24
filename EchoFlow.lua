@@ -353,8 +353,18 @@ local function EngineTick(elapsed)
           -- Junk again: it's in the run now, so put it at the back of the queue.
           engine.queue[#engine.queue + 1] = display
           engine.total = engine.total + 1
+          engine.junkStreak = (engine.junkStreak or 0) + 1
           ShowToast("- " .. display .. " — junk again, requeued",
             delta .. progress, 0.85, 0.41, 0.29)
+        end
+        if verdict ~= "REROLL" and verdict ~= "DISABLE" then engine.junkStreak = 0 end
+        -- EbonholdHub Auto-Pick can answer draws instantly; if it keeps
+        -- choosing junk we'd loop forever burning orbs. Stop and say so.
+        if (engine.junkStreak or 0) >= 5 then
+          StopEngine("Stopped: 5 junk picks in a row. If EbonholdHub Auto-Pick is "
+            .. "making the draws, its build list disagrees with the ratings — "
+            .. "pause Auto-Pick (or tell Claude) before spending more orbs.")
+          return
         end
         PP.print("Got " .. BRIGHT .. display .. R .. " — " .. StatDeltaText(engine.prevStats))
         RefreshBadges()
@@ -504,8 +514,15 @@ end
 function EF.Init()
   local driver = CreateFrame("Frame")
   driver.elapsed = 0
+  driver.engAccum = 0
   driver:SetScript("OnUpdate", function(self, elapsed)
-    PP.safeCall(EngineTick, elapsed)
+    -- Engine steps at 0.3s, not per frame — tile walks and owned-set diffs
+    -- are too heavy for frame rate.
+    self.engAccum = self.engAccum + elapsed
+    if self.engAccum >= 0.3 then
+      PP.safeCall(EngineTick, self.engAccum)
+      self.engAccum = 0
+    end
     self.elapsed = self.elapsed + elapsed
     if self.elapsed > 1.5 then
       self.elapsed = 0
