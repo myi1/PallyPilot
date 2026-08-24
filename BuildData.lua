@@ -5,7 +5,7 @@ local PP = PallyPilot
 local B = {}
 PP.Build = B
 
-B.title = "Solo Retribution — Road to AotC I"
+B.title = "Solo Retribution — Hardcore climb (AotC 1+2 done, HC2 unlocked)"
 B.spec = "Retribution"
 
 -- Stat priority (Nero's endgame build): Strength is the keystone (AP -> SP),
