@@ -32,7 +32,15 @@ local lastFight = nil
 local bestDps = 0
 
 local function StartFight()
-  fight = { start = GetTime(), total = 0, echo = 0, spells = {}, targets = {} }
+  fight = { start = GetTime(), total = 0, echo = 0, spells = {}, targets = {},
+            taken = 0, maxHit = 0 }
+end
+
+local function AddTaken(amount)
+  if not amount or amount <= 0 then return end
+  if not fight then StartFight() end
+  fight.taken = fight.taken + amount
+  if amount > fight.maxHit then fight.maxHit = amount end
 end
 
 local function AddDamage(spell, amount, target)
@@ -75,6 +83,8 @@ local function SaveFight(f)
     total = math.floor(f.total),
     dps = math.floor(f.dps),
     echoPct = math.floor(f.echo / f.total * 100 + 0.5),
+    taken = math.floor(f.taken or 0),
+    maxHit = math.floor(f.maxHit or 0),
     spells = spells,
   }
   while #log > MAX_FIGHTS do table.remove(log, 1) end
@@ -99,8 +109,9 @@ local function EndFight()
       tag = VERD .. "  NEW BEST" .. R
       bestDps = lastFight.dps
     end
-    PP.print(string.format("Fight: %s DPS over %ds — %d%% from echoes%s  (/pp dps for breakdown)",
-      GOLD .. Fmt(lastFight.dps) .. R, math.floor(dur), echoPct, tag))
+    PP.print(string.format("Fight: %s DPS over %ds — %d%% from echoes · took %s (max hit %s)%s",
+      GOLD .. Fmt(lastFight.dps) .. R, math.floor(dur), echoPct,
+      EMBER .. Fmt(fight.taken or 0) .. R, Fmt(fight.maxHit or 0), tag))
     PP.safeCall(SaveFight, lastFight)
   end
   fight = nil
@@ -133,6 +144,17 @@ local AFFIL_MINE = COMBATLOG_OBJECT_AFFILIATION_MINE or 0x00000001
 
 local function OnCLEU(timestamp, event, srcGUID, srcName, srcFlags,
                       dstGUID, dstName, dstFlags, ...)
+  -- Damage the PLAYER takes (survivability side of the ledger).
+  if dstGUID and dstGUID == UnitGUID("player") then
+    if event == "SWING_DAMAGE" then
+      AddTaken((select(1, ...)))
+    elseif event == "SPELL_DAMAGE" or event == "SPELL_PERIODIC_DAMAGE"
+        or event == "RANGE_DAMAGE" or event == "DAMAGE_SHIELD" then
+      AddTaken((select(4, ...)))
+    elseif event == "ENVIRONMENTAL_DAMAGE" then
+      AddTaken((select(2, ...)))
+    end
+  end
   if not srcFlags or bit.band(srcFlags, AFFIL_MINE) == 0 then return end
   if event == "SWING_DAMAGE" then
     AddDamage("Melee", (select(1, ...)), dstName)

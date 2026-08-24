@@ -346,7 +346,7 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if arg == "start" then PP.safeCall(PP.RunLog.Start)
     else PP.safeCall(PP.RunLog.Status) end
   elseif cmd == "hubsync" then
-    if PP.HubSync.Push then PP.safeCall(PP.HubSync.Push) end
+    if PP.HubSync.Push then PP.safeCall(PP.HubSync.Push, arg) end
   elseif cmd == "locks" then
     local n = tonumber(arg)
     if n and n >= 1 and n <= 12 then
