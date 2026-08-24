@@ -403,7 +403,8 @@ function EF.RefreshRail()
   local buckets = PP.EchoAudit.Compute and select(1, PP.EchoAudit.Compute())
   local t = {}
   if buckets then
-    t[#t+1] = GOLD .. "LOCK NOW — best six owned" .. R
+    t[#t+1] = GOLD .. "LOCK NOW — best "
+      .. PP.EchoAudit.LockSlots() .. " owned" .. R
     for _, p in ipairs(PP.EchoAudit.LockNow(buckets)) do
       t[#t+1] = "  " .. p.name
     end

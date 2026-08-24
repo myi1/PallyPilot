@@ -1,7 +1,7 @@
 -- PallyPilot Core: namespace, saved vars, events, slash commands, main window.
 PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
-  GearAudit = {}, EchoFlow = {}, BossCard = {},
+  GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {},
 }
 local PP = PallyPilot
 
@@ -9,7 +9,7 @@ local DB_VERSION = 1
 local DEFAULTS = {
   version = DB_VERSION,
   options = { winPos = nil, autoDraw = false, autoTalents = false, rotationHelper = true,
-              rerollOrbs = 1 },
+              rerollOrbs = 1, lockSlots = 5 },
   -- Diagnostic captures (gear tooltips, UI frame dumps). Written here so they
   -- land in SavedVariables on /reload and can be read from WTF directly.
   scans = {},
@@ -74,6 +74,7 @@ local function OnEvent(self, event, ...)
     PP.safeCall(PP.EchoFlow.Init)
     PP.safeCall(PP.BossCard.Init)
     PP.safeCall(PP.GearAudit.HookUI)
+    PP.safeCall(PP.RunLog.Init)
     local paladin = select(2, UnitClass("player")) == "PALADIN"
     if not paladin then
       PP.print("Heads up: this build is tuned for Paladins. You're playing "
@@ -289,6 +290,17 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if arg == "echo" then PP.safeCall(PP.UiScanEcho) else PP.safeCall(PP.UiScan) end
   elseif cmd == "perkscan" then
     PP.safeCall(PP.PerkScan)
+  elseif cmd == "run" then
+    if arg == "start" then PP.safeCall(PP.RunLog.Start)
+    else PP.safeCall(PP.RunLog.Status) end
+  elseif cmd == "locks" then
+    local n = tonumber(arg)
+    if n and n >= 1 and n <= 12 then
+      PP.db.options.lockSlots = n
+      PP.print("Permanent echo slots set to " .. n .. " — Lock Now recommends that many.")
+    else
+      PP.print("Usage: /pp locks <n>  (currently " .. (PP.db.options.lockSlots or 5) .. ")")
+    end
   elseif cmd == "gear" then
     if PP.GearAudit.Toggle then PP.GearAudit.Toggle() end
   elseif cmd == "reroll" then

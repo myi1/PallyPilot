@@ -136,13 +136,18 @@ function A.Compute()
   return buckets, total
 end
 
--- "Maximize what I have": the best six owned echoes to LOCK right now —
--- owned core first, then owned S, then A, then B. Re-run after farming.
+-- "Maximize what I have": the best owned echoes to LOCK right now — owned
+-- core first, then S, then A, then B — sized to the permanent slots the
+-- player has actually unlocked (/pp locks <n>).
+function A.LockSlots()
+  return (PP.db and PP.db.options and PP.db.options.lockSlots) or 5
+end
+
 function A.LockNow(buckets)
-  local pick = {}
+  local pick, max = {}, A.LockSlots()
   for _, key in ipairs({ "CORE", "S", "A", "B" }) do
     for _, name in ipairs(buckets[key]) do
-      if #pick >= 6 then return pick end
+      if #pick >= max then return pick end
       pick[#pick + 1] = { name = name, tier = key }
     end
   end
@@ -261,7 +266,8 @@ local function BuildText()
   -- Maximize current potential: best six OWNED echoes to lock today.
   local lockNow = A.LockNow(buckets)
   if #lockNow > 0 then
-    t[#t+1] = "\n" .. GOLD .. "LOCK NOW — BEST SIX YOU OWN" .. R .. "\n"
+    t[#t+1] = "\n" .. GOLD .. "LOCK NOW — BEST " .. A.LockSlots()
+      .. " YOU OWN" .. R .. "\n"
     t[#t+1] = DIM .. "Your current-potential lock set, from what you actually have. "
       .. "As farmed tomes land, better echoes push weaker ones out — new learns are "
       .. "announced in chat with their verdict." .. R .. "\n"
@@ -383,6 +389,7 @@ local function CheckForNewEchoes()
       local display = names[base] or TitleCase(base)
       PP.print("New echo: " .. BRIGHT .. display .. R .. " — "
         .. (VERDICT_LABEL[verdict] or verdict))
+      if A.onNewEcho then pcall(A.onNewEcho, display, verdict) end
       if verdict == "CORE" or verdict == "S" then
         PP.print(VERD .. "  That's an upgrade — /pp audit to see your refreshed Lock Now six." .. R)
       end
