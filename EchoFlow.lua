@@ -158,9 +158,72 @@ local function RunJunk()
 end
 
 -- ---------------------------------------------------------------------------
+-- Outcome toast: after each pick, show what you got, its verdict, and the
+-- net power change (HP / AP / crit) since just before the Forget.
+local toast
+local function ShowToast(main, sub, r, g, b)
+  if not toast then
+    toast = CreateFrame("Frame", "PallyPilotToast", UIParent)
+    toast:SetWidth(400); toast:SetHeight(58)
+    toast:SetPoint("TOP", UIParent, "TOP", 0, -96)
+    toast:SetFrameStrata("HIGH")
+    toast:SetBackdrop({
+      bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+      edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+      tile = true, tileSize = 32, edgeSize = 20,
+      insets = { left = 6, right = 6, top = 6, bottom = 6 },
+    })
+    toast.main = toast:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    toast.main:SetPoint("TOP", toast, "TOP", 0, -12)
+    toast.sub = toast:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    toast.sub:SetPoint("TOP", toast.main, "BOTTOM", 0, -4)
+    toast:SetScript("OnUpdate", function(self, elapsed)
+      self.age = (self.age or 0) + elapsed
+      if self.age > 6 then self:Hide() end
+    end)
+    toast:EnableMouse(true)
+    toast:SetScript("OnMouseDown", function(self) self:Hide() end)
+  end
+  toast.main:SetText(main)
+  toast.main:SetTextColor(r, g, b)
+  toast.sub:SetText(sub or "")
+  toast.age = 0
+  toast:Show()
+end
+
+local function StatSnap()
+  local base, pos, neg = UnitAttackPower("player")
+  return {
+    hp = UnitHealthMax("player") or 0,
+    ap = (base or 0) + (pos or 0) + (neg or 0),
+    crit = (GetCritChance and GetCritChance()) or 0,
+  }
+end
+
+local function StatDeltaText(before)
+  if not before then return "" end
+  local now = StatSnap()
+  local parts = {}
+  local dhp, dap, dcrit = now.hp - before.hp, now.ap - before.ap, now.crit - before.crit
+  if math.abs(dhp) >= 1 then
+    parts[#parts+1] = (dhp > 0 and VERD .. "+" or EMBER) .. dhp .. " HP" .. R
+  end
+  if math.abs(dap) >= 1 then
+    parts[#parts+1] = (dap > 0 and VERD .. "+" or EMBER) .. dap .. " AP" .. R
+  end
+  if math.abs(dcrit) >= 0.1 then
+    parts[#parts+1] = (dcrit > 0 and VERD .. "+" or EMBER)
+      .. string.format("%.1f", dcrit) .. "% crit" .. R
+  end
+  if #parts == 0 then return DIM .. "no stat change (proc/utility echo)" .. R end
+  return table.concat(parts, DIM .. " · " .. R)
+end
+
+-- ---------------------------------------------------------------------------
 -- Reroll engine. Phases: ORB -> TILE -> DIALOG -> FORGET -> DRAW -> next.
--- DRAW waits for the owned-set to change (you picked) before continuing.
-local engine = { queue = {}, phase = nil, waited = 0, baseline = nil, idx = 0, total = 0 }
+-- DRAW advances only when a NEW echo appears in the owned set (your pick),
+-- not on the removal the Forget itself causes.
+local engine = { queue = {}, phase = nil, waited = 0, idx = 0, total = 0 }
 
 local function SetStatus(msg, color)
   if status then status:SetText((color or DIM) .. msg .. R) end
@@ -222,13 +285,23 @@ local function EngineTick(elapsed)
   if not name then StopEngine(nil); SetStatus("queue empty — done!", VERD); return end
 
   if engine.phase == "ORB" then
+    -- Picking a draw closes the journal — reopen it ourselves.
+    local j = Journal()
+    if not (j and j:IsVisible()) then
+      local micro = _G["EchoJournalMicroButton"]
+      if micro then
+        SmartClick(micro)
+        SetStatus("reopening the Echoes window...")
+      elseif engine.waited > 3 then
+        SetStatus("open the Echoes window to continue", EMBER)
+      end
+      return
+    end
     local orb = OrbBubble()
     if orb and orb:IsVisible() then
       SmartClick(orb)
       engine.phase = "TILE"; engine.waited = 0
       SetStatus("orb clicked — selecting " .. name)
-    else
-      StopEngine("Reroll stopped: Orb bubble not visible.")
     end
   elseif engine.phase == "TILE" then
     local tile = FindTile(name)
@@ -247,28 +320,53 @@ local function EngineTick(elapsed)
       engine.phase = "FORGET"; engine.waited = 0
     end
   elseif engine.phase == "FORGET" then
-    engine.baseline = PP.EchoAudit.OwnedSignature()
+    engine.prevOwned = PP.EchoAudit.OwnedCopy()
+    engine.prevStats = StatSnap()
     SmartClick(engine.forgetBtn)
     engine.forgetBtn = nil
     engine.phase = "DRAW"; engine.waited = 0
     engine.idx = engine.idx + 1
     SetStatus("(" .. engine.idx .. "/" .. engine.total .. ") " .. name
       .. " forgotten — PICK YOUR NEW ECHO", BRIGHT)
-    PP.print("Rerolled " .. BRIGHT .. name .. R .. " — pick your replacement (draw advice applies).")
   elseif engine.phase == "DRAW" then
     engine.waited = 0 -- no timeout while waiting on the player's pick
-    local sig = PP.EchoAudit.OwnedSignature()
-    if sig and engine.baseline and sig ~= engine.baseline then
-      table.remove(engine.queue, 1)
-      RefreshBadges()
-      if #engine.queue == 0 then
-        StopEngine(nil)
-        SetStatus("done — " .. engine.idx .. " rerolled", VERD)
-        PP.print("Reroll queue complete: " .. engine.idx .. " echoes recycled.")
-        if rail then EF.RefreshRail() end
-      else
-        engine.phase = "ORB"
-        SetStatus("next: " .. engine.queue[1])
+    local cur = PP.EchoAudit.OwnedCopy()
+    if cur and engine.prevOwned then
+      local newKey
+      for k in pairs(cur) do
+        if not engine.prevOwned[k] then newKey = k; break end
+      end
+      if newKey then
+        table.remove(engine.queue, 1)
+        local verdict, display = PP.EchoAudit.VerdictFor(newKey)
+        display = display or newKey
+        local delta = StatDeltaText(engine.prevStats)
+        local progress = DIM .. "  (" .. engine.idx .. "/" .. engine.total .. ")" .. R
+        if verdict == "CORE" or verdict == "S" then
+          ShowToast("+ " .. display .. " — " .. (verdict == "CORE" and "CORE!" or "S TIER, KEEP"),
+            delta .. progress, 1, 0.85, 0.35)
+        elseif verdict == "A" then
+          ShowToast("+ " .. display .. " — A tier, keep", delta .. progress, 0.62, 0.70, 0.74)
+        elseif verdict == "B" then
+          ShowToast("+ " .. display .. " — B filler", delta .. progress, 0.71, 0.65, 0.53)
+        else
+          -- Junk again: it's in the run now, so put it at the back of the queue.
+          engine.queue[#engine.queue + 1] = display
+          engine.total = engine.total + 1
+          ShowToast("- " .. display .. " — junk again, requeued",
+            delta .. progress, 0.85, 0.41, 0.29)
+        end
+        PP.print("Got " .. BRIGHT .. display .. R .. " — " .. StatDeltaText(engine.prevStats))
+        RefreshBadges()
+        if #engine.queue == 0 then
+          StopEngine(nil)
+          SetStatus("done — " .. engine.idx .. " rerolled", VERD)
+          PP.print("Reroll queue complete: " .. engine.idx .. " echoes recycled.")
+          if rail then EF.RefreshRail() end
+        else
+          engine.phase = "ORB"; engine.waited = 0
+          SetStatus("next: " .. engine.queue[1])
+        end
       end
     end
   end

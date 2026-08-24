@@ -225,6 +225,38 @@ function PP.UiScanEcho()
     .. " lines captured. /reload to save, then tell Claude.")
 end
 
+-- Diagnostic: dump the server's echo/perk database to SavedVariables so
+-- every echo in the game can be rated into BuildData tiers.
+function PP.PerkScan()
+  local db = ProjectEbonhold and ProjectEbonhold.PerkDatabase
+  if not db then
+    PP.print("ProjectEbonhold.PerkDatabase not found on this client.")
+    return
+  end
+  local lines, n = {}, 0
+  local MAX = 8000
+  local function dump(t, prefix, depth)
+    if depth > 3 or n >= MAX then return end
+    for k, v in pairs(t) do
+      if n >= MAX then return end
+      local tv = type(v)
+      if tv == "table" then
+        dump(v, prefix .. "." .. tostring(k), depth + 1)
+      elseif tv == "string" or tv == "number" or tv == "boolean" then
+        n = n + 1
+        lines[n] = prefix .. "." .. tostring(k) .. " = " .. tostring(v)
+      end
+    end
+  end
+  dump(db, "Perk", 0)
+  table.sort(lines)
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.perks = lines
+  PP.db.scans.perksTime = date("%Y-%m-%d %H:%M")
+  PP.print("Perk database dump: " .. n
+    .. " lines. /reload to save, then tell Claude — every echo gets rated.")
+end
+
 SLASH_PALLYPILOT1 = "/pp"
 SLASH_PALLYPILOT2 = "/pallypilot"
 SlashCmdList["PALLYPILOT"] = function(line)
@@ -255,6 +287,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     PP.safeCall(PP.GearScan)
   elseif cmd == "uiscan" then
     if arg == "echo" then PP.safeCall(PP.UiScanEcho) else PP.safeCall(PP.UiScan) end
+  elseif cmd == "perkscan" then
+    PP.safeCall(PP.PerkScan)
   elseif cmd == "gear" then
     if PP.GearAudit.Toggle then PP.GearAudit.Toggle() end
   elseif cmd == "reroll" then

@@ -207,6 +207,15 @@ function A.OwnedSignature()
   return n
 end
 
+-- Snapshot copy of the owned set, for precise added/removed diffing.
+function A.OwnedCopy()
+  local owned = OwnedSet()
+  if not owned then return nil end
+  local c = {}
+  for k in pairs(owned) do c[k] = true end
+  return c
+end
+
 local SECTIONS = {
   { key = "REROLL", color = EMBER, title = "Reroll / feed to an Orb",
     note = "Not in the build. These are your reroll currency — no build slot wants them." },
