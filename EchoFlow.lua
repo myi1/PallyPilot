@@ -61,33 +61,44 @@ local function HookTooltip(tipName)
 end
 
 -- ---------------------------------------------------------------------------
--- Tile discovery: any Button under the journal whose text region names a
--- known echo (handles the journal's "Broodmot..." truncation).
-local function TileText(btn)
+-- Tile discovery. Run-panel tiles carry their RANK ("1"/"2") as a text
+-- region alongside the name, so every FontString region is tried against the
+-- echo catalog until one matches (handles "Broodmot..." truncation too).
+local function TileEcho(btn)
   local regions = { btn:GetRegions() }
   for _, reg in ipairs(regions) do
     if reg.GetText and reg:GetObjectType() == "FontString" then
       local t = reg:GetText()
-      if t and t ~= "" then return t end
+      if t and t ~= "" then
+        local display, verdict = PP.EchoAudit.MatchDisplay(t)
+        if display then return display, verdict end
+      end
     end
   end
   return nil
 end
 
-local function EachTile(fn)
-  local root = Journal()
+-- The left "my run" panel — the only tiles the Orb can act on.
+local function RunRoot()
+  return _G["ProjectEbonholdEchoJournalMyRunScroll"]
+    or _G["ProjectEbonholdEchoJournalMyRunInset"]
+    or Journal()
+end
+
+local function EachTile(root, fn)
   if not root then return end
   local function walk(f, depth)
     if depth > 6 then return end
+    if f.GetScrollChild then
+      local sc = f:GetScrollChild()
+      if sc then walk(sc, depth + 1) end
+    end
     local kids = { f:GetChildren() }
     for _, c in ipairs(kids) do
       local ok, ctype = pcall(c.GetObjectType, c)
       if ok and (ctype == "Button" or ctype == "CheckButton") and c:IsVisible() then
-        local text = TileText(c)
-        if text then
-          local display, verdict = PP.EchoAudit.MatchDisplay(text)
-          if display then fn(c, display, verdict) end
-        end
+        local display, verdict = TileEcho(c)
+        if display then fn(c, display, verdict) end
       end
       if ok then walk(c, depth + 1) end
     end
@@ -95,8 +106,20 @@ local function EachTile(fn)
   PP.safeCall(walk, root, 0)
 end
 
+-- Click a frame through whatever handler it actually uses.
+local function SmartClick(f)
+  if not f then return false end
+  if f.Click and f:GetScript("OnClick") then f:Click(); return true end
+  local up = f:GetScript("OnMouseUp")
+  if up then pcall(up, f, "LeftButton"); return true end
+  local down = f:GetScript("OnMouseDown")
+  if down then pcall(down, f, "LeftButton"); return true end
+  if f.Click then f:Click(); return true end
+  return false
+end
+
 local function RefreshBadges()
-  EachTile(function(btn, _, verdict)
+  EachTile(Journal(), function(btn, _, verdict)
     if not btn.__ppDot then
       local t = btn:CreateTexture(nil, "OVERLAY")
       t:SetWidth(9); t:SetHeight(9)
@@ -115,10 +138,23 @@ end
 
 local function FindTile(name)
   local hit
-  EachTile(function(btn, display)
+  EachTile(RunRoot(), function(btn, display)
     if not hit and display == name then hit = btn end
   end)
   return hit
+end
+
+-- Junk actually present in the current run — the only rerollable junk.
+local function RunJunk()
+  local seen, out = {}, {}
+  EachTile(RunRoot(), function(_, display, verdict)
+    if verdict == "REROLL" and not seen[display] then
+      seen[display] = true
+      out[#out + 1] = display
+    end
+  end)
+  table.sort(out)
+  return out
 end
 
 -- ---------------------------------------------------------------------------
@@ -188,7 +224,7 @@ local function EngineTick(elapsed)
   if engine.phase == "ORB" then
     local orb = OrbBubble()
     if orb and orb:IsVisible() then
-      orb:Click()
+      SmartClick(orb)
       engine.phase = "TILE"; engine.waited = 0
       SetStatus("orb clicked — selecting " .. name)
     else
@@ -197,10 +233,10 @@ local function EngineTick(elapsed)
   elseif engine.phase == "TILE" then
     local tile = FindTile(name)
     if tile then
-      tile:Click()
+      SmartClick(tile)
       engine.phase = "DIALOG"; engine.waited = 0
     elseif engine.waited > 2 then
-      SetStatus("can't see '" .. name .. "' — scroll your echo list to it", EMBER)
+      SetStatus("can't see '" .. name .. "' — scroll your run list to it", EMBER)
     end
   elseif engine.phase == "DIALOG" then
     local forget, slider = FindForgetDialog()
@@ -212,7 +248,7 @@ local function EngineTick(elapsed)
     end
   elseif engine.phase == "FORGET" then
     engine.baseline = PP.EchoAudit.OwnedSignature()
-    engine.forgetBtn:Click()
+    SmartClick(engine.forgetBtn)
     engine.forgetBtn = nil
     engine.phase = "DRAW"; engine.waited = 0
     engine.idx = engine.idx + 1
@@ -243,15 +279,20 @@ function EF.StartReroll()
     StopEngine("Reroll stopped by you.")
     return
   end
-  local list = PP.EchoAudit.RerollList()
-  if #list == 0 then SetStatus("nothing to reroll — collection is clean", VERD) return end
+  -- The Orb only trades echoes in the CURRENT RUN — queue those, not the
+  -- whole owned collection.
+  local list = RunJunk()
+  if #list == 0 then
+    SetStatus("no junk in this run — nothing to reroll", VERD)
+    return
+  end
   engine.queue = list
   engine.total = #list
   engine.idx = 0
   engine.phase = "ORB"
   engine.waited = 0
   if rail and rail.rerollBtn then rail.rerollBtn:SetText("STOP") end
-  PP.print("Reroll queue: " .. #list .. " junk echoes, "
+  PP.print("Reroll queue: " .. #list .. " junk echoes in this run, "
     .. (PP.db.options.rerollOrbs or 1) .. " orb(s) each. You only make the picks. "
     .. "Click STOP anytime.")
   SetStatus("starting — " .. engine.queue[1])
@@ -269,12 +310,14 @@ function EF.RefreshRail()
       t[#t+1] = "  " .. p.name
     end
     local junk = #buckets.REROLL
+    local inRun = #RunJunk()
     t[#t+1] = " "
     t[#t+1] = DIM .. #buckets.CORE .. " core · " .. #buckets.S .. " S · "
       .. #buckets.A .. " A · " .. #buckets.B .. " B" .. R
-    t[#t+1] = EMBER .. junk .. " junk to reroll" .. R
+    t[#t+1] = EMBER .. inRun .. " junk in this run" .. R
+      .. DIM .. " (" .. junk .. " owned)" .. R
     if rail.rerollBtn and not engine.phase then
-      rail.rerollBtn:SetText("Reroll junk (" .. junk .. ")")
+      rail.rerollBtn:SetText("Reroll junk (" .. inRun .. ")")
     end
   else
     t[#t+1] = EMBER .. "EbonholdHub data not found" .. R
