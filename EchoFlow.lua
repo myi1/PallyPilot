@@ -529,19 +529,19 @@ function EF.StartReroll()
   StartQueue(list, "Reroll queue")
 end
 
--- Optimization pass: trade B-tier run echoes for shots at S/A. Junk results
--- requeue (and trip the streak guard); B results just move on.
+-- RETIRED (breadth doctrine, 2026-08-25): rerolling a B below the active
+-- cap trades a unique (-1% Adaptive Power + the B's effect) for one repeat
+-- rank. Measured disaster: 71 -> 34 uniques. At the cap, the draw engine
+-- ranks the cores automatically — no button needed.
 function EF.StartUpgrade()
   if engine.phase then
     StopEngine("Queue stopped by you.")
     return
   end
-  local list = RunByVerdict("B")
-  if #list == 0 then
-    SetStatus("no B-tier echoes in this run — already optimal", VERD)
-    return
-  end
-  StartQueue(list, "Upgrade queue (B -> S/A)")
+  PP.print("Upgrade-Bs is retired: below the ~72 active cap every B rerolled "
+    .. "is -1% Adaptive Power plus the B's own effect, traded for one repeat "
+    .. "rank. Your Bs ARE the build. Reroll junk only.")
+  SetStatus("Bs stay — they're breadth (+1% Adaptive each)", VERD)
 end
 
 -- ---------------------------------------------------------------------------
@@ -568,7 +568,7 @@ function EF.RefreshRail()
       rail.rerollBtn:SetText("Reroll junk (" .. inRun .. ")")
     end
     if rail.upgradeBtn and not engine.phase then
-      rail.upgradeBtn:SetText("Upgrade Bs (" .. upgradable .. ")")
+      rail.upgradeBtn:SetText("Bs stay: +" .. upgradable .. "% Adaptive")
     end
   else
     t[#t+1] = EMBER .. "EbonholdHub data not found" .. R
