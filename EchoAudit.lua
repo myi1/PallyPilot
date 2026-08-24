@@ -134,6 +134,79 @@ function A.LockNow(buckets)
   return pick
 end
 
+-- ---------------------------------------------------------------------------
+-- Public lookups for EchoFlow (tooltips, tile badges, reroll queue).
+local nameCache, nameCacheAt = nil, 0
+local function CachedNames()
+  local now = GetTime and GetTime() or 0
+  if not nameCache or (now - nameCacheAt) > 10 then
+    nameCache = DisplayNames(); nameCacheAt = now
+  end
+  return nameCache
+end
+
+-- Verdict for any display text (quality suffixes ok). Returns nil for text
+-- that isn't a known echo, so tooltip hooks stay quiet on ordinary tooltips.
+function A.VerdictFor(text)
+  if not text or text == "" then return nil end
+  local norm = Norm(text)
+  local base = StripQuality(norm)
+  local names = CachedNames()
+  local owned = OwnedSet()
+  local known = names[base] ~= nil
+    or (owned and (owned[norm] or owned[base])) or false
+  if not known then return nil end
+  return Classify(base), names[base] or TitleCase(base)
+end
+
+-- Match possibly-truncated tile text ("Broodmot...") to a known echo.
+function A.MatchDisplay(text)
+  if not text or text == "" then return nil end
+  local norm = Norm(text)
+  local base = StripQuality(norm)
+  local names = CachedNames()
+  if names[base] then return names[base], Classify(base) end
+  local prefix = string.match(norm, "^(.-)%.%.%.$")
+  if prefix and prefix ~= "" then
+    local hit
+    for key, display in pairs(names) do
+      if string.sub(key, 1, string.len(prefix)) == prefix then
+        if hit then return nil end -- ambiguous
+        hit = { display, key }
+      end
+    end
+    if hit then return hit[1], Classify(hit[2]) end
+  end
+  return nil
+end
+
+-- Plain (uncolored) reroll queue: owned, unrated, junk.
+function A.RerollList()
+  local owned = OwnedSet()
+  if not owned then return {} end
+  local names, seen, out = CachedNames(), {}, {}
+  for norm in pairs(owned) do
+    local base = StripQuality(norm)
+    if not seen[base] then
+      seen[base] = true
+      if Classify(base) == "REROLL" then
+        out[#out + 1] = names[base] or TitleCase(base)
+      end
+    end
+  end
+  table.sort(out)
+  return out
+end
+
+-- Cheap change signature for "did I just learn something?" polling.
+function A.OwnedSignature()
+  local owned = OwnedSet()
+  if not owned then return nil end
+  local n = 0
+  for _ in pairs(owned) do n = n + 1 end
+  return n
+end
+
 local SECTIONS = {
   { key = "REROLL", color = EMBER, title = "Reroll / feed to an Orb",
     note = "Not in the build. These are your reroll currency — no build slot wants them." },

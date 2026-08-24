@@ -1,14 +1,15 @@
 -- PallyPilot Core: namespace, saved vars, events, slash commands, main window.
 PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
-  GearAudit = {},
+  GearAudit = {}, EchoFlow = {}, BossCard = {},
 }
 local PP = PallyPilot
 
 local DB_VERSION = 1
 local DEFAULTS = {
   version = DB_VERSION,
-  options = { winPos = nil, autoDraw = false, autoTalents = false, rotationHelper = true },
+  options = { winPos = nil, autoDraw = false, autoTalents = false, rotationHelper = true,
+              rerollOrbs = 1 },
   -- Diagnostic captures (gear tooltips, UI frame dumps). Written here so they
   -- land in SavedVariables on /reload and can be read from WTF directly.
   scans = {},
@@ -70,6 +71,9 @@ local function OnEvent(self, event, ...)
     PP.safeCall(PP.Dashboard.Init)
     PP.safeCall(PP.DrawHelper.Init)
     if PP.RotationHelper then PP.safeCall(PP.RotationHelper.Init) end
+    PP.safeCall(PP.EchoFlow.Init)
+    PP.safeCall(PP.BossCard.Init)
+    PP.safeCall(PP.GearAudit.HookUI)
     local paladin = select(2, UnitClass("player")) == "PALADIN"
     if not paladin then
       PP.print("Heads up: this build is tuned for Paladins. You're playing "
@@ -253,6 +257,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if arg == "echo" then PP.safeCall(PP.UiScanEcho) else PP.safeCall(PP.UiScan) end
   elseif cmd == "gear" then
     if PP.GearAudit.Toggle then PP.GearAudit.Toggle() end
+  elseif cmd == "reroll" then
+    if PP.EchoFlow.StartReroll then PP.safeCall(PP.EchoFlow.StartReroll) end
   else
     PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
   end

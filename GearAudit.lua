@@ -222,3 +222,84 @@ function GA.Toggle()
   if not frame then GA.Init() end
   if frame:IsShown() then frame:Hide() else GA.Refresh(); frame:Show() end
 end
+
+-- ---------------------------------------------------------------------------
+-- In-place integrations: verdict dots on the character sheet's slot buttons
+-- and advice lines on equipped-item tooltips.
+local SLOT_BUTTON = {
+  [1]="CharacterHeadSlot",[2]="CharacterNeckSlot",[3]="CharacterShoulderSlot",
+  [4]="CharacterShirtSlot",[5]="CharacterChestSlot",[6]="CharacterWaistSlot",
+  [7]="CharacterLegsSlot",[8]="CharacterFeetSlot",[9]="CharacterWristSlot",
+  [10]="CharacterHandsSlot",[11]="CharacterFinger0Slot",[12]="CharacterFinger1Slot",
+  [13]="CharacterTrinket0Slot",[14]="CharacterTrinket1Slot",[15]="CharacterBackSlot",
+  [16]="CharacterMainHandSlot",[17]="CharacterSecondaryHandSlot",
+  [18]="CharacterRangedSlot",[19]="CharacterTabardSlot",
+}
+local DOT_COLOR = {
+  missing = { 0.85, 0.25, 0.15 },
+  swap = { 0.85, 0.41, 0.29 },
+  rank = { 0.96, 0.85, 0.53 },
+}
+
+local cache, cacheAt = nil, 0
+local function CachedResults()
+  local now = GetTime and GetTime() or 0
+  if not cache or (now - cacheAt) > 10 then
+    cache = GA.Compute(); cacheAt = now
+  end
+  return cache
+end
+
+function GA.MarkPaperDoll()
+  for _, r in ipairs(CachedResults()) do
+    local btn = _G[SLOT_BUTTON[r.slot]]
+    if btn then
+      if not btn.__ppDot then
+        local t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetWidth(10); t:SetHeight(10)
+        t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -1, -1)
+        btn.__ppDot = t
+      end
+      local c = DOT_COLOR[r.status]
+      if c then
+        btn.__ppDot:SetTexture(c[1], c[2], c[3], 0.95)
+        btn.__ppDot:Show()
+      else
+        btn.__ppDot:Hide()
+      end
+    end
+  end
+end
+
+local function AdviceFor(itemName)
+  if not itemName then return nil end
+  for _, r in ipairs(CachedResults()) do
+    if r.item == itemName and r.status ~= "ok" then return r end
+  end
+  return nil
+end
+
+function GA.HookUI()
+  if PaperDollFrame and not GA.__pdHooked then
+    GA.__pdHooked = true
+    PaperDollFrame:HookScript("OnShow", function() PP.safeCall(GA.MarkPaperDoll) end)
+  end
+  if GameTooltip and not GA.__ttHooked then
+    GA.__ttHooked = true
+    GameTooltip:HookScript("OnTooltipSetItem", function(tip)
+      PP.safeCall(function()
+        local name = tip:GetItem()
+        local r = AdviceFor(name)
+        if not r then return end
+        if r.status == "missing" then
+          tip:AddLine("PallyPilot: no affix — add " .. r.want, 0.85, 0.25, 0.15)
+        elseif r.status == "swap" then
+          tip:AddLine("PallyPilot: re-affix to " .. r.want .. " (survival plan)", 0.85, 0.41, 0.29)
+        elseif r.status == "rank" then
+          tip:AddLine("PallyPilot: upgrade affix rank (currently " .. (r.rank or "?") .. ")", 0.96, 0.85, 0.53)
+        end
+        tip:Show()
+      end)
+    end)
+  end
+end
