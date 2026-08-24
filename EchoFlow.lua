@@ -229,6 +229,8 @@ local rollingStats, lastPickAt = nil, 0
 function EF.NotifyPick(name)
   local verdict, display = PP.EchoAudit.VerdictFor(name)
   display = display or name
+  -- Signal the reroll engine: the draw was answered (auto-pick path).
+  EF.OnPickSignal(display)
   local delta = rollingStats and StatDeltaText(rollingStats) or ""
   local label, r, g, b
   if verdict == "CORE" or verdict == "S" then
@@ -252,9 +254,24 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Reroll engine. Phases: ORB -> TILE -> DIALOG -> FORGET -> DRAW -> next.
--- DRAW advances only when a NEW echo appears in the owned set (your pick),
--- not on the removal the Forget itself causes.
+-- DRAW advances on ANY of three signals: EBH's pick event (auto-pick), a
+-- new tile appearing in the run panel (manual pick), or a new owned tome.
+-- Run draws don't change tome ownership, so ownership alone is NOT enough.
 local engine = { queue = {}, phase = nil, waited = 0, idx = 0, total = 0 }
+
+function EF.OnPickSignal(name)
+  if engine.phase == "DRAW" then
+    engine.pickFlag = true
+    engine.lastPickName = name
+  end
+end
+
+-- Set of all echo names currently in the run panel.
+local function RunNameSet()
+  local set = {}
+  EachTile(RunRoot(), function(_, display) set[display] = true end)
+  return set
+end
 
 local function SetStatus(msg, color)
   if status then status:SetText((color or DIM) .. msg .. R) end
@@ -355,61 +372,80 @@ local function EngineTick(elapsed)
   elseif engine.phase == "FORGET" then
     engine.prevOwned = PP.EchoAudit.OwnedCopy()
     engine.prevStats = StatSnap()
+    engine.runSnapshot = RunNameSet()
+    engine.runSnapshot[name] = nil -- the forgotten one leaves; ignore it
+    engine.pickFlag = false
+    engine.lastPickName = nil
     SmartClick(engine.forgetBtn)
     engine.forgetBtn = nil
     engine.phase = "DRAW"; engine.waited = 0
     engine.idx = engine.idx + 1
     SetStatus("(" .. engine.idx .. "/" .. engine.total .. ") " .. name
-      .. " forgotten — PICK YOUR NEW ECHO", BRIGHT)
+      .. " forgotten — waiting for the pick (auto-pick is usually instant)", BRIGHT)
   elseif engine.phase == "DRAW" then
-    engine.waited = 0 -- no timeout while waiting on the player's pick
-    local cur = PP.EchoAudit.OwnedCopy()
-    if cur and engine.prevOwned then
-      local newKey
-      for k in pairs(cur) do
-        if not engine.prevOwned[k] then newKey = k; break end
+    engine.waited = 0 -- no timeout while waiting on the pick
+    local newName, viaAutoPick
+    if engine.pickFlag then
+      newName, viaAutoPick = engine.lastPickName or "?", true
+    else
+      -- Tome learned (rare): a new owned key appears.
+      local cur = PP.EchoAudit.OwnedCopy()
+      if cur and engine.prevOwned then
+        for k in pairs(cur) do
+          if not engine.prevOwned[k] then newName = k; break end
+        end
       end
-      if newKey then
-        table.remove(engine.queue, 1)
-        local verdict, display = PP.EchoAudit.VerdictFor(newKey)
-        display = display or newKey
-        local delta = StatDeltaText(engine.prevStats)
-        local progress = DIM .. "  (" .. engine.idx .. "/" .. engine.total .. ")" .. R
-        if verdict == "CORE" or verdict == "S" then
-          ShowToast("+ " .. display .. " — " .. (verdict == "CORE" and "CORE!" or "S TIER, KEEP"),
-            delta .. progress, 1, 0.85, 0.35)
-        elseif verdict == "A" then
-          ShowToast("+ " .. display .. " — A tier, keep", delta .. progress, 0.62, 0.70, 0.74)
-        elseif verdict == "B" then
-          ShowToast("+ " .. display .. " — B filler", delta .. progress, 0.71, 0.65, 0.53)
-        else
-          -- Junk again: it's in the run now, so put it at the back of the queue.
-          engine.queue[#engine.queue + 1] = display
-          engine.total = engine.total + 1
-          engine.junkStreak = (engine.junkStreak or 0) + 1
+      -- Manual pick: a new tile shows up in the run panel.
+      if not newName and engine.runSnapshot then
+        EachTile(RunRoot(), function(_, display)
+          if not newName and not engine.runSnapshot[display] then newName = display end
+        end)
+      end
+    end
+    if newName then
+      engine.pickFlag = false
+      table.remove(engine.queue, 1)
+      local verdict, display = PP.EchoAudit.VerdictFor(newName)
+      display = display or newName
+      local delta = StatDeltaText(engine.prevStats)
+      local progress = DIM .. "  (" .. engine.idx .. "/" .. engine.total .. ")" .. R
+      if verdict == "REROLL" or verdict == "DISABLE" then
+        -- Junk again: it's in the run now, so put it at the back of the queue.
+        engine.queue[#engine.queue + 1] = display
+        engine.total = engine.total + 1
+        engine.junkStreak = (engine.junkStreak or 0) + 1
+        if not viaAutoPick then
           ShowToast("- " .. display .. " — junk again, requeued",
             delta .. progress, 0.85, 0.41, 0.29)
         end
-        if verdict ~= "REROLL" and verdict ~= "DISABLE" then engine.junkStreak = 0 end
-        -- EbonholdHub Auto-Pick can answer draws instantly; if it keeps
-        -- choosing junk we'd loop forever burning orbs. Stop and say so.
-        if (engine.junkStreak or 0) >= 5 then
-          StopEngine("Stopped: 5 junk picks in a row. If EbonholdHub Auto-Pick is "
-            .. "making the draws, its build list disagrees with the ratings — "
-            .. "pause Auto-Pick (or tell Claude) before spending more orbs.")
-          return
+      else
+        engine.junkStreak = 0
+        -- Auto-pick already toasted via NotifyPick; only toast the
+        -- fallback-detected picks.
+        if not viaAutoPick then
+          local r2, g2, b2 = 0.71, 0.65, 0.53
+          if verdict == "CORE" or verdict == "S" then r2, g2, b2 = 1, 0.85, 0.35
+          elseif verdict == "A" then r2, g2, b2 = 0.62, 0.70, 0.74 end
+          ShowToast("+ " .. display .. " — " .. tostring(verdict or "?"),
+            delta .. progress, r2, g2, b2)
         end
-        PP.print("Got " .. BRIGHT .. display .. R .. " — " .. StatDeltaText(engine.prevStats))
-        RefreshBadges()
-        if #engine.queue == 0 then
-          StopEngine(nil)
-          SetStatus("done — " .. engine.idx .. " rerolled", VERD)
-          PP.print("Reroll queue complete: " .. engine.idx .. " echoes recycled.")
-          if rail then EF.RefreshRail() end
-        else
-          engine.phase = "ORB"; engine.waited = 0
-          SetStatus("next: " .. engine.queue[1])
-        end
+      end
+      if (engine.junkStreak or 0) >= 5 then
+        StopEngine("Stopped: 5 junk picks in a row. Auto-Pick's choices keep "
+          .. "rating as junk — tell Claude before spending more orbs.")
+        return
+      end
+      PP.print("(" .. engine.idx .. "/" .. engine.total .. ") got "
+        .. BRIGHT .. display .. R .. " — " .. delta)
+      RefreshBadges()
+      if #engine.queue == 0 then
+        StopEngine(nil)
+        SetStatus("done — " .. engine.idx .. " rerolled", VERD)
+        PP.print("Queue complete: " .. engine.idx .. " echoes recycled.")
+        if rail then EF.RefreshRail() end
+      else
+        engine.phase = "ORB"; engine.waited = 0
+        SetStatus("next: " .. engine.queue[1])
       end
     end
   end
