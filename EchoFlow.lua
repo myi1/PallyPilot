@@ -144,11 +144,11 @@ local function FindTile(name)
   return hit
 end
 
--- Junk actually present in the current run — the only rerollable junk.
-local function RunJunk()
+-- Run-panel echoes carrying a given verdict (the Orb's working set).
+local function RunByVerdict(want)
   local seen, out = {}, {}
   EachTile(RunRoot(), function(_, display, verdict)
-    if verdict == "REROLL" and not seen[display] then
+    if verdict == want and not seen[display] then
       seen[display] = true
       out[#out + 1] = display
     end
@@ -156,6 +156,8 @@ local function RunJunk()
   table.sort(out)
   return out
 end
+
+local function RunJunk() return RunByVerdict("REROLL") end
 
 -- ---------------------------------------------------------------------------
 -- Outcome toast: after each pick, show what you got, its verdict, and the
@@ -220,6 +222,35 @@ local function StatDeltaText(before)
 end
 
 -- ---------------------------------------------------------------------------
+-- Auto-pick toasts: EBH's automation answers draws instantly; RunLog's hook
+-- on TrackPickStat calls in here so every automated pick shows a verdict
+-- toast with the power delta since a rolling baseline.
+local rollingStats, lastPickAt = nil, 0
+function EF.NotifyPick(name)
+  local verdict, display = PP.EchoAudit.VerdictFor(name)
+  display = display or name
+  local delta = rollingStats and StatDeltaText(rollingStats) or ""
+  local label, r, g, b
+  if verdict == "CORE" or verdict == "S" then
+    label, r, g, b = (verdict == "CORE" and "CORE!" or "S TIER"), 1, 0.85, 0.35
+  elseif verdict == "A" then
+    label, r, g, b = "A tier", 0.62, 0.70, 0.74
+  elseif verdict == "B" then
+    label, r, g, b = "B filler", 0.71, 0.65, 0.53
+  else
+    label, r, g, b = "junk pick!", 0.85, 0.41, 0.29
+  end
+  ShowToast("+ " .. display .. " — " .. label, delta, r, g, b)
+  rollingStats = StatSnap()
+  lastPickAt = GetTime and GetTime() or 0
+end
+
+function EF.RefreshBaseline()
+  local now = GetTime and GetTime() or 0
+  if now - lastPickAt > 3 then rollingStats = StatSnap() end
+end
+
+-- ---------------------------------------------------------------------------
 -- Reroll engine. Phases: ORB -> TILE -> DIALOG -> FORGET -> DRAW -> next.
 -- DRAW advances only when a NEW echo appears in the owned set (your pick),
 -- not on the removal the Forget itself causes.
@@ -237,6 +268,8 @@ local function StopEngine(msg)
     SetStatus(msg, EMBER)
   end
   if rail and rail.rerollBtn then rail.rerollBtn:SetText("Reroll junk") end
+  if rail and rail.upgradeBtn then rail.upgradeBtn:SetText("Upgrade Bs") end
+  if rail then PP.safeCall(EF.RefreshRail) end
 end
 
 -- Find the visible Forget dialog: a Button labeled "Forget" plus a Slider
@@ -382,28 +415,48 @@ local function EngineTick(elapsed)
   end
 end
 
+local function StartQueue(list, label)
+  engine.queue = list
+  engine.total = #list
+  engine.idx = 0
+  engine.junkStreak = 0
+  engine.phase = "ORB"
+  engine.waited = 0
+  if rail and rail.rerollBtn then rail.rerollBtn:SetText("STOP") end
+  if rail and rail.upgradeBtn then rail.upgradeBtn:SetText("STOP") end
+  PP.print(label .. ": " .. #list .. " echoes queued, "
+    .. (PP.db.options.rerollOrbs or 1) .. " orb(s) each. Click STOP anytime.")
+  SetStatus("starting — " .. engine.queue[1])
+end
+
 function EF.StartReroll()
   if engine.phase then
-    StopEngine("Reroll stopped by you.")
+    StopEngine("Queue stopped by you.")
     return
   end
   -- The Orb only trades echoes in the CURRENT RUN — queue those, not the
   -- whole owned collection.
   local list = RunJunk()
   if #list == 0 then
-    SetStatus("no junk in this run — nothing to reroll", VERD)
+    SetStatus("no junk in this run — try Upgrade Bs", VERD)
     return
   end
-  engine.queue = list
-  engine.total = #list
-  engine.idx = 0
-  engine.phase = "ORB"
-  engine.waited = 0
-  if rail and rail.rerollBtn then rail.rerollBtn:SetText("STOP") end
-  PP.print("Reroll queue: " .. #list .. " junk echoes in this run, "
-    .. (PP.db.options.rerollOrbs or 1) .. " orb(s) each. You only make the picks. "
-    .. "Click STOP anytime.")
-  SetStatus("starting — " .. engine.queue[1])
+  StartQueue(list, "Reroll queue")
+end
+
+-- Optimization pass: trade B-tier run echoes for shots at S/A. Junk results
+-- requeue (and trip the streak guard); B results just move on.
+function EF.StartUpgrade()
+  if engine.phase then
+    StopEngine("Queue stopped by you.")
+    return
+  end
+  local list = RunByVerdict("B")
+  if #list == 0 then
+    SetStatus("no B-tier echoes in this run — already optimal", VERD)
+    return
+  end
+  StartQueue(list, "Upgrade queue (B -> S/A)")
 end
 
 -- ---------------------------------------------------------------------------
@@ -420,13 +473,17 @@ function EF.RefreshRail()
     end
     local junk = #buckets.REROLL
     local inRun = #RunJunk()
+    local upgradable = #RunByVerdict("B")
     t[#t+1] = " "
     t[#t+1] = DIM .. #buckets.CORE .. " core · " .. #buckets.S .. " S · "
       .. #buckets.A .. " A · " .. #buckets.B .. " B" .. R
-    t[#t+1] = EMBER .. inRun .. " junk in this run" .. R
-      .. DIM .. " (" .. junk .. " owned)" .. R
+    t[#t+1] = EMBER .. inRun .. " junk in run" .. R .. DIM .. " · " .. R
+      .. BRIGHT .. upgradable .. " Bs upgradable" .. R
     if rail.rerollBtn and not engine.phase then
       rail.rerollBtn:SetText("Reroll junk (" .. inRun .. ")")
+    end
+    if rail.upgradeBtn and not engine.phase then
+      rail.upgradeBtn:SetText("Upgrade Bs (" .. upgradable .. ")")
     end
   else
     t[#t+1] = EMBER .. "EbonholdHub data not found" .. R
@@ -461,7 +518,7 @@ local function BuildRail()
   -- Orb spend per reroll: [-] n [+]
   local minus = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
   minus:SetWidth(22); minus:SetHeight(20)
-  minus:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 42)
+  minus:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 68)
   minus:SetText("-")
   local orbLabel = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   orbLabel:SetPoint("LEFT", minus, "RIGHT", 6, 0)
@@ -487,8 +544,14 @@ local function BuildRail()
   rail.rerollBtn:SetText("Reroll junk")
   rail.rerollBtn:SetScript("OnClick", function() PP.safeCall(EF.StartReroll) end)
 
+  rail.upgradeBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.upgradeBtn:SetWidth(182); rail.upgradeBtn:SetHeight(22)
+  rail.upgradeBtn:SetPoint("BOTTOM", rail, "BOTTOM", 0, 40)
+  rail.upgradeBtn:SetText("Upgrade Bs")
+  rail.upgradeBtn:SetScript("OnClick", function() PP.safeCall(EF.StartUpgrade) end)
+
   status = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  status:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 68)
+  status:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 94)
   status:SetWidth(182)
   status:SetJustifyH("LEFT")
 
@@ -529,6 +592,7 @@ function EF.Init()
       if not rail and Journal() then PP.safeCall(BuildRail) end
       PP.safeCall(HookTooltip, "GameTooltip")
       PP.safeCall(HookTooltip, "UtilsSpellTooltip")
+      PP.safeCall(EF.RefreshBaseline)
     end
   end)
 end

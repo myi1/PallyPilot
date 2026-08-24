@@ -55,6 +55,8 @@ B.tiers = {
     "Flame Vents", "Nether Lord's Command", "Twin Casting", "Second Edge",
     "First Strike", "Perfect Timing", "Crypt Lord's Swarm", "Rage of the Colossus",
     "Burning Flames", "Spellweave",
+    -- Catalog finds promoted to curated S (priority order matters for locks):
+    "Sanctum Sentries", "Arcane Cadence", "Reaper's Reprieve",
     -- Dual-wield enabler — the weapon setup depends on it. Never reroll.
     "Ambidexterity",
   },

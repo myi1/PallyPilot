@@ -113,6 +113,9 @@ function RL.Init()
         local verdict = PP.EchoAudit.VerdictFor
           and select(1, PP.EchoAudit.VerdictFor(pick.name)) or "?"
         PP.safeCall(RL.OnNewEcho, pick.name, "pick:" .. tostring(verdict))
+        if PP.EchoFlow and PP.EchoFlow.NotifyPick then
+          PP.safeCall(PP.EchoFlow.NotifyPick, pick.name)
+        end
       end
     end)
   end

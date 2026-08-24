@@ -70,6 +70,25 @@ local function TitleCase(lower)
   end))
 end
 
+-- Priority index within the build: curated list position beats alphabetical.
+-- Lower = more valuable. Catalog-only names fall after all curated ones.
+local tierOrderCache
+local function TierOrderIndex(base)
+  if not tierOrderCache then
+    tierOrderCache = {}
+    local i = 0
+    for _, list in ipairs({ PP.Build.locked, PP.Build.tiers.S,
+                            PP.Build.tiers.A, PP.Build.tiers.B }) do
+      for _, n in ipairs(list) do
+        i = i + 1
+        local k = Norm(n)
+        if not tierOrderCache[k] then tierOrderCache[k] = i end
+      end
+    end
+  end
+  return tierOrderCache[base] or 9999
+end
+
 -- Full-catalog lookup (BuildData.catalog), normalized keys, built lazily.
 local catalogNorm
 local function CatalogTier(norm)
@@ -121,6 +140,7 @@ function A.Compute()
     end
   end
   local buckets = { CORE = {}, S = {}, A = {}, B = {}, DISABLE = {}, REROLL = {} }
+  local ordOf = {}
   local total = 0
   for base, e in pairs(merged) do
     total = total + 1
@@ -130,9 +150,16 @@ function A.Compute()
       table.sort(e.qualities)
       display = display .. DIM .. " (" .. table.concat(e.qualities, ", ") .. ")" .. R
     end
+    ordOf[display] = TierOrderIndex(base)
     table.insert(buckets[verdict], display)
   end
-  for _, list in pairs(buckets) do table.sort(list) end
+  -- Curated priority order within each bucket, alphabetical among peers.
+  for _, list in pairs(buckets) do
+    table.sort(list, function(a, b)
+      if ordOf[a] ~= ordOf[b] then return (ordOf[a] or 9999) < (ordOf[b] or 9999) end
+      return a < b
+    end)
+  end
   return buckets, total
 end
 
@@ -244,7 +271,14 @@ function A.BestOwned(n)
       end
     end
   end
-  for _, l in pairs(buckets) do table.sort(l) end
+  local ordOf = {}
+  for _, l in pairs(buckets) do
+    for _, nm in ipairs(l) do ordOf[nm] = ordOf[nm] or TierOrderIndex(Norm(nm)) end
+    table.sort(l, function(a, b)
+      if ordOf[a] ~= ordOf[b] then return (ordOf[a] or 9999) < (ordOf[b] or 9999) end
+      return a < b
+    end)
+  end
   local out = {}
   for _, key in ipairs({ "CORE", "S", "A", "B" }) do
     for _, nm in ipairs(buckets[key]) do
