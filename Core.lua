@@ -1,7 +1,7 @@
 -- PallyPilot Core: namespace, saved vars, events, slash commands, main window.
 PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
-  GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {},
+  GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
 }
 local PP = PallyPilot
 
@@ -293,6 +293,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
   elseif cmd == "run" then
     if arg == "start" then PP.safeCall(PP.RunLog.Start)
     else PP.safeCall(PP.RunLog.Status) end
+  elseif cmd == "hubsync" then
+    if PP.HubSync.Push then PP.safeCall(PP.HubSync.Push) end
   elseif cmd == "locks" then
     local n = tonumber(arg)
     if n and n >= 1 and n <= 12 then

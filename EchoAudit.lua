@@ -227,6 +227,34 @@ function A.OwnedSignature()
   return n
 end
 
+-- Best N owned echoes as PLAIN display names (no colors/quality tags) —
+-- verdict order CORE > S > A > B. Used by HubSync's lockedEchoes.
+function A.BestOwned(n)
+  local owned = OwnedSet()
+  if not owned then return {} end
+  local names, seen = CachedNames(), {}
+  local buckets = { CORE = {}, S = {}, A = {}, B = {} }
+  for norm in pairs(owned) do
+    local base = StripQuality(norm)
+    if not seen[base] then
+      seen[base] = true
+      local v = Classify(base)
+      if buckets[v] then
+        table.insert(buckets[v], names[base] or TitleCase(base))
+      end
+    end
+  end
+  for _, l in pairs(buckets) do table.sort(l) end
+  local out = {}
+  for _, key in ipairs({ "CORE", "S", "A", "B" }) do
+    for _, nm in ipairs(buckets[key]) do
+      if #out >= n then return out end
+      out[#out + 1] = nm
+    end
+  end
+  return out
+end
+
 -- Snapshot copy of the owned set, for precise added/removed diffing.
 function A.OwnedCopy()
   local owned = OwnedSet()
