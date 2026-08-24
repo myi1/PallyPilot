@@ -2,7 +2,7 @@
 PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
   GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
-  CombatMeter = {},
+  CombatMeter = {}, AshAdvisor = {},
 }
 local PP = PallyPilot
 
@@ -171,13 +171,13 @@ function PP.UiScan()
     .. " visible frames. /reload to save it, then tell Claude — no screenshot needed.")
 end
 
--- Deep scan of the server's Echo Journal subtree: every child frame with its
--- plain-data fields (echo ids live on tile buttons the way checkpoint data
--- lived on map buttons). Run with the Echoes window open.
-function PP.UiScanEcho()
-  local root = _G["ProjectEbonholdEchoJournal"]
+-- Deep scan of a server-UI subtree: every child frame with its plain-data
+-- fields (node/echo data lives on buttons the way checkpoint data lived on
+-- map buttons). rootName + saveKey select the target.
+function PP.UiScanTree(rootName, saveKey, hint)
+  local root = _G[rootName]
   if not root then
-    PP.print("Echo journal frame not found — open the Echoes window first.")
+    PP.print(rootName .. " not found — " .. (hint or "open the window first."))
     return
   end
   local out, n = {}, 0
@@ -222,10 +222,23 @@ function PP.UiScanEcho()
   end
   walk(root, 0)
   PP.db.scans = PP.db.scans or {}
-  PP.db.scans.echoUI = out
-  PP.db.scans.echoUITime = date("%Y-%m-%d %H:%M")
-  PP.print("Echo journal deep scan: " .. n
+  PP.db.scans[saveKey] = out
+  PP.db.scans[saveKey .. "Time"] = date("%Y-%m-%d %H:%M")
+  PP.print(rootName .. " deep scan: " .. n
     .. " lines captured. /reload to save, then tell Claude.")
+end
+
+function PP.UiScanEcho()
+  PP.UiScanTree("ProjectEbonholdEchoJournal", "echoUI",
+    "open the Echoes window first.")
+end
+
+-- Soul Ash tree scan: open the Skill Tree tab, then run this. The tree
+-- panel's frame name is unknown, so we dump the whole CollectionsJournal
+-- subtree — node buttons carry their data as fields.
+function PP.UiScanAsh()
+  PP.UiScanTree("CollectionsJournal", "ashUI",
+    "open the Collections window (Skill Tree tab) first.")
 end
 
 -- Diagnostic: dump the server's echo/perk database to SavedVariables so
@@ -337,7 +350,11 @@ SlashCmdList["PALLYPILOT"] = function(line)
   elseif cmd == "gearscan" then
     PP.safeCall(PP.GearScan)
   elseif cmd == "uiscan" then
-    if arg == "echo" then PP.safeCall(PP.UiScanEcho) else PP.safeCall(PP.UiScan) end
+    if arg == "echo" then PP.safeCall(PP.UiScanEcho)
+    elseif arg == "ash" then PP.safeCall(PP.UiScanAsh)
+    else PP.safeCall(PP.UiScan) end
+  elseif cmd == "ash" then
+    if PP.AshAdvisor and PP.AshAdvisor.Report then PP.safeCall(PP.AshAdvisor.Report) end
   elseif cmd == "perkscan" then
     PP.safeCall(PP.PerkScan)
   elseif cmd == "echotext" then
