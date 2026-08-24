@@ -328,9 +328,9 @@ function AA.Render()
   end
 
   if run and run > 0 then
-    Say("  " .. DIM .. "Keep " .. R .. BRIGHT .. Fmt(math.ceil(run * 0.1))
-      .. R .. DIM .. " unspent — 10% of this run's ash is the "
-      .. "pay-to-continue price." .. R)
+    Say("  " .. DIM .. "Non-hardcore continue price: " .. R .. BRIGHT
+      .. Fmt(math.ceil(run * 0.1)) .. R .. DIM
+      .. " (10% of run ash). HARDCORE death is final — no continue." .. R)
   end
   if committed then
     local g = AD.PRESTIGE.gate
@@ -488,7 +488,9 @@ function AA.RefreshRail()
   end
   local run = RunAsh()
   if run and run > 0 then
-    bits[#bits+1] = DIM .. "continue reserve: " .. Fmt(math.ceil(run * 0.1)) .. R
+    -- Hardcore runs have NO pay-to-continue: death is final there.
+    bits[#bits+1] = DIM .. "continue price (non-HC only): "
+      .. Fmt(math.ceil(run * 0.1)) .. R
   end
   rail.footer:SetText(table.concat(bits, "\n"))
 end

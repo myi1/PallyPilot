@@ -118,6 +118,13 @@ local BUNDLES = {
   { id = "ppb-blades", tier = "S",
     echoes = { "Ambidexterity", "Second Edge", "First Strike",
                "Expertise Drills", "Armor Penetration", "Weapon Mastery" } },
+  -- Measured on the arm3 HoR-HC2 benchmark: the fire/frost proc web (Fire
+  -- Cyclone #1 source) feeds itself — echoes' own fire/frost damage triggers
+  -- the school-stack echoes.
+  { id = "ppb-cyclones", tier = "S",
+    echoes = { "Cinders of the Sanctum", "Cyclone of Cold Bones",
+               "Permafrost Aura", "Frostfire Paradox", "Scorched Path",
+               "Conjured Flame", "Flame Beacon" } },
 }
 local function AssembleBundles()
   local out = {}

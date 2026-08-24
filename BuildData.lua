@@ -125,7 +125,10 @@ B.catalog = {
   ["Battlefield Hazard"] = "B", ["Beast Slayer"] = "B",
   ["Blighted Hazard"] = "B", ["Broodmother's Webbing"] = "B",
   ["Champion's Rally"] = "B", ["Chaotic Convergence"] = "B",
-  ["Chill of the Bone Wyrm"] = "B", ["Cinders of the Sanctum"] = "B",
+  ["Chill of the Bone Wyrm"] = "B",
+  -- MEASURED (arm3 HoR-HC2 benchmark): its Fire Cyclone proc was the #1
+  -- damage source (10-14% per fight) — the fire/frost echo web feeds it.
+  ["Cinders of the Sanctum"] = "S",
   ["Conjured Flame"] = "B", ["Crippling Strikes"] = "B",
   ["Curse of the Plaguebringer"] = "B", ["Dark Nucleus"] = "B",
   ["Demon Slayer"] = "B", ["Divine Resonance"] = "B", ["Dragon Slayer"] = "B",
@@ -145,23 +148,27 @@ B.catalog = {
   ["Lightning Charged"] = "B", ["Machine Slayer"] = "B", ["Malleable Goo"] = "B",
   ["Mana Infusion"] = "B",      -- verified: mana returns also heal above 80% mana
   ["Mutagenic Fumes"] = "B", ["Opening Split"] = "B",
-  ["Permafrost Aura"] = "B", ["Permeating Chill"] = "B", ["Polarity Shift"] = "B",
+  ["Permafrost Aura"] = "A",    -- measured: steady 3-4% + feeds the frost web
+  ["Permeating Chill"] = "B", ["Polarity Shift"] = "B",
   ["Prismatic Guard"] = "B", ["Raging Momentum"] = "B",
   ["Ravenous Bellow"] = "B", ["Reactive Retaliation"] = "B",
   ["Reinforced Shielding"] = "B", ["Relentless Energy"] = "B",
   ["Rocket Strike"] = "B", ["Rootbreaker"] = "B",
-  ["Ruthless Exploiter"] = "B", -- +20% vs CC'd only; raid bosses are CC-immune
+  ["Ruthless Exploiter"] = "A", -- measured 6-8% of total on HC2 trash; my
+                                -- CC-only read was too narrow (procs off the
+                                -- echo web's freezes/roots/stuns constantly)
   ["Sanctified Sky"] = "B", ["Scorched Path"] = "B",
   ["Shadow Crash"] = "B", ["Shadow Hazard"] = "B", ["Shadow Ward"] = "B",
   ["Sharpened Edge"] = "B",     -- verified: small flat adder, not % damage
-  ["Shielded Steps"] = "B", ["Shock Vortex"] = "B", ["Slime Spray"] = "B",
+  ["Shielded Steps"] = "B", ["Shock Vortex"] = "B",
+  ["Slime Spray"] = "A",        -- measured: Mutated Infection/Blight web = top-3 source
   ["Slimebound Husk"] = "B", ["Spell Harmony"] = "B", ["Spiteful Shard"] = "B",
   ["Spiteful Thorns"] = "B", ["Steady Grip"] = "B",
   ["Stone Shatter"] = "B", ["Stoneskin Threads"] = "B",
   ["Stored Momentum"] = "B", ["Storm Hazard"] = "B", ["Sundered Will"] = "B",
   ["Swift Step"] = "B",
   ["The Sporelord's Gift"] = "B", -- buffs "nearby allies"; solo value unclear
-  ["The Unclean's Fever"] = "B",
+  ["The Unclean's Fever"] = "A",  -- measured: consistent ~3% while tanking packs
   ["Titan's Grip"] = "B",       -- 2H-in-one-hand at -20% dmg; test vs 1H pair
   ["Toxic Phials"] = "B", ["Twilight Combustion"] = "B",
   ["Undead Bane"] = "B",        -- +600 SP vs undead; SP is secondary but real
