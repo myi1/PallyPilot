@@ -53,6 +53,7 @@ local function DisplayNames()
     for _, n in ipairs(list) do add(n) end
   end
   for _, n in ipairs(B.disable) do add(n) end
+  for n in pairs(B.catalog or {}) do add(n) end
   local data = EbonholdHub and EbonholdHub.EchoMapData and EbonholdHub.EchoMapData.Locations
   if data then
     for _, list in pairs(data) do
@@ -67,6 +68,18 @@ local function TitleCase(lower)
   return (lower:gsub("(%a)([%w']*)", function(head, rest)
     return string.upper(head) .. rest
   end))
+end
+
+-- Full-catalog lookup (BuildData.catalog), normalized keys, built lazily.
+local catalogNorm
+local function CatalogTier(norm)
+  if not catalogNorm then
+    catalogNorm = {}
+    for n, tier in pairs(PP.Build.catalog or {}) do
+      catalogNorm[Norm(n)] = tier
+    end
+  end
+  return catalogNorm[norm]
 end
 
 -- Verdict for one owned echo (by normalized name).
@@ -84,6 +97,8 @@ local function Classify(norm)
       if Norm(n) == norm then return tier end
     end
   end
+  local ct = CatalogTier(norm)
+  if ct and ct ~= "F" then return ct end
   return "REROLL"
 end
 
@@ -270,8 +285,9 @@ local function BuildText()
     end
   end
   t[#t+1] = "\n" .. DIM .. PP.Build.disableNote .. R .. "\n"
-  t[#t+1] = VERD .. "Unrated echoes default to Reroll. If one reads strong for the "
-    .. "build, it may just be missing a tier — ratings live in BuildData.lua." .. R .. "\n"
+  t[#t+1] = VERD .. "The full 323-echo catalog is rated (PerkDatabase dump). Reroll "
+    .. "now means rated-junk, not unknown. Disagree with a verdict? Ratings live in "
+    .. "BuildData.lua." .. R .. "\n"
   return table.concat(t)
 end
 

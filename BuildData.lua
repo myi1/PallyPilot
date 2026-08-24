@@ -73,6 +73,98 @@ B.tiers = {
   },
 }
 
+-- Full-catalog ratings (from the server's PerkDatabase dump, 2026-08-25:
+-- 323 echoes, 242 paladin-usable). Names NOT in the curated lists above are
+-- rated here: S/A/B = tiers, F = junk (reroll fodder). Anything absent from
+-- both stays unrated-junk. Rationale: DoT echoes ride Pandemic/Contagion,
+-- leech/sustain enables solo, caster/mana/spirit/healer-only echoes are dead
+-- weight for Ret, undead-flavored damage is the whole AotC path.
+B.catalog = {
+  -- S: build-defining
+  ["Arcane Cadence"] = "S",       -- Divine Storm triggers it (Nero's note)
+  ["Sanctum Sentries"] = "S",     -- permanent +10% damage-taken debuff via guardians
+  ["Reaper's Reprieve"] = "S",    -- cheat-death; mandatory for Hardcore runs
+  -- A: strong pickups
+  ["Blade Tempest"] = "A", ["Call of the Lich King"] = "A",
+  ["Cinders of the Sanctum"] = "A", ["Crushing Finish"] = "A",
+  ["Curse of the Plaguebringer"] = "A", ["Deathwhisper's Barrier"] = "A",
+  ["Defile"] = "A", ["Emerald Vigor"] = "A", ["Enhanced Recovery"] = "A",
+  ["Essence Tap"] = "A", ["Frostmourne Hungers"] = "A",
+  ["Idol of Yogg-Saron"] = "A", ["Immolation Aura"] = "A",
+  ["Impaler's Tribute"] = "A", ["Keen Aim"] = "A", ["Leeching Swarm"] = "A",
+  ["Lethal Precision"] = "A", ["Necrotic Plague"] = "A", ["Open Wounds"] = "A",
+  ["Reaper's Verdict"] = "A", ["Rolling Momentum"] = "A",
+  ["Ruthless Exploiter"] = "A", ["Sharpened Edge"] = "A",
+  ["Sweeping Blows"] = "A", ["The Harvester's Tithe"] = "A",
+  ["The Last Wall"] = "A", ["The Sporelord's Gift"] = "A",
+  ["Undead Slayer"] = "A",        -- Naxx/ICC are 100% undead
+  -- B: fine filler
+  ["Archmage's Mark"] = "B", ["Arcane Ward"] = "B", ["Armor Mastery"] = "B",
+  ["Arcane Bombardment"] = "B", ["Backstabber's Edge"] = "B",
+  ["Battle Tempo"] = "B", ["Battlefield Hazard"] = "B", ["Beast Slayer"] = "B",
+  ["Blighted Hazard"] = "B", ["Broodmother's Fury"] = "B",
+  ["Broodmother's Webbing"] = "B", ["Champion's Rally"] = "B",
+  ["Chaotic Convergence"] = "B", ["Chill of the Bone Wyrm"] = "B",
+  ["Conjured Flame"] = "B", ["Crippling Strikes"] = "B",
+  ["Crusader's Surge"] = "B", ["Crushing Force"] = "B",
+  ["Cyclone of Cold Bones"] = "B", ["Dark Nucleus"] = "B",
+  ["Demon Slayer"] = "B", ["Demonic Awakening"] = "B",
+  ["Divine Resonance"] = "B", ["Dragon Slayer"] = "B",
+  ["Drillmaster's Rebuke"] = "B", ["Earthen Snap"] = "B",
+  ["Earthen Spike"] = "B", ["Earthen Stability"] = "B",
+  ["Echoing Tides"] = "B", ["Elemental Slayer"] = "B", ["Ember Spark"] = "B",
+  ["Ember Ward"] = "B", ["Emberlord's Gift"] = "B", ["Eonar's Seed"] = "B",
+  ["Flame Beacon"] = "B", ["Forged in Combat"] = "B", ["Fortress Soul"] = "B",
+  ["Frost Bite"] = "B", ["Frost Ward"] = "B", ["Frostfire Paradox"] = "B",
+  ["Frostguard Carapace"] = "B", ["Giant Slayer"] = "B", ["Grim Resolve"] = "B",
+  ["Gunship Barrage"] = "B", ["Hardened Resolve"] = "B", ["Hardened Skin"] = "B",
+  ["Harpoon Barrage"] = "B", ["Heavy Blows"] = "B", ["Holy Hazard"] = "B",
+  ["Hungering Curse"] = "B", ["Inhaled Blight"] = "B", ["Insulated Soul"] = "B",
+  ["Lightning Charged"] = "B", ["Machine Slayer"] = "B", ["Malleable Goo"] = "B",
+  ["Mutagenic Fumes"] = "B", ["Opening Split"] = "B", ["Peak Condition"] = "B",
+  ["Permafrost Aura"] = "B", ["Permeating Chill"] = "B", ["Polarity Shift"] = "B",
+  ["Precision Strike"] = "B", ["Prismatic Guard"] = "B",
+  ["Purifying Touch"] = "B", ["Quick Hands"] = "B", ["Raging Momentum"] = "B",
+  ["Ravenous Bellow"] = "B", ["Reactive Retaliation"] = "B",
+  ["Reinforced Shielding"] = "B", ["Relentless Energy"] = "B",
+  ["Rocket Strike"] = "B", ["Rootbreaker"] = "B", ["Sanctified Hazard"] = "B",
+  ["Sanctified Sky"] = "B", ["Scent of Blood"] = "B", ["Scorched Path"] = "B",
+  ["Shadow Crash"] = "B", ["Shadow Hazard"] = "B", ["Shadow Ward"] = "B",
+  ["Shielded Steps"] = "B", ["Shock Vortex"] = "B", ["Slime Spray"] = "B",
+  ["Slimebound Husk"] = "B", ["Spell Harmony"] = "B", ["Spiteful Shard"] = "B",
+  ["Spiteful Thorns"] = "B", ["Static Overflow"] = "B", ["Steady Grip"] = "B",
+  ["Stitched Fury"] = "B", ["Stone Shatter"] = "B", ["Stonefist Barrage"] = "B",
+  ["Stoneskin Threads"] = "B", ["Stored Momentum"] = "B", ["Storm Hazard"] = "B",
+  ["Sudden Insight"] = "B", ["Sundered Formation"] = "B", ["Sundered Will"] = "B",
+  ["Swift Step"] = "B", ["Temporal Pressure"] = "B",
+  ["The Unclean's Fever"] = "B", ["Titan's Grip"] = "B", ["Toxic Phials"] = "B",
+  ["Tunnel Vision"] = "B", ["Twilight Combustion"] = "B",
+  ["Unbroken Focus"] = "B", ["Verdant Ward"] = "B", ["Warm-Blooded"] = "B",
+  ["Widow's Venom"] = "B", ["Wild Hazard"] = "B",
+  ["Paladin - Arcane Bombardment"] = "B", ["Paladin - Ember Spark"] = "B",
+  ["Paladin - Stonefist Barrage"] = "B",
+  -- F: dead weight for Ret (caster/mana/spirit/healer-only, threat, niche)
+  ["Accelerated Spirit"] = "F", ["Agility Boost"] = "F", ["Arcane Burn"] = "F",
+  ["Arcane Hazard"] = "F", ["Arcane Surge"] = "F", ["Beast Bane"] = "F",
+  ["Burning Touch"] = "F", ["Cavalry Instincts"] = "F", ["Demon Bane"] = "F",
+  ["Divine Surge"] = "F", ["Dragonkin Bane"] = "F", ["Drained Reserves"] = "F",
+  ["Efficient Casting"] = "F", ["Elemental Bane"] = "F",
+  ["Entropic Fusion"] = "F", ["Fel Hazard"] = "F", ["Fel Surge"] = "F",
+  ["Giant Bane"] = "F", ["Glass Canon"] = "F", -- +dmg taken kills Hardcore runs
+  ["Healing Cadence"] = "F", ["Healing Echo"] = "F",
+  ["Heavy Incantations"] = "F", ["Holy Revelation"] = "F",
+  ["Hunting Hazard"] = "F", ["Inspiring Mending"] = "F", ["Leadfoot"] = "F",
+  ["Lingering Inspiration"] = "F", ["Mana Infusion"] = "F",
+  ["Mana Regeneration"] = "F", ["Mana Reservoir"] = "F",
+  ["Mechanical Bane"] = "F", ["Meditative Flow"] = "F", ["Mind Expansion"] = "F",
+  ["Nature's Surge"] = "F", ["Overwhelming Restoration"] = "F",
+  ["Provoking Presence"] = "F", -- threat is meaningless solo
+  ["Runic Momentum"] = "F",     -- runic power: dead resource for a paladin
+  ["Spiritual Fortitude"] = "F", ["Steady Casting"] = "F",
+  ["Steady Channeling"] = "F", ["Storm of the Spellweaver"] = "F",
+  ["Subtle Presence"] = "F", ["Undead Bane"] = "F", ["Unstable Missiles"] = "F",
+}
+
 -- Echoes to disable / banish. Rage- and runic-power-scaling echoes are dead for
 -- a mana class; the others are traps for this build.
 B.disable = {
