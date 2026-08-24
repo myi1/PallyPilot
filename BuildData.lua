@@ -165,10 +165,12 @@ B.catalog = {
   ["Titan's Grip"] = "B",       -- 2H-in-one-hand at -20% dmg; test vs 1H pair
   ["Toxic Phials"] = "B", ["Twilight Combustion"] = "B",
   ["Undead Bane"] = "B",        -- +600 SP vs undead; SP is secondary but real
+  ["Agility Boost"] = "B",      -- weak alone, but a 3rd base-stat TYPE turns
+                                -- Resonant Build's +15% damage ON (with Str+Stam)
   ["Verdant Ward"] = "B", ["Warm-Blooded"] = "B",
   ["Widow's Venom"] = "B", ["Wild Hazard"] = "B",
   -- F: verified dead weight or traps for this build
-  ["Accelerated Spirit"] = "F", ["Agility Boost"] = "F", ["Arcane Burn"] = "F",
+  ["Accelerated Spirit"] = "F", ["Arcane Burn"] = "F",
   ["Arcane Hazard"] = "F", ["Arcane Surge"] = "F",
   ["Armor Mastery"] = "F",      -- you already wear plate
   ["Beast Bane"] = "F",
