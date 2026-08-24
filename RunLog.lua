@@ -46,6 +46,13 @@ function RL.OnLevelUp()
   local runs = Runs()
   if not runs.current or runs.current.finished then return end
   local s = Snap()
+  -- Catch-up bursts fire one event per level gained; collapse same-level
+  -- snapshots into the latest reading instead of appending duplicates.
+  local prev = runs.current.levels[#runs.current.levels]
+  if prev and prev.lvl == s.lvl then
+    runs.current.levels[#runs.current.levels] = s
+    return
+  end
   runs.current.levels[#runs.current.levels + 1] = s
   if s.lvl >= 80 then
     runs.current.finished = date("%Y-%m-%d %H:%M")
@@ -93,8 +100,20 @@ function RL.Init()
       end
     end)
   end)
-  -- Echo learns arrive via the audit watcher's callback.
+  -- Echo learns arrive via the audit watcher's callback (tome ownership)...
   PP.EchoAudit.onNewEcho = function(display, verdict)
     PP.safeCall(RL.OnNewEcho, display, verdict)
+  end
+  -- ...but run DRAWS don't change ownership, so also tap EbonholdHub's own
+  -- pick tracker (post-hook only, behavior untouched).
+  if EbonholdHub and EbonholdHub.Build and EbonholdHub.Build.TrackPickStat
+     and hooksecurefunc then
+    hooksecurefunc(EbonholdHub.Build, "TrackPickStat", function(pick)
+      if pick and pick.name then
+        local verdict = PP.EchoAudit.VerdictFor
+          and select(1, PP.EchoAudit.VerdictFor(pick.name)) or "?"
+        PP.safeCall(RL.OnNewEcho, pick.name, "pick:" .. tostring(verdict))
+      end
+    end)
   end
 end
