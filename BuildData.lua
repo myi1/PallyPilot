@@ -55,12 +55,17 @@ B.tiers = {
     "Flame Vents", "Nether Lord's Command", "Twin Casting", "Second Edge",
     "First Strike", "Perfect Timing", "Crypt Lord's Swarm", "Rage of the Colossus",
     "Burning Flames", "Spellweave",
+    -- Dual-wield enabler — the weapon setup depends on it. Never reroll.
+    "Ambidexterity",
   },
   A = {
     "Accelerated Decay", "Quickened Tempo", "Quickening Aura", "Arcane Density",
     "Rend the Weak", "Iron Constitution", "Brutal Might", "Scorching Wounds",
     "Battle Rhythm", "Relentless Rhythm", "Tempest Vortex", "Strength Training",
     "Focused Assault", "Mystic Potency", "Reaper's Doom", "Weapon Mastery",
+    -- Physical dual-wield scaling: ArP multiplies white/CS/DS damage,
+    -- expertise removes dodge/parry from two swing streams.
+    "Armor Penetration", "Expertise Drills",
   },
   B = {
     "Steel Brand", "Bolstered Vitality", "Pain Drive", "Holy Brand",
@@ -71,7 +76,9 @@ B.tiers = {
 -- Echoes to disable / banish. Rage- and runic-power-scaling echoes are dead for
 -- a mana class; the others are traps for this build.
 B.disable = {
-  "Warded Aegis", "Brittle Armor", "Overcharged", "Paladin - Corrosive Breath",
+  "Warded Aegis", "Brittle Armor", "Overcharged",
+  -- Ebonhold lists this one both ways depending on the UI.
+  "Paladin - Corrosive Breath", "Corrosive Breath",
 }
 B.disableNote = "Also disable any echo that scales with RAGE or RUNIC POWER — "
   .. "you're a mana class, so they do nothing. The mana-resource echo DOES work."

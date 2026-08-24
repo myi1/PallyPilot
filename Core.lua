@@ -80,6 +80,38 @@ PP.frame:SetScript("OnEvent", OnEvent)
 PP.frame:RegisterEvent("ADDON_LOADED")
 PP.frame:RegisterEvent("PLAYER_LOGIN")
 
+-- Diagnostic: dump equipped-item tooltip lines so we can learn Ebonhold's
+-- affix text format (feeds the future gear/affix auditor).
+local SLOT_NAMES = {
+  [1]="Head",[2]="Neck",[3]="Shoulder",[4]="Shirt",[5]="Chest",[6]="Waist",
+  [7]="Legs",[8]="Feet",[9]="Wrist",[10]="Hands",[11]="Ring1",[12]="Ring2",
+  [13]="Trinket1",[14]="Trinket2",[15]="Back",[16]="MainHand",[17]="OffHand",
+  [18]="Ranged",[19]="Tabard",
+}
+function PP.GearScan()
+  local tip = PPScanTooltip
+    or CreateFrame("GameTooltip", "PPScanTooltip", nil, "GameTooltipTemplate")
+  tip:SetOwner(UIParent, "ANCHOR_NONE")
+  PP.print("Gear scan — screenshot this output for the affix auditor:")
+  for slot = 1, 19 do
+    local link = GetInventoryItemLink("player", slot)
+    if link then
+      tip:ClearLines()
+      tip:SetInventoryItem("player", slot)
+      local itemName = GetItemInfo(link)
+      DEFAULT_CHAT_FRAME:AddMessage("|cffe0b352[" .. (SLOT_NAMES[slot] or slot)
+        .. "]|r " .. (itemName or "?"))
+      for i = 2, tip:NumLines() do
+        local line = _G["PPScanTooltipTextLeft" .. i]
+        local txt = line and line:GetText()
+        if txt and txt ~= "" then
+          DEFAULT_CHAT_FRAME:AddMessage("    " .. txt)
+        end
+      end
+    end
+  end
+end
+
 SLASH_PALLYPILOT1 = "/pp"
 SLASH_PALLYPILOT2 = "/pallypilot"
 SlashCmdList["PALLYPILOT"] = function(line)
@@ -106,6 +138,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.RotationHelper then PP.RotationHelper.Toggle() end
   elseif cmd == "keyscan" then
     if PP.RotationHelper and PP.RotationHelper.KeyScan then PP.RotationHelper.KeyScan() end
+  elseif cmd == "gearscan" then
+    PP.safeCall(PP.GearScan)
   else
     PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
   end
