@@ -387,11 +387,26 @@ local function EngineTick(elapsed)
     SmartClick(engine.forgetBtn)
     engine.forgetBtn = nil
     engine.phase = "DRAW"; engine.waited = 0
+    engine.drawWait = 0
     engine.idx = engine.idx + 1
     SetStatus("(" .. engine.idx .. "/" .. engine.total .. ") " .. name
       .. " forgotten — waiting for the pick (auto-pick is usually instant)", BRIGHT)
   elseif engine.phase == "DRAW" then
     engine.waited = 0 -- no timeout while waiting on the pick
+    engine.drawWait = (engine.drawWait or 0) + elapsed
+    -- The pick closes the journal; the tile-diff fallback below is blind
+    -- while it's hidden. Reopen it ourselves after a short grace period.
+    if engine.drawWait > 2 then
+      local j = Journal()
+      if not (j and j:IsVisible()) then
+        local micro = _G["EchoJournalMicroButton"]
+        if micro then SmartClick(micro) end
+      end
+      if engine.drawWait > 10 then
+        SetStatus("(" .. engine.idx .. "/" .. engine.total .. ") still waiting — "
+          .. "if the pick already happened, /pp next skips ahead", EMBER)
+      end
+    end
     local newName, viaAutoPick
     if engine.pickFlag then
       newName, viaAutoPick = engine.lastPickName or "?", true
@@ -471,6 +486,28 @@ local function StartQueue(list, label)
   PP.print(label .. ": " .. #list .. " echoes queued, "
     .. (PP.db.options.rerollOrbs or 1) .. " orb(s) each. Click STOP anytime.")
   SetStatus("starting — " .. engine.queue[1])
+end
+
+-- Manual escape hatch: the pick happened but no signal caught it.
+-- Advances the queue without verdict processing (no requeue, no toast).
+function EF.ForceNext()
+  if engine.phase ~= "DRAW" then
+    PP.print("Nothing is waiting on a pick right now.")
+    return
+  end
+  table.remove(engine.queue, 1)
+  engine.pickFlag = false
+  RefreshBadges()
+  if #engine.queue == 0 then
+    StopEngine(nil)
+    SetStatus("done — " .. engine.idx .. " rerolled", VERD)
+    PP.print("Queue complete: " .. engine.idx .. " echoes recycled.")
+    if rail then EF.RefreshRail() end
+  else
+    engine.phase = "ORB"; engine.waited = 0
+    SetStatus("next: " .. engine.queue[1])
+    PP.print("Skipped ahead — next: " .. engine.queue[1])
+  end
 end
 
 function EF.StartReroll()

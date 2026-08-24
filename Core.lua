@@ -357,6 +357,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.GearAudit.Toggle then PP.GearAudit.Toggle() end
   elseif cmd == "reroll" then
     if PP.EchoFlow.StartReroll then PP.safeCall(PP.EchoFlow.StartReroll) end
+  elseif cmd == "next" then
+    if PP.EchoFlow.ForceNext then PP.safeCall(PP.EchoFlow.ForceNext) end
   else
     PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
   end
