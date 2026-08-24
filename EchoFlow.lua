@@ -20,6 +20,7 @@ local DOT = {
   S    = { 0.96, 0.85, 0.53 },
   A    = { 0.62, 0.70, 0.74 },
   B    = { 0.55, 0.48, 0.38 },
+  C    = { 0.45, 0.50, 0.55 },
   DISABLE = { 0.85, 0.25, 0.15 },
   REROLL  = { 0.85, 0.41, 0.29 },
 }
@@ -28,6 +29,7 @@ local TIP_LABEL = {
   S = "S tier — keep (lock candidate)",
   A = "A tier — keep",
   B = "B tier — fine filler",
+  C = "C — breadth filler (+1% Adaptive Power)",
   DISABLE = "DISABLE — bad for this build",
   REROLL = "unrated — reroll fodder",
 }
@@ -247,6 +249,8 @@ function EF.NotifyPick(name)
     label, r, g, b = "A tier", 0.62, 0.70, 0.74
   elseif verdict == "B" then
     label, r, g, b = "B filler", 0.71, 0.65, 0.53
+  elseif verdict == "C" then
+    label, r, g, b = "breadth +1%", 0.45, 0.50, 0.55
   else
     label, r, g, b = "junk pick!", 0.85, 0.41, 0.29
   end

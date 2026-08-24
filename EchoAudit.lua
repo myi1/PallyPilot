@@ -139,7 +139,8 @@ function A.Compute()
       e.hasBase = true
     end
   end
-  local buckets = { CORE = {}, S = {}, A = {}, B = {}, DISABLE = {}, REROLL = {} }
+  local buckets = { CORE = {}, S = {}, A = {}, B = {}, C = {},
+                    DISABLE = {}, REROLL = {} }
   local ordOf = {}
   local total = 0
   for base, e in pairs(merged) do
@@ -303,6 +304,9 @@ local SECTIONS = {
     note = "Not in the build. These are your reroll currency — no build slot wants them." },
   { key = "DISABLE", color = EMBER, title = "Disable / banish",
     note = "Actively bad for this build. Turn them off; banish from draws when offered." },
+  { key = "C", color = DIM, title = "Breadth filler — keep active",
+    note = "No build value on their own, but every unique active echo is +1% "
+      .. "damage via Adaptive Power. Never reroll these below the active cap." },
   { key = "B", color = DIM, title = "Fine — keep, low priority",
     note = "B tier. Fill slots when nothing better is available; replace as S/A arrive." },
   { key = "A", color = ASH, title = "Keep — A tier", note = nil },
@@ -322,8 +326,8 @@ local function BuildText()
   end
   t[#t+1] = DIM .. "You own " .. R .. GOLD .. total .. R .. DIM .. " echoes — "
     .. #buckets.CORE .. " core, " .. #buckets.S .. " S, " .. #buckets.A .. " A, "
-    .. #buckets.B .. " B, " .. #buckets.DISABLE .. " to disable, "
-    .. #buckets.REROLL .. " unrated/reroll." .. R .. "\n"
+    .. #buckets.B .. " B, " .. #buckets.C .. " C, " .. #buckets.DISABLE
+    .. " to disable, " .. #buckets.REROLL .. " unrated/reroll." .. R .. "\n"
 
   -- Maximize current potential: best six OWNED echoes to lock today.
   local lockNow = A.LockNow(buckets)
@@ -422,6 +426,7 @@ local VERDICT_LABEL = {
   S = BRIGHT .. "S tier — KEEP (lock candidate)" .. R,
   A = ASH .. "A tier — keep" .. R,
   B = DIM .. "B tier — fine" .. R,
+  C = DIM .. "C — breadth filler (+1% Adaptive)" .. R,
   DISABLE = EMBER .. "DISABLE — bad for the build" .. R,
   REROLL = EMBER .. "unrated — reroll fodder unless it reads strong" .. R,
 }

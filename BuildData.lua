@@ -169,48 +169,68 @@ B.catalog = {
                                 -- Resonant Build's +15% damage ON (with Str+Stam)
   ["Verdant Ward"] = "B", ["Warm-Blooded"] = "B",
   ["Widow's Venom"] = "B", ["Wild Hazard"] = "B",
-  -- F: verified dead weight or traps for this build
-  ["Accelerated Spirit"] = "F", ["Arcane Burn"] = "F",
-  ["Arcane Hazard"] = "F", ["Arcane Surge"] = "F",
-  ["Armor Mastery"] = "F",      -- you already wear plate
-  ["Beast Bane"] = "F",
-  ["Bolstered Vitality"] = "F", -- +175 flat HP on a 111k pool
-  ["Burning Touch"] = "F", ["Cavalry Instincts"] = "F", ["Demon Bane"] = "F",
-  ["Divine Surge"] = "F", ["Dragonkin Bane"] = "F", ["Drained Reserves"] = "F",
-  ["Efficient Casting"] = "F", ["Elemental Bane"] = "F",
-  ["Enhanced Recovery"] = "F",  -- verified: it's +1% healing received. One.
-  ["Entropic Fusion"] = "F", ["Fel Hazard"] = "F", ["Fel Surge"] = "F",
-  ["Giant Bane"] = "F", ["Glass Canon"] = "F", -- +dmg taken kills Hardcore runs
-  ["Healing Cadence"] = "F", ["Healing Echo"] = "F",
-  ["Heavy Blows"] = "F",        -- verified: -30% attack speed; dual-wield poison
-  ["Heavy Incantations"] = "F", ["Holy Revelation"] = "F",
-  ["Hunting Hazard"] = "F", ["Inspiring Mending"] = "F", ["Leadfoot"] = "F",
+  -- Promotions from the Wkpal autopsy (2026-08-25): field data over theory.
+  ["The Last Wall"] = "A",      -- +50% max HP; Wkpal runs it — losing it = -17k HP
+  ["Drained Reserves"] = "A",   -- +15% spell dmg; -30% mana irrelevant with JotW
+  ["Bolstered Vitality"] = "B", ["Warded Aegis"] = "B",
+  -- F: ONLY true negative riders. Merely-useless echoes are C instead — every
+  -- unique active echo pays +1% damage via Adaptive Power, and F-ratings also
+  -- waste the engine's banishes (Wkpal spends banishes on duplicates).
+  ["Glass Canon"] = "F",        -- -30% max HP rider
+  ["Heavy Blows"] = "F",        -- -30% attack speed rider (dual-wield poison)
+  ["Brittle Armor"] = "F", ["Overcharged"] = "F",
   -- Tooltip-verified trap: -50% crit CHANCE for +30% crit damage. Zeroes a
   -- ~44% crit build; only sane at 90%+ crit. (Field report 2026-08-25.)
   ["Lethal Precision"] = "F",
-  ["Lingering Inspiration"] = "F",
-  ["Mana Regeneration"] = "F", ["Mana Reservoir"] = "F",
-  ["Mechanical Bane"] = "F", ["Meditative Flow"] = "F", ["Mind Expansion"] = "F",
-  ["Nature's Surge"] = "F", ["Overwhelming Restoration"] = "F",
-  ["Provoking Presence"] = "F", -- threat is meaningless solo
-  ["Runic Momentum"] = "F",     -- runic power: dead resource for a paladin
-  ["Spiritual Fortitude"] = "F", ["Steady Casting"] = "F",
-  ["Steady Channeling"] = "F", ["Stitched Fury"] = "F", -- requires living <15% HP
-  ["Storm of the Spellweaver"] = "F", ["Subtle Presence"] = "F",
-  ["The Last Wall"] = "F",      -- verified: -60% healing received guts JoL sustain
-  ["Unbroken Focus"] = "F",     -- needs 5s without damage; solo melee never has it
-  ["Unstable Missiles"] = "F",
+  -- C: breadth filler — no build value, but KEEP them active for Adaptive.
+  ["Accelerated Spirit"] = "C", ["Arcane Burn"] = "C", ["Arcane Hazard"] = "C",
+  ["Arcane Surge"] = "C", ["Armor Mastery"] = "C", ["Beast Bane"] = "C",
+  ["Burning Touch"] = "C", ["Cavalry Instincts"] = "C", ["Demon Bane"] = "C",
+  ["Divine Surge"] = "C", ["Dragonkin Bane"] = "C", ["Efficient Casting"] = "C",
+  ["Elemental Bane"] = "C", ["Enhanced Recovery"] = "C", ["Entropic Fusion"] = "C",
+  ["Fel Hazard"] = "C", ["Fel Surge"] = "C", ["Giant Bane"] = "C",
+  ["Healing Cadence"] = "C", ["Healing Echo"] = "C", ["Heavy Incantations"] = "C",
+  ["Holy Revelation"] = "C", ["Hunting Hazard"] = "C", ["Inspiring Mending"] = "C",
+  ["Leadfoot"] = "C", ["Lingering Inspiration"] = "C", ["Mana Regeneration"] = "C",
+  ["Mana Reservoir"] = "C", ["Mechanical Bane"] = "C", ["Meditative Flow"] = "C",
+  ["Mind Expansion"] = "C", ["Nature's Surge"] = "C",
+  ["Overwhelming Restoration"] = "C", ["Provoking Presence"] = "C",
+  ["Runic Momentum"] = "C", ["Spiritual Fortitude"] = "C",
+  ["Steady Casting"] = "C", ["Steady Channeling"] = "C", ["Stitched Fury"] = "C",
+  ["Storm of the Spellweaver"] = "C", ["Subtle Presence"] = "C",
+  ["Unbroken Focus"] = "C", ["Unstable Missiles"] = "C",
 }
+
+-- Cross-class proc variants (Wkpal insight): they never proc for a paladin,
+-- but each is a unique active echo = +1% Adaptive Power. All A for breadth.
+do
+  local classes = { "Warrior", "Paladin", "Hunter", "Rogue", "Priest",
+    "Death Knight", "Shaman", "Mage", "Warlock", "Druid" }
+  local procs = { "Corrosive Breath", "Arcane Bombardment",
+    "Stonefist Barrage", "Ember Spark" }
+  for _, c in ipairs(classes) do
+    for _, p in ipairs(procs) do
+      B.catalog[c .. " - " .. p] = "A"
+    end
+  end
+  B.catalog["Corrosive Breath"] = "A"
+  B.catalog["Arcane Bombardment"] = "A"
+  B.catalog["Stonefist Barrage"] = "A"
+  B.catalog["Ember Spark"] = "A"
+end
 
 -- Echoes to disable / banish. Rage- and runic-power-scaling echoes are dead for
 -- a mana class; the others are traps for this build.
+-- BREADTH META (Wkpal autopsy 2026-08-25): Adaptive Power pays +1% per unique
+-- ACTIVE echo, so even a do-nothing echo is worth +1% damage. Disable ONLY
+-- echoes with true negative riders. Rage/runic echoes do nothing functionally
+-- but still count as uniques — keep them.
 B.disable = {
-  "Warded Aegis", "Brittle Armor", "Overcharged",
-  -- Ebonhold lists this one both ways depending on the UI.
-  "Paladin - Corrosive Breath", "Corrosive Breath",
+  "Brittle Armor",   -- -30% armor rider
+  "Overcharged",     -- +30% damage taken rider
 }
-B.disableNote = "Also disable any echo that scales with RAGE or RUNIC POWER — "
-  .. "you're a mana class, so they do nothing. The mana-resource echo DOES work."
+B.disableNote = "Only negative-rider echoes are disabled. Everything else — even "
+  .. "functionally dead rage/runic echoes — feeds Adaptive Power +1% per unique."
 
 -- Item affixes — two schools (Enchanted Anvil, Dalaran).
 B.affixSurvival = {

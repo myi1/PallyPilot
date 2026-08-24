@@ -1,25 +1,46 @@
--- PallyPilot HubSync: publish the PallyPilot ratings INTO EbonholdHub as a
--- build, via EBH's own public API (Create/Delete/SetActive) — data only,
--- no EBH code copied. Once active, EBH's Auto-Pick executes our catalog:
--- one brain (PallyPilot ratings), their engine (banish/reroll/freeze).
+-- PallyPilot HubSync v2: publish the PallyPilot ratings INTO EbonholdHub as
+-- the active build, via EBH's own public API — data only, no EBH code copied.
+-- Doctrine (Wkpal autopsy + systems reference, 2026-08-25): BREADTH.
+--  * echoMaxPicks stays EMPTY (engine default = 1 copy each): the engine
+--    natively prefers any fresh non-F echo over any repeat, and at the
+--    active cap it degrades into ranking the cores automatically.
+--  * F only for negative riders — F-ratings waste the run's ~9 banishes.
+--  * Locks are NUMERIC spellIds (EBH matches ids, not names — names never
+--    fired; this was silently broken until the autopsy).
+--  * echoTierOrder grants position bonuses; echoBundles exploit the unused
+--    +40 bundle score. settings pin aggression 4 (the duplicate-banish mode).
 local PP = PallyPilot
 local HS = PP.HubSync
 
 local TITLE = "PallyPilot Solo Ret (synced)"
 
--- The server displays echo names with curly apostrophes; BuildData uses
--- straight ones. Emit both spellings so exact-match lookups always hit.
+local QUALITY_WORDS = {
+  Common = true, Uncommon = true, Rare = true, Epic = true,
+  Legendary = true, Artifact = true,
+}
+
+local function ToCurly(name)
+  return (string.gsub(name, "'", "\226\128\153"))
+end
+local function Norm(name)
+  name = string.gsub(name, "\226\128\153", "'")
+  return string.lower(name)
+end
+
 local function BothQuotes(t, name, tier)
   t[name] = tier
-  local curly = string.gsub(name, "'", "\226\128\153")
+  local curly = ToCurly(name)
   if curly ~= name then t[curly] = tier end
 end
 
 -- Curated lists win over the catalog; locked cores are S; disables are F.
+-- C is omitted: unrated names default to C inside EBH anyway.
 local function AssembleTiers()
   local B = PP.Build
   local tiers = {}
-  for n, t in pairs(B.catalog or {}) do BothQuotes(tiers, n, t) end
+  for n, t in pairs(B.catalog or {}) do
+    if t ~= "C" then BothQuotes(tiers, n, t) end
+  end
   for tier, list in pairs(B.tiers) do
     for _, n in ipairs(list) do BothQuotes(tiers, n, tier) end
   end
@@ -28,30 +49,91 @@ local function AssembleTiers()
   return tiers
 end
 
--- STRATEGY (field lessons 2026-08-25): Adaptive Power pays +1% damage per
--- UNIQUE active echo, so BREADTH is itself a damage multiplier — 71 uniques
--- beat 34 uniques with deeper ranks (measured: keepsy). Two modes:
---   breadth (default): everything capped at 1 copy -> Auto-Pick always
---     prefers a NEW echo over any repeat. Correct until active slots fill.
---   depth: S/core uncapped, A to 5 -> repeats rank up the core. Correct
---     only once you're at the active-echo cap (~72) or the pool is dry.
-local function AssembleMaxPicks(tiers, mode)
-  local mp = {}
-  if mode == "depth" then
-    for name, tier in pairs(tiers) do
-      if tier == "S" then
-        mp[name] = 0
-      elseif tier == "A" then
-        mp[name] = 5
+-- Priority-ordered S/A name arrays (EBH grants position bonuses we were
+-- forfeiting). Curated order first, catalog names after, server spelling.
+local function AssembleTierOrder()
+  local B = PP.Build
+  local order = { S = {}, A = {} }
+  local seen = {}
+  local function add(tier, n)
+    local c = ToCurly(n)
+    if not seen[c] then
+      seen[c] = true
+      table.insert(order[tier], c)
+    end
+  end
+  for _, n in ipairs(B.locked) do add("S", n) end
+  for _, n in ipairs(B.tiers.S) do add("S", n) end
+  for _, n in ipairs(B.tiers.A) do add("A", n) end
+  local cs, ca = {}, {}
+  for n, t in pairs(B.catalog or {}) do
+    if t == "S" then cs[#cs + 1] = n elseif t == "A" then ca[#ca + 1] = n end
+  end
+  table.sort(cs); table.sort(ca)
+  for _, n in ipairs(cs) do add("S", n) end
+  for _, n in ipairs(ca) do add("A", n) end
+  return order
+end
+
+-- Locks must be numeric perk spellIds. Resolve display names against the
+-- live PerkDatabase (highest quality variant wins), with known fallbacks.
+local FALLBACK_IDS = {
+  ["pandemic"] = 201256, ["adaptive power"] = 200960,
+  ["constellations"] = 200844, ["twilight equilibrium"] = 201324,
+}
+local function ResolveSpellIds(names)
+  local db = ProjectEbonhold and ProjectEbonhold.PerkDatabase
+  local best = {}
+  if db then
+    for id, e in pairs(db) do
+      if type(id) == "number" and type(e) == "table" and e.comment then
+        local base, q = string.match(e.comment, "^(.-)%s*%-%s*(%a+)$")
+        if not (base and QUALITY_WORDS[q]) then base = e.comment end
+        local key = Norm(base)
+        local quality = e.quality or 0
+        if not best[key] or quality > best[key].q then
+          best[key] = { id = id, q = quality }
+        end
       end
     end
   end
-  -- breadth: empty table -> EBH's default cap of 1 for everything.
-  return mp
+  local out = {}
+  for _, name in ipairs(names) do
+    local hit = best[Norm(name)]
+    local id = (hit and hit.id) or FALLBACK_IDS[Norm(name)]
+    if id then out[#out + 1] = id end
+  end
+  return out
+end
+
+-- Synergy bundles: +40 score for members while the main (first) is active.
+-- A mechanic no community build uses — our edge.
+local BUNDLES = {
+  { id = "ppb-resonant", tier = "S",
+    echoes = { "Resonant Build", "Strength Training", "Agility Boost",
+               "Iron Constitution" } },
+  { id = "ppb-dots", tier = "S",
+    echoes = { "Contagion", "Echoing Tides", "Scorching Wounds", "Open Wounds",
+               "Hungering Curse", "Necrotic Plague", "Accelerated Decay" } },
+  { id = "ppb-blades", tier = "S",
+    echoes = { "Ambidexterity", "Second Edge", "First Strike",
+               "Expertise Drills", "Armor Penetration", "Weapon Mastery" } },
+}
+local function AssembleBundles()
+  local out = {}
+  for i, b in ipairs(BUNDLES) do
+    local echoes = {}
+    for j, n in ipairs(b.echoes) do echoes[j] = ToCurly(n) end
+    out[i] = { id = b.id, tier = b.tier, echoes = echoes }
+  end
+  return out
 end
 
 function HS.Push(mode)
-  mode = (mode == "depth") and "depth" or "breadth"
+  if mode == "depth" then
+    PP.print("Depth mode is retired — at the active cap the engine ranks the "
+      .. "cores automatically (see wkpal-vs-pallypilot.md). Syncing breadth.")
+  end
   local EB = EbonholdHub and EbonholdHub.Build
   if not (EB and EB.Create and EB.SetActive and EbonholdHubDB) then
     PP.print("EbonholdHub not loaded — can't sync a build into it.")
@@ -59,24 +141,31 @@ function HS.Push(mode)
   end
   local slots = (EB.GetLockedSlotCount and EB.GetLockedSlotCount())
     or PP.EchoAudit.LockSlots()
-  local locked = PP.EchoAudit.BestOwned and PP.EchoAudit.BestOwned(slots) or {}
+  local lockedNames = PP.EchoAudit.BestOwned and PP.EchoAudit.BestOwned(slots) or {}
+  local lockedIds = ResolveSpellIds(lockedNames)
 
-  -- Replace any previous synced build (stats reset — they're just counters).
+  -- An open Hub edit session would commit its pending tiers over ours.
+  if EbonholdHub.TierData and EbonholdHub.TierData.ClearPending then
+    pcall(EbonholdHub.TierData.ClearPending)
+  end
+
   for id, b in pairs(EbonholdHubDB.builds or {}) do
     if b.title == TITLE and EB.Delete then pcall(EB.Delete, id) end
   end
 
-  local tiers = AssembleTiers()
   local ok, build = pcall(EB.Create, {
     title = TITLE,
     class = "PALADIN",
     spec = 3,
-    comments = "Auto-generated by PallyPilot (tooltip-verified catalog), "
-      .. "mode: " .. mode .. ". breadth = uniques first (Adaptive Power), "
-      .. "depth = rank the core. /pp hubsync breadth|depth to switch.",
-    lockedEchoes = locked,
-    echoTiers = tiers,
-    echoMaxPicks = AssembleMaxPicks(tiers, mode),
+    comments = "PallyPilot breadth build (Wkpal autopsy 2026-08-25): uniques "
+      .. "first for Adaptive Power; F only for negative riders; cross-class "
+      .. "procs rated A; spellId locks; tier order + synergy bundles.",
+    lockedEchoes = lockedIds,
+    echoTiers = AssembleTiers(),
+    echoTierOrder = AssembleTierOrder(),
+    echoBundles = AssembleBundles(),
+    echoMaxPicks = {},  -- EMPTY on purpose: 1 copy each = breadth
+    settings = { aggressionLevel = 4, banishFamilyWhitelist = {} },
     automationEnabled = true,
     author = "PallyPilot",
   })
@@ -90,9 +179,7 @@ function HS.Push(mode)
       .. " — select '" .. TITLE .. "' manually in EbonholdHub.")
     return
   end
-  PP.print("Synced and ACTIVE: '" .. TITLE .. "' in " .. string.upper(mode)
-    .. " mode (" .. slots .. " lock slots).")
-  if #locked > 0 then
-    PP.print("Suggested locks: " .. table.concat(locked, ", "))
-  end
+  PP.print("Synced and ACTIVE: '" .. TITLE .. "' — BREADTH doctrine, "
+    .. slots .. " lock slots, lock ids: " .. table.concat(lockedIds, ", "))
+  PP.print("Locks: " .. table.concat(lockedNames, ", "))
 end
