@@ -75,6 +75,7 @@ local function SaveFight(f)
   end
   log[#log + 1] = {
     t = time(),
+    tag = PP.db.benchTag,
     when = date("%Y-%m-%d %H:%M"),
     zone = GetRealZoneText() or "?",
     target = topTarget,

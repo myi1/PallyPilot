@@ -420,6 +420,15 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.EchoFlow.ForceNext then PP.safeCall(PP.EchoFlow.ForceNext) end
   elseif cmd == "dps" then
     if PP.CombatMeter.Report then PP.safeCall(PP.CombatMeter.Report) end
+  elseif cmd == "bench" then
+    if arg == "off" or arg == "" then
+      PP.db.benchTag = nil
+      PP.print("Benchmark tag cleared — fights log untagged.")
+    else
+      PP.db.benchTag = arg
+      PP.print("Benchmark tag set: '" .. arg .. "' — every fight logs with it "
+        .. "until /pp bench off. Same route + same tag name across arms = clean A/B.")
+    end
   else
     PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
   end
