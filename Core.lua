@@ -1,6 +1,7 @@
 -- PallyPilot Core: namespace, saved vars, events, slash commands, main window.
 PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
+  GearAudit = {},
 }
 local PP = PallyPilot
 
@@ -163,6 +164,63 @@ function PP.UiScan()
     .. " visible frames. /reload to save it, then tell Claude — no screenshot needed.")
 end
 
+-- Deep scan of the server's Echo Journal subtree: every child frame with its
+-- plain-data fields (echo ids live on tile buttons the way checkpoint data
+-- lived on map buttons). Run with the Echoes window open.
+function PP.UiScanEcho()
+  local root = _G["ProjectEbonholdEchoJournal"]
+  if not root then
+    PP.print("Echo journal frame not found — open the Echoes window first.")
+    return
+  end
+  local out, n = {}, 0
+  local MAX = 2500
+  local function fieldDump(f)
+    local bits = {}
+    for k, v in pairs(f) do
+      local tv = type(v)
+      if tv == "string" or tv == "number" or tv == "boolean" then
+        bits[#bits + 1] = tostring(k) .. "=" .. tostring(v)
+      end
+    end
+    table.sort(bits)
+    return table.concat(bits, ", ")
+  end
+  local function walk(f, depth)
+    if depth > 7 or n >= MAX then return end
+    local kids = { f:GetChildren() }
+    for i, c in ipairs(kids) do
+      if n >= MAX then return end
+      local ok = pcall(function()
+        local ctype = c.GetObjectType and c:GetObjectType() or "?"
+        local name = c.GetName and c:GetName() or nil
+        local label
+        if c.GetFontString then
+          local cfs = c:GetFontString()
+          label = cfs and cfs:GetText() or nil
+        end
+        if not label and c.GetText then label = c:GetText() end
+        n = n + 1
+        out[n] = string.rep("  ", depth) .. ctype .. " " .. (name or ("#" .. i))
+          .. (label and (" txt=" .. tostring(label)) or "")
+          .. (c:IsVisible() and "" or " [hidden]")
+        local fd = fieldDump(c)
+        if fd ~= "" and n < MAX then
+          n = n + 1
+          out[n] = string.rep("  ", depth) .. "   {" .. fd .. "}"
+        end
+      end)
+      if ok then walk(c, depth + 1) end
+    end
+  end
+  walk(root, 0)
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.echoUI = out
+  PP.db.scans.echoUITime = date("%Y-%m-%d %H:%M")
+  PP.print("Echo journal deep scan: " .. n
+    .. " lines captured. /reload to save, then tell Claude.")
+end
+
 SLASH_PALLYPILOT1 = "/pp"
 SLASH_PALLYPILOT2 = "/pallypilot"
 SlashCmdList["PALLYPILOT"] = function(line)
@@ -192,8 +250,10 @@ SlashCmdList["PALLYPILOT"] = function(line)
   elseif cmd == "gearscan" then
     PP.safeCall(PP.GearScan)
   elseif cmd == "uiscan" then
-    PP.safeCall(PP.UiScan)
+    if arg == "echo" then PP.safeCall(PP.UiScanEcho) else PP.safeCall(PP.UiScan) end
+  elseif cmd == "gear" then
+    if PP.GearAudit.Toggle then PP.GearAudit.Toggle() end
   else
-    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
+    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
   end
 end

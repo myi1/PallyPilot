@@ -136,6 +136,12 @@ function D.Init()
   guideB:SetText("Raid guide")
   guideB:SetScript("OnClick", function() if PP.RaidGuide then PP.RaidGuide.Toggle() end end)
 
+  local gearB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  gearB:SetWidth(95); gearB:SetHeight(22)
+  gearB:SetPoint("LEFT", guideB, "RIGHT", 6, 0)
+  gearB:SetText("Gear audit")
+  gearB:SetScript("OnClick", function() if PP.GearAudit then PP.GearAudit.Toggle() end end)
+
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -100)
   scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
