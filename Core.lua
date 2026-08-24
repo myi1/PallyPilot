@@ -273,6 +273,44 @@ function PP.PerkScan()
     .. " lines. /reload to save, then tell Claude — every echo gets rated.")
 end
 
+-- Diagnostic: dump the server's Soul Ash tree DB (global TalentDatabase from
+-- the ProjectEbonhold addon) with spell names and the advisor's live rank
+-- state, so offline analysis can refine node ratings.
+function PP.AshTreeScan()
+  local db = _G.TalentDatabase
+  local tree = db and db[0]
+  if not tree or not tree.nodes then
+    PP.print("TalentDatabase not found on this client — is the ProjectEbonhold addon loaded?")
+    return
+  end
+  local st = PP.AshAdvisor and PP.AshAdvisor.GetState and PP.AshAdvisor.GetState()
+  local ranks = st and st.nodeRanks or {}
+  local lines, n = {}, 0
+  lines[1] = "tree=" .. tostring(tree.name) .. " nodes=" .. #tree.nodes
+    .. (st and (" spendable=" .. tostring(st.spendable)
+      .. " committed=" .. tostring(st.committed)
+      .. " maxEchoes=" .. tostring(st.maxEchoes)) or " state=none")
+  n = 1
+  for _, nd in ipairs(tree.nodes) do
+    local name = nd.spells and nd.spells[1] and GetSpellInfo(nd.spells[1])
+    local costs = {}
+    for i, c in ipairs(nd.soulPointsCosts or {}) do costs[i] = tostring(c) end
+    n = n + 1
+    lines[n] = "node " .. tostring(nd.id) .. " | " .. (name or "?")
+      .. " | ranks=" .. (nd.spells and #nd.spells or 0)
+      .. " | rank=" .. tostring(ranks[nd.id] or 0)
+      .. " | costs=" .. table.concat(costs, "/")
+      .. (nd.infinite and (" | INFINITE growth=" .. tostring(nd.infiniteGrowth or 1.15)) or "")
+      .. (nd.permanent and " | PERM" or "")
+      .. (nd.isStart and " | START" or "")
+  end
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.ashTree = lines
+  PP.db.scans.ashTreeTime = date("%Y-%m-%d %H:%M")
+  PP.print("Soul Ash tree dump: " .. (n - 1)
+    .. " nodes. /reload to save, then tell Claude — ratings get refined.")
+end
+
 -- Diagnostic: render every perk spell's REAL tooltip text (off-screen) and
 -- save it, so the echo catalog can be rated from actual effects, not names.
 function PP.EchoTextScan()
@@ -355,6 +393,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     else PP.safeCall(PP.UiScan) end
   elseif cmd == "ash" then
     if PP.AshAdvisor and PP.AshAdvisor.Report then PP.safeCall(PP.AshAdvisor.Report) end
+  elseif cmd == "ashscan2" then
+    PP.safeCall(PP.AshTreeScan)
   elseif cmd == "perkscan" then
     PP.safeCall(PP.PerkScan)
   elseif cmd == "echotext" then

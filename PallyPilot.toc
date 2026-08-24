@@ -18,6 +18,7 @@ BossCard.lua
 RunLog.lua
 HubSync.lua
 CombatMeter.lua
+AshData.lua
 AshAdvisor.lua
 DrawHelper.lua
 Talents.lua
