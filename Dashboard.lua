@@ -124,6 +124,12 @@ function D.Init()
   rotT:SetText("Rotation HUD")
   rotT:SetScript("OnClick", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end)
 
+  local auditT = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  auditT:SetWidth(95); auditT:SetHeight(22)
+  auditT:SetPoint("LEFT", rotT, "RIGHT", 8, 0)
+  auditT:SetText("Echo audit")
+  auditT:SetScript("OnClick", function() if PP.EchoAudit then PP.EchoAudit.Toggle() end end)
+
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -100)
   scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
