@@ -2,6 +2,7 @@
 PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
   GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
+  CombatMeter = {},
 }
 local PP = PallyPilot
 
@@ -75,6 +76,7 @@ local function OnEvent(self, event, ...)
     PP.safeCall(PP.BossCard.Init)
     PP.safeCall(PP.GearAudit.HookUI)
     PP.safeCall(PP.RunLog.Init)
+    PP.safeCall(PP.CombatMeter.Init)
     local paladin = select(2, UnitClass("player")) == "PALADIN"
     if not paladin then
       PP.print("Heads up: this build is tuned for Paladins. You're playing "
@@ -359,6 +361,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.EchoFlow.StartReroll then PP.safeCall(PP.EchoFlow.StartReroll) end
   elseif cmd == "next" then
     if PP.EchoFlow.ForceNext then PP.safeCall(PP.EchoFlow.ForceNext) end
+  elseif cmd == "dps" then
+    if PP.CombatMeter.Report then PP.safeCall(PP.CombatMeter.Report) end
   else
     PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
   end
