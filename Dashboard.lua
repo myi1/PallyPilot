@@ -130,6 +130,12 @@ function D.Init()
   auditT:SetText("Echo audit")
   auditT:SetScript("OnClick", function() if PP.EchoAudit then PP.EchoAudit.Toggle() end end)
 
+  local guideB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  guideB:SetWidth(95); guideB:SetHeight(22)
+  guideB:SetPoint("LEFT", auditT, "RIGHT", 6, 0)
+  guideB:SetText("Raid guide")
+  guideB:SetScript("OnClick", function() if PP.RaidGuide then PP.RaidGuide.Toggle() end end)
+
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -100)
   scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)

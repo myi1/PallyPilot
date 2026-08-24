@@ -1,6 +1,6 @@
 -- PallyPilot Core: namespace, saved vars, events, slash commands, main window.
 PallyPilot = {
-  Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {},
+  Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
 }
 local PP = PallyPilot
 
@@ -91,6 +91,10 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.FarmQueue.Toggle then PP.FarmQueue.Toggle() end
   elseif cmd == "audit" or cmd == "echoes" then
     if PP.EchoAudit.Toggle then PP.EchoAudit.Toggle() end
+  elseif cmd == "guide" or cmd == "raid" then
+    if PP.RaidGuide.Toggle then PP.RaidGuide.Toggle() end
+  elseif cmd == "boss" then
+    if PP.RaidGuide.BossToChat then PP.RaidGuide.BossToChat(arg) end
   elseif cmd == "echoscan" then
     if PP.DrawHelper.Scan then PP.DrawHelper.Scan() end
   elseif cmd == "draw" then
@@ -103,6 +107,6 @@ SlashCmdList["PALLYPILOT"] = function(line)
   elseif cmd == "keyscan" then
     if PP.RotationHelper and PP.RotationHelper.KeyScan then PP.RotationHelper.KeyScan() end
   else
-    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp rotation | /pp talents recommend|guide|auto")
+    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
   end
 end
