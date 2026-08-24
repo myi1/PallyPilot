@@ -258,6 +258,54 @@ function PP.PerkScan()
     .. " lines. /reload to save, then tell Claude — every echo gets rated.")
 end
 
+-- Diagnostic: render every perk spell's REAL tooltip text (off-screen) and
+-- save it, so the echo catalog can be rated from actual effects, not names.
+function PP.EchoTextScan()
+  local db = ProjectEbonhold and ProjectEbonhold.PerkDatabase
+  if not db then
+    PP.print("ProjectEbonhold.PerkDatabase not found.")
+    return
+  end
+  local ids = {}
+  for id in pairs(db) do
+    if type(id) == "number" then ids[#ids + 1] = id end
+  end
+  table.sort(ids)
+  local tip = PPScanTooltip
+    or CreateFrame("GameTooltip", "PPScanTooltip", nil, "GameTooltipTemplate")
+  tip:SetOwner(UIParent, "ANCHOR_NONE")
+  local out, idx = {}, 0
+  local runner = CreateFrame("Frame")
+  runner:SetScript("OnUpdate", function(self)
+    local batch = 0
+    while batch < 25 and idx < #ids do
+      idx = idx + 1; batch = batch + 1
+      local id = ids[idx]
+      tip:ClearLines()
+      local ok = pcall(tip.SetHyperlink, tip, "spell:" .. id)
+      local parts = {}
+      if ok then
+        for i = 1, tip:NumLines() do
+          local fs = _G["PPScanTooltipTextLeft" .. i]
+          local txt = fs and fs:GetText()
+          if txt and txt ~= "" then parts[#parts + 1] = txt end
+        end
+      end
+      out[#out + 1] = id .. " || "
+        .. (#parts > 0 and table.concat(parts, " | ") or "<no tooltip>")
+    end
+    if idx >= #ids then
+      self:SetScript("OnUpdate", nil)
+      PP.db.scans = PP.db.scans or {}
+      PP.db.scans.echoText = out
+      PP.db.scans.echoTextTime = date("%Y-%m-%d %H:%M")
+      PP.print("Echo tooltip dump: " .. #out .. " spells captured. /reload to "
+        .. "save, then tell Claude — the catalog gets re-rated from real text.")
+    end
+  end)
+  PP.print("Scanning " .. #ids .. " echo tooltips (a few seconds)...")
+end
+
 SLASH_PALLYPILOT1 = "/pp"
 SLASH_PALLYPILOT2 = "/pallypilot"
 SlashCmdList["PALLYPILOT"] = function(line)
@@ -290,6 +338,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if arg == "echo" then PP.safeCall(PP.UiScanEcho) else PP.safeCall(PP.UiScan) end
   elseif cmd == "perkscan" then
     PP.safeCall(PP.PerkScan)
+  elseif cmd == "echotext" then
+    PP.safeCall(PP.EchoTextScan)
   elseif cmd == "run" then
     if arg == "start" then PP.safeCall(PP.RunLog.Start)
     else PP.safeCall(PP.RunLog.Status) end

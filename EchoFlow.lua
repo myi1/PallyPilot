@@ -157,7 +157,15 @@ local function RunByVerdict(want)
   return out
 end
 
-local function RunJunk() return RunByVerdict("REROLL") end
+-- Junk for the reroll queue = rated-junk AND disable-listed run echoes
+-- (disable's right-click only works at level 1; at 80 the Orb is the only
+-- way to purge them).
+local function RunJunk()
+  local out = RunByVerdict("REROLL")
+  for _, name in ipairs(RunByVerdict("DISABLE")) do out[#out + 1] = name end
+  table.sort(out)
+  return out
+end
 
 -- ---------------------------------------------------------------------------
 -- Outcome toast: after each pick, show what you got, its verdict, and the

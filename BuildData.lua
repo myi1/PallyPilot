@@ -94,7 +94,7 @@ B.catalog = {
   ["Essence Tap"] = "A", ["Frostmourne Hungers"] = "A",
   ["Idol of Yogg-Saron"] = "A", ["Immolation Aura"] = "A",
   ["Impaler's Tribute"] = "A", ["Keen Aim"] = "A", ["Leeching Swarm"] = "A",
-  ["Lethal Precision"] = "A", ["Necrotic Plague"] = "A", ["Open Wounds"] = "A",
+  ["Necrotic Plague"] = "A", ["Open Wounds"] = "A",
   ["Reaper's Verdict"] = "A", ["Rolling Momentum"] = "A",
   ["Ruthless Exploiter"] = "A", ["Sharpened Edge"] = "A",
   ["Sweeping Blows"] = "A", ["The Harvester's Tithe"] = "A",
@@ -154,6 +154,9 @@ B.catalog = {
   ["Entropic Fusion"] = "F", ["Fel Hazard"] = "F", ["Fel Surge"] = "F",
   ["Giant Bane"] = "F", ["Glass Canon"] = "F", -- +dmg taken kills Hardcore runs
   ["Healing Cadence"] = "F", ["Healing Echo"] = "F",
+  -- Tooltip-verified trap: -50% crit CHANCE for +30% crit damage. Zeroes a
+  -- ~44% crit build; only sane at 90%+ crit. (Field report 2026-08-25.)
+  ["Lethal Precision"] = "F",
   ["Heavy Incantations"] = "F", ["Holy Revelation"] = "F",
   ["Hunting Hazard"] = "F", ["Inspiring Mending"] = "F", ["Leadfoot"] = "F",
   ["Lingering Inspiration"] = "F", ["Mana Infusion"] = "F",
