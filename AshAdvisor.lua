@@ -405,76 +405,92 @@ function AA.RefreshRail()
   local spendable = state and state.spendable or nil
   local committed = state and state.committed or nil
 
-  rail.hero:SetText(spendable and (GOLD .. Fmt(spendable) .. R) or (DIM .. "—" .. R))
-  rail.heroSub:SetText(DIM .. "banked ash · committed "
-    .. (committed and Fmt(committed) or "?") .. R)
-
-  -- Milestone bar: progress to the next echo-slot milestone.
-  if committed then
-    local prevAt, nextAt = 0, nil
-    for _, m in ipairs(AD.MILESTONES) do
-      if committed >= m then prevAt = m
-      elseif not nextAt then nextAt = m end
-    end
-    if nextAt then
-      local pct = (committed - prevAt) / (nextAt - prevAt)
-      if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
-      rail.barFill:SetWidth(math.max(1, 174 * pct))
-      rail.barLabel:SetText(DIM .. "next echo slot: " .. R .. EMBER
-        .. Fmt(nextAt - committed) .. R .. DIM .. " to go" .. R)
-    else
-      rail.barFill:SetWidth(174)
-      rail.barLabel:SetText(VERD .. "all milestone slots earned" .. R)
-    end
-    rail.bar:Show()
-  else
-    rail.bar:Hide()
-    rail.barLabel:SetText(DIM .. "waiting for server state..." .. R)
-  end
-
   local queue = BuyQueue(ranks, spendable)
   ClearGlows()
 
-  -- Focal: the single next buy.
-  local top = queue[1]
+  -- Split: what you can buy NOW (priority order) vs what you're saving for.
+  local affordable, saving = {}, nil
+  local affordTotal = 0
+  for _, q in ipairs(queue) do
+    if q.afford then
+      affordable[#affordable + 1] = q
+      affordTotal = affordTotal + (q.cost or 0)
+    elseif not saving and q.cost then
+      saving = q -- highest-priority thing out of reach
+    end
+  end
+
+  rail.hero:SetText(spendable and (GOLD .. Fmt(spendable) .. R) or (DIM .. "—" .. R))
+  rail.heroSub:SetText(spendable
+    and (DIM .. "banked · " .. R .. VERD .. #affordable .. R .. DIM
+      .. " buys in reach (" .. Fmt(affordTotal) .. ")" .. R)
+    or (DIM .. "waiting for server state..." .. R))
+
+  -- Focal: the top thing you can actually buy right now.
+  local top = affordable[1]
   if top then
+    rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
     rail.nextName:SetText(BRIGHT .. top.name .. R)
-    local costStr = top.cost
-      and ((top.afford and VERD or EMBER) .. Fmt(top.cost) .. R)
-      or (DIM .. "cost ?" .. R)
     local rankStr = top.infinite and ("r" .. (top.cur or "?"))
       or ((top.cur or "?") .. "/" .. top.total)
-    rail.nextCost:SetText(costStr .. DIM .. "  ·  " .. rankStr
+    rail.nextCost:SetText(VERD .. Fmt(top.cost) .. R .. DIM .. "  ·  " .. rankStr
       .. (top.perm and "  ·  prestige-proof" or "") .. R)
     rail.nextWhy:SetText(DIM .. (top.effect or "") .. R)
     if top.id then GlowNode(top.id, 1, 0.72, 0.20) end
+  elseif #queue > 0 then
+    rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
+    rail.nextName:SetText(DIM .. "nothing in reach" .. R)
+    rail.nextCost:SetText(DIM .. "bank more ash" .. R)
+    rail.nextWhy:SetText("")
   else
+    rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
     rail.nextName:SetText(VERD .. "Everything tracked is maxed" .. R)
     rail.nextCost:SetText(DIM .. "feed the infinites" .. R)
     rail.nextWhy:SetText("")
   end
 
-  -- Queue list (compact) + affordable glows.
+  -- Saving target: top priority buy that's out of reach.
+  if saving and spendable then
+    rail.saveLine:SetText(GOLD .. "SAVING FOR  " .. R .. BRIGHT .. saving.name
+      .. R .. DIM .. " — " .. R .. EMBER .. Fmt(saving.cost) .. R .. DIM
+      .. " (" .. Fmt(saving.cost - spendable) .. " short)" .. R)
+  else
+    rail.saveLine:SetText("")
+  end
+
+  -- Rest of the in-reach list + green glows; then the next few dims.
   local t = {}
-  local lastTier
-  for i = 2, math.min(#queue, 9) do
-    local q = queue[i]
-    if q.tier ~= lastTier then
-      lastTier = q.tier
-      t[#t+1] = DIM .. string.upper(AD.TIER_NAMES[q.tier] or "") .. R
+  for i = 2, math.min(#affordable, 7) do
+    local q = affordable[i]
+    t[#t+1] = "  " .. BRIGHT .. q.name .. R .. DIM .. " — " .. R
+      .. VERD .. Fmt(q.cost) .. R
+  end
+  for _, q in ipairs(affordable) do
+    if q.id and q ~= top then GlowNode(q.id, 0.54, 0.66, 0.42) end
+  end
+  local dimmed = 0
+  for _, q in ipairs(queue) do
+    if not q.afford and q ~= saving and q.cost and dimmed < 3 then
+      dimmed = dimmed + 1
+      if dimmed == 1 then t[#t+1] = DIM .. "later:" .. R end
+      t[#t+1] = DIM .. "  " .. q.name .. " — " .. Fmt(q.cost) .. R
     end
-    local costStr = q.cost and ((q.afford and VERD or EMBER) .. Fmt(q.cost) .. R)
-      or (DIM .. "?" .. R)
-    t[#t+1] = "  " .. BRIGHT .. q.name .. R .. DIM .. " — " .. R .. costStr
-    if q.afford and q.id then GlowNode(q.id, 0.54, 0.66, 0.42) end
   end
   rail.body:SetText(table.concat(t, "\n"))
 
+  -- Footer: only what the native UI doesn't say — prestige math + reserve.
+  local bits = {}
+  if committed and committed >= AD.PRESTIGE.gate then
+    local worths = math.min(committed, AD.PRESTIGE.destroyedCap) / AD.PRESTIGE.gate
+    local bonus = AD.PRESTIGE.gainPerGate * (worths ^ AD.PRESTIGE.exponent) * 100
+    bits[#bits+1] = DIM .. "prestige now: " .. R .. VERD
+      .. string.format("+%.1f%%", bonus) .. R .. DIM .. " ash gain" .. R
+  end
   local run = RunAsh()
-  rail.footer:SetText(run and run > 0
-    and (DIM .. "reserve " .. Fmt(math.ceil(run * 0.1))
-      .. " (10% continue price)" .. R)
-    or "")
+  if run and run > 0 then
+    bits[#bits+1] = DIM .. "continue reserve: " .. Fmt(math.ceil(run * 0.1)) .. R
+  end
+  rail.footer:SetText(table.concat(bits, "\n"))
 end
 
 function AA.InitRail()
@@ -499,21 +515,11 @@ function AA.InitRail()
   rail.hero:SetPoint("TOP", rail, "TOP", 0, -32)
   rail.heroSub = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   rail.heroSub:SetPoint("TOP", rail.hero, "BOTTOM", 0, -2)
-
-  rail.bar = rail:CreateTexture(nil, "ARTWORK")
-  rail.bar:SetTexture(0.2, 0.18, 0.14, 0.9)
-  rail.bar:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -76)
-  rail.bar:SetWidth(174); rail.bar:SetHeight(8)
-  rail.barFill = rail:CreateTexture(nil, "OVERLAY")
-  rail.barFill:SetTexture(0.88, 0.70, 0.32, 1)
-  rail.barFill:SetPoint("TOPLEFT", rail.bar, "TOPLEFT", 0, 0)
-  rail.barFill:SetHeight(8); rail.barFill:SetWidth(1)
-  rail.barLabel = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.barLabel:SetPoint("TOPLEFT", rail.bar, "BOTTOMLEFT", 0, -3)
+  rail.heroSub:SetWidth(180)
 
   rail.nextHead = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  rail.nextHead:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -108)
-  rail.nextHead:SetText(GOLD .. "NEXT BUY" .. R)
+  rail.nextHead:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -78)
+  rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
   rail.nextName = rail:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   rail.nextName:SetPoint("TOPLEFT", rail.nextHead, "BOTTOMLEFT", 0, -4)
   rail.nextName:SetWidth(174); rail.nextName:SetJustifyH("LEFT")
@@ -523,8 +529,12 @@ function AA.InitRail()
   rail.nextWhy:SetPoint("TOPLEFT", rail.nextCost, "BOTTOMLEFT", 0, -3)
   rail.nextWhy:SetWidth(174); rail.nextWhy:SetJustifyH("LEFT")
 
+  rail.saveLine = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.saveLine:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -156)
+  rail.saveLine:SetWidth(174); rail.saveLine:SetJustifyH("LEFT")
+
   rail.body = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.body:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -196)
+  rail.body:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -186)
   rail.body:SetWidth(174); rail.body:SetJustifyH("LEFT"); rail.body:SetJustifyV("TOP")
   rail.body:SetSpacing(2)
 
