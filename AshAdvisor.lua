@@ -97,7 +97,10 @@ local function NextBuy(entry, ranks)
       cur = cur + r
       if r < maxR then
         local c = NodeRankCost(nd, r + 1)
-        if c and (bestCost == nil or c < bestCost) then bestCost = c end
+        if c and (bestCost == nil or c < bestCost) then
+          bestCost = c
+          entry._bestId = id
+        end
       end
     end
   end
@@ -177,6 +180,7 @@ local function OnLoadouts(body)
     pendingReport = false
     AA.Render()
   end
+  if AA.RefreshRail then PP.safeCall(AA.RefreshRail) end
 end
 
 local inflight = {}
@@ -344,6 +348,205 @@ function AA.Render()
         .. Fmt(g - committed) .. " away)." .. R)
     end
   end
+end
+
+-- ---------------------------------------------------------------------------
+-- Ash rail: the advisor docked INSIDE the Skill Tree tab (parent
+-- skillTreeFrame, so it shows exactly when the tree does) + glows on the
+-- recommended node buttons themselves (they're named skillTreeNode<id>).
+-- ---------------------------------------------------------------------------
+local rail
+local glowing = {}
+
+local function ClearGlows()
+  for _, t in ipairs(glowing) do t:Hide() end
+  glowing = {}
+end
+
+local function GlowNode(id, r, g, b)
+  local btn = _G["skillTreeNode" .. id]
+  if not btn then return end
+  local t = btn.__ppGlow
+  if not t then
+    t = btn:CreateTexture(nil, "OVERLAY")
+    t:SetTexture("Interface\\Buttons\\CheckButtonGlow")
+    t:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    t:SetWidth((btn:GetWidth() or 24) * 1.7)
+    t:SetHeight((btn:GetHeight() or 24) * 1.7)
+    btn.__ppGlow = t
+  end
+  t:SetVertexColor(r, g, b, 0.9)
+  t:Show()
+  glowing[#glowing + 1] = t
+end
+
+-- Uncapped entries in priority order with cost/affordability/frontier id.
+local function BuyQueue(ranks, spendable)
+  local out = {}
+  for _, entry in ipairs(AD.NODES) do
+    entry._bestId = nil
+    local cur, total, cost = NextBuy(entry, ranks)
+    local capped = (cur ~= nil and cur >= total)
+    if not capped then
+      out[#out + 1] = {
+        name = entry.name, tier = entry.tier, effect = entry.effect,
+        cur = cur, total = total, cost = cost, id = entry._bestId,
+        infinite = entry.infinite, perm = entry.perm,
+        afford = (cost and spendable and cost <= spendable) or false,
+      }
+    end
+  end
+  return out
+end
+
+function AA.RefreshRail()
+  if not (rail and rail:IsShown()) then return end
+  local ranks = state and state.nodeRanks or nil
+  local spendable = state and state.spendable or nil
+  local committed = state and state.committed or nil
+
+  rail.hero:SetText(spendable and (GOLD .. Fmt(spendable) .. R) or (DIM .. "—" .. R))
+  rail.heroSub:SetText(DIM .. "banked ash · committed "
+    .. (committed and Fmt(committed) or "?") .. R)
+
+  -- Milestone bar: progress to the next echo-slot milestone.
+  if committed then
+    local prevAt, nextAt = 0, nil
+    for _, m in ipairs(AD.MILESTONES) do
+      if committed >= m then prevAt = m
+      elseif not nextAt then nextAt = m end
+    end
+    if nextAt then
+      local pct = (committed - prevAt) / (nextAt - prevAt)
+      if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
+      rail.barFill:SetWidth(math.max(1, 174 * pct))
+      rail.barLabel:SetText(DIM .. "next echo slot: " .. R .. EMBER
+        .. Fmt(nextAt - committed) .. R .. DIM .. " to go" .. R)
+    else
+      rail.barFill:SetWidth(174)
+      rail.barLabel:SetText(VERD .. "all milestone slots earned" .. R)
+    end
+    rail.bar:Show()
+  else
+    rail.bar:Hide()
+    rail.barLabel:SetText(DIM .. "waiting for server state..." .. R)
+  end
+
+  local queue = BuyQueue(ranks, spendable)
+  ClearGlows()
+
+  -- Focal: the single next buy.
+  local top = queue[1]
+  if top then
+    rail.nextName:SetText(BRIGHT .. top.name .. R)
+    local costStr = top.cost
+      and ((top.afford and VERD or EMBER) .. Fmt(top.cost) .. R)
+      or (DIM .. "cost ?" .. R)
+    local rankStr = top.infinite and ("r" .. (top.cur or "?"))
+      or ((top.cur or "?") .. "/" .. top.total)
+    rail.nextCost:SetText(costStr .. DIM .. "  ·  " .. rankStr
+      .. (top.perm and "  ·  prestige-proof" or "") .. R)
+    rail.nextWhy:SetText(DIM .. (top.effect or "") .. R)
+    if top.id then GlowNode(top.id, 1, 0.72, 0.20) end
+  else
+    rail.nextName:SetText(VERD .. "Everything tracked is maxed" .. R)
+    rail.nextCost:SetText(DIM .. "feed the infinites" .. R)
+    rail.nextWhy:SetText("")
+  end
+
+  -- Queue list (compact) + affordable glows.
+  local t = {}
+  local lastTier
+  for i = 2, math.min(#queue, 9) do
+    local q = queue[i]
+    if q.tier ~= lastTier then
+      lastTier = q.tier
+      t[#t+1] = DIM .. string.upper(AD.TIER_NAMES[q.tier] or "") .. R
+    end
+    local costStr = q.cost and ((q.afford and VERD or EMBER) .. Fmt(q.cost) .. R)
+      or (DIM .. "?" .. R)
+    t[#t+1] = "  " .. BRIGHT .. q.name .. R .. DIM .. " — " .. R .. costStr
+    if q.afford and q.id then GlowNode(q.id, 0.54, 0.66, 0.42) end
+  end
+  rail.body:SetText(table.concat(t, "\n"))
+
+  local run = RunAsh()
+  rail.footer:SetText(run and run > 0
+    and (DIM .. "reserve " .. Fmt(math.ceil(run * 0.1))
+      .. " (10% continue price)" .. R)
+    or "")
+end
+
+function AA.InitRail()
+  local host = _G["skillTreeFrame"]
+  if not host or rail then return end
+  rail = CreateFrame("Frame", "PallyPilotAshRail", host)
+  rail:SetWidth(210)
+  rail:SetPoint("TOPLEFT", host, "TOPRIGHT", 10, 0)
+  rail:SetPoint("BOTTOMLEFT", host, "BOTTOMRIGHT", 10, 0)
+  rail:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 32, edgeSize = 24,
+    insets = { left = 8, right = 8, top = 8, bottom = 8 },
+  })
+
+  local title = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  title:SetPoint("TOP", rail, "TOP", 0, -14)
+  title:SetText(GOLD .. "PallyPilot" .. R)
+
+  rail.hero = rail:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+  rail.hero:SetPoint("TOP", rail, "TOP", 0, -32)
+  rail.heroSub = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.heroSub:SetPoint("TOP", rail.hero, "BOTTOM", 0, -2)
+
+  rail.bar = rail:CreateTexture(nil, "ARTWORK")
+  rail.bar:SetTexture(0.2, 0.18, 0.14, 0.9)
+  rail.bar:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -76)
+  rail.bar:SetWidth(174); rail.bar:SetHeight(8)
+  rail.barFill = rail:CreateTexture(nil, "OVERLAY")
+  rail.barFill:SetTexture(0.88, 0.70, 0.32, 1)
+  rail.barFill:SetPoint("TOPLEFT", rail.bar, "TOPLEFT", 0, 0)
+  rail.barFill:SetHeight(8); rail.barFill:SetWidth(1)
+  rail.barLabel = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.barLabel:SetPoint("TOPLEFT", rail.bar, "BOTTOMLEFT", 0, -3)
+
+  rail.nextHead = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  rail.nextHead:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -108)
+  rail.nextHead:SetText(GOLD .. "NEXT BUY" .. R)
+  rail.nextName = rail:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  rail.nextName:SetPoint("TOPLEFT", rail.nextHead, "BOTTOMLEFT", 0, -4)
+  rail.nextName:SetWidth(174); rail.nextName:SetJustifyH("LEFT")
+  rail.nextCost = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.nextCost:SetPoint("TOPLEFT", rail.nextName, "BOTTOMLEFT", 0, -2)
+  rail.nextWhy = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.nextWhy:SetPoint("TOPLEFT", rail.nextCost, "BOTTOMLEFT", 0, -3)
+  rail.nextWhy:SetWidth(174); rail.nextWhy:SetJustifyH("LEFT")
+
+  rail.body = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.body:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -196)
+  rail.body:SetWidth(174); rail.body:SetJustifyH("LEFT"); rail.body:SetJustifyV("TOP")
+  rail.body:SetSpacing(2)
+
+  rail.footer = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.footer:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 18, 40)
+
+  local refresh = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  refresh:SetWidth(174); refresh:SetHeight(20)
+  refresh:SetPoint("BOTTOM", rail, "BOTTOM", 0, 14)
+  refresh:SetText("Refresh")
+  refresh:SetScript("OnClick", function()
+    RequestState()
+    PP.safeCall(AA.RefreshRail)
+  end)
+
+  rail:SetScript("OnShow", function()
+    local fresh = state and (GetTime() - (state.at or 0)) < STALE_AFTER
+    if not fresh then RequestState() end
+    PP.safeCall(AA.RefreshRail)
+  end)
+  rail:SetScript("OnHide", function() ClearGlows() end)
+  if rail:IsShown() then PP.safeCall(AA.RefreshRail) end
 end
 
 function AA.Report()

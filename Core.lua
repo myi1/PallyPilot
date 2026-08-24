@@ -77,6 +77,7 @@ local function OnEvent(self, event, ...)
     PP.safeCall(PP.GearAudit.HookUI)
     PP.safeCall(PP.RunLog.Init)
     PP.safeCall(PP.CombatMeter.Init)
+    if PP.AshAdvisor.InitRail then PP.safeCall(PP.AshAdvisor.InitRail) end
     local paladin = select(2, UnitClass("player")) == "PALADIN"
     if not paladin then
       PP.print("Heads up: this build is tuned for Paladins. You're playing "
