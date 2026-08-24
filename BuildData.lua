@@ -81,93 +81,123 @@ B.tiers = {
 -- both stays unrated-junk. Rationale: DoT echoes ride Pandemic/Contagion,
 -- leech/sustain enables solo, caster/mana/spirit/healer-only echoes are dead
 -- weight for Ret, undead-flavored damage is the whole AotC path.
+-- TOOLTIP-VERIFIED (2026-08-25): every rating below is grounded in the real
+-- effect text from /pp echotext (546 tooltips). No name inference remains.
 B.catalog = {
-  -- S: build-defining
-  ["Arcane Cadence"] = "S",       -- Divine Storm triggers it (Nero's note)
-  ["Sanctum Sentries"] = "S",     -- permanent +10% damage-taken debuff via guardians
-  ["Reaper's Reprieve"] = "S",    -- cheat-death; mandatory for Hardcore runs
-  -- A: strong pickups
-  ["Blade Tempest"] = "A", ["Call of the Lich King"] = "A",
-  ["Cinders of the Sanctum"] = "A", ["Crushing Finish"] = "A",
-  ["Curse of the Plaguebringer"] = "A", ["Deathwhisper's Barrier"] = "A",
-  ["Defile"] = "A", ["Emerald Vigor"] = "A", ["Enhanced Recovery"] = "A",
-  ["Essence Tap"] = "A", ["Frostmourne Hungers"] = "A",
+  -- S: build-defining (verified numbers)
+  ["Precision Strike"] = "S",   -- +100% crit chance for 3s, every 10s
+  ["Temporal Pressure"] = "S",  -- haste reduces CDs of the entire Ret rotation
+  ["Necrotic Plague"] = "S",    -- 36k/s DoT-proc plague; jumps +25% per death
+  ["Undead Slayer"] = "S",      -- up to +900 AP vs undead = all of Naxx/ICC
+  -- A: strong, verified
+  ["Arcane Bombardment"] = "A", ["Paladin - Arcane Bombardment"] = "A", -- CS/Judgement fire 2 big arcane missiles
+  ["Stonefist Barrage"] = "A", ["Paladin - Stonefist Barrage"] = "A",   -- every Judgement hurls an AoE boulder
+  ["Blade Tempest"] = "A",      -- phys-on-DoT summons 36k/s whirlwind clone
+  ["Broodmother's Fury"] = "A", -- cinder stacks into 121k Deep Breath
+  ["Call of the Lich King"] = "A",
+  ["Crimson Reprisal"] = "A",   -- JoL/FoL heals deal 15% as damage
+  ["Crusader's Surge"] = "A",   -- chance for instant Exorcism/FoL/HL
+  ["Crushing Finish"] = "A",    -- execute, scales with Expertise
+  ["Crushing Force"] = "A",     -- crit-rating stat echo (stat prio #2)
+  ["Cyclone of Cold Bones"] = "A",
+  ["Deathwhisper's Barrier"] = "A",
+  ["Defile"] = "A", ["Demonic Awakening"] = "A",
+  ["Echoing Tides"] = "A",      -- 30% double-tick on periodics (DoT build)
+  ["Frostmourne Hungers"] = "A", ["Gunship Barrage"] = "A",
+  ["Hungering Curse"] = "A",    -- auto Siphon Life: DoT + sustain
   ["Idol of Yogg-Saron"] = "A", ["Immolation Aura"] = "A",
   ["Impaler's Tribute"] = "A", ["Keen Aim"] = "A", ["Leeching Swarm"] = "A",
-  ["Necrotic Plague"] = "A", ["Open Wounds"] = "A",
+  ["Open Wounds"] = "A",
+  ["Peak Condition"] = "A",     -- +10% dmg above 75% HP; JoL keeps you there
+  ["Purifying Touch"] = "A",    -- direct heals auto-dispel magic (free Cleanse)
+  ["Quick Hands"] = "A",        -- haste-rating stat echo (stat prio #3)
   ["Reaper's Verdict"] = "A", ["Rolling Momentum"] = "A",
-  ["Ruthless Exploiter"] = "A", ["Sharpened Edge"] = "A",
+  ["Sanctified Hazard"] = "A",  -- +20% Consecration/DS at 4+ enemies
+  ["Scent of Blood"] = "A",     -- +15% attack/cast speed in execute range
+  ["Static Overflow"] = "A", ["Sudden Insight"] = "A",
+  ["Sundered Formation"] = "A", -- +10% phys taken + cleave rider
   ["Sweeping Blows"] = "A", ["The Harvester's Tithe"] = "A",
-  ["The Last Wall"] = "A", ["The Sporelord's Gift"] = "A",
-  ["Undead Slayer"] = "A",        -- Naxx/ICC are 100% undead
-  -- B: fine filler
-  ["Archmage's Mark"] = "B", ["Arcane Ward"] = "B", ["Armor Mastery"] = "B",
-  ["Arcane Bombardment"] = "B", ["Backstabber's Edge"] = "B",
-  ["Battle Tempo"] = "B", ["Battlefield Hazard"] = "B", ["Beast Slayer"] = "B",
-  ["Blighted Hazard"] = "B", ["Broodmother's Fury"] = "B",
-  ["Broodmother's Webbing"] = "B", ["Champion's Rally"] = "B",
-  ["Chaotic Convergence"] = "B", ["Chill of the Bone Wyrm"] = "B",
+  ["Tunnel Vision"] = "A",      -- +8% sustained single-target (bosses)
+  -- B: fine filler (verified minor/situational; several trigger only off
+  -- OTHER echoes' fire/frost/shadow/nature damage — synergy picks)
+  ["Archmage's Mark"] = "B", ["Arcane Ward"] = "B",
+  ["Backstabber's Edge"] = "B", ["Battle Tempo"] = "B",
+  ["Battlefield Hazard"] = "B", ["Beast Slayer"] = "B",
+  ["Blighted Hazard"] = "B", ["Broodmother's Webbing"] = "B",
+  ["Champion's Rally"] = "B", ["Chaotic Convergence"] = "B",
+  ["Chill of the Bone Wyrm"] = "B", ["Cinders of the Sanctum"] = "B",
   ["Conjured Flame"] = "B", ["Crippling Strikes"] = "B",
-  ["Crusader's Surge"] = "B", ["Crushing Force"] = "B",
-  ["Cyclone of Cold Bones"] = "B", ["Dark Nucleus"] = "B",
-  ["Demon Slayer"] = "B", ["Demonic Awakening"] = "B",
-  ["Divine Resonance"] = "B", ["Dragon Slayer"] = "B",
+  ["Curse of the Plaguebringer"] = "B", ["Dark Nucleus"] = "B",
+  ["Demon Slayer"] = "B", ["Divine Resonance"] = "B", ["Dragon Slayer"] = "B",
   ["Drillmaster's Rebuke"] = "B", ["Earthen Snap"] = "B",
   ["Earthen Spike"] = "B", ["Earthen Stability"] = "B",
-  ["Echoing Tides"] = "B", ["Elemental Slayer"] = "B", ["Ember Spark"] = "B",
-  ["Ember Ward"] = "B", ["Emberlord's Gift"] = "B", ["Eonar's Seed"] = "B",
+  ["Elemental Slayer"] = "B", ["Ember Spark"] = "B",
+  ["Paladin - Ember Spark"] = "B",
+  ["Ember Ward"] = "B", ["Emberlord's Gift"] = "B",
+  ["Emerald Vigor"] = "B",      -- ally-targeted; self may not count solo
+  ["Eonar's Seed"] = "B", ["Essence Tap"] = "B",
   ["Flame Beacon"] = "B", ["Forged in Combat"] = "B", ["Fortress Soul"] = "B",
   ["Frost Bite"] = "B", ["Frost Ward"] = "B", ["Frostfire Paradox"] = "B",
   ["Frostguard Carapace"] = "B", ["Giant Slayer"] = "B", ["Grim Resolve"] = "B",
-  ["Gunship Barrage"] = "B", ["Hardened Resolve"] = "B", ["Hardened Skin"] = "B",
-  ["Harpoon Barrage"] = "B", ["Heavy Blows"] = "B", ["Holy Hazard"] = "B",
-  ["Hungering Curse"] = "B", ["Inhaled Blight"] = "B", ["Insulated Soul"] = "B",
+  ["Hardened Resolve"] = "B", ["Hardened Skin"] = "B",
+  ["Harpoon Barrage"] = "B", ["Holy Hazard"] = "B",
+  ["Inhaled Blight"] = "B", ["Insulated Soul"] = "B",
   ["Lightning Charged"] = "B", ["Machine Slayer"] = "B", ["Malleable Goo"] = "B",
-  ["Mutagenic Fumes"] = "B", ["Opening Split"] = "B", ["Peak Condition"] = "B",
+  ["Mana Infusion"] = "B",      -- verified: mana returns also heal above 80% mana
+  ["Mutagenic Fumes"] = "B", ["Opening Split"] = "B",
   ["Permafrost Aura"] = "B", ["Permeating Chill"] = "B", ["Polarity Shift"] = "B",
-  ["Precision Strike"] = "B", ["Prismatic Guard"] = "B",
-  ["Purifying Touch"] = "B", ["Quick Hands"] = "B", ["Raging Momentum"] = "B",
+  ["Prismatic Guard"] = "B", ["Raging Momentum"] = "B",
   ["Ravenous Bellow"] = "B", ["Reactive Retaliation"] = "B",
   ["Reinforced Shielding"] = "B", ["Relentless Energy"] = "B",
-  ["Rocket Strike"] = "B", ["Rootbreaker"] = "B", ["Sanctified Hazard"] = "B",
-  ["Sanctified Sky"] = "B", ["Scent of Blood"] = "B", ["Scorched Path"] = "B",
+  ["Rocket Strike"] = "B", ["Rootbreaker"] = "B",
+  ["Ruthless Exploiter"] = "B", -- +20% vs CC'd only; raid bosses are CC-immune
+  ["Sanctified Sky"] = "B", ["Scorched Path"] = "B",
   ["Shadow Crash"] = "B", ["Shadow Hazard"] = "B", ["Shadow Ward"] = "B",
+  ["Sharpened Edge"] = "B",     -- verified: small flat adder, not % damage
   ["Shielded Steps"] = "B", ["Shock Vortex"] = "B", ["Slime Spray"] = "B",
   ["Slimebound Husk"] = "B", ["Spell Harmony"] = "B", ["Spiteful Shard"] = "B",
-  ["Spiteful Thorns"] = "B", ["Static Overflow"] = "B", ["Steady Grip"] = "B",
-  ["Stitched Fury"] = "B", ["Stone Shatter"] = "B", ["Stonefist Barrage"] = "B",
-  ["Stoneskin Threads"] = "B", ["Stored Momentum"] = "B", ["Storm Hazard"] = "B",
-  ["Sudden Insight"] = "B", ["Sundered Formation"] = "B", ["Sundered Will"] = "B",
-  ["Swift Step"] = "B", ["Temporal Pressure"] = "B",
-  ["The Unclean's Fever"] = "B", ["Titan's Grip"] = "B", ["Toxic Phials"] = "B",
-  ["Tunnel Vision"] = "B", ["Twilight Combustion"] = "B",
-  ["Unbroken Focus"] = "B", ["Verdant Ward"] = "B", ["Warm-Blooded"] = "B",
+  ["Spiteful Thorns"] = "B", ["Steady Grip"] = "B",
+  ["Stone Shatter"] = "B", ["Stoneskin Threads"] = "B",
+  ["Stored Momentum"] = "B", ["Storm Hazard"] = "B", ["Sundered Will"] = "B",
+  ["Swift Step"] = "B",
+  ["The Sporelord's Gift"] = "B", -- buffs "nearby allies"; solo value unclear
+  ["The Unclean's Fever"] = "B",
+  ["Titan's Grip"] = "B",       -- 2H-in-one-hand at -20% dmg; test vs 1H pair
+  ["Toxic Phials"] = "B", ["Twilight Combustion"] = "B",
+  ["Undead Bane"] = "B",        -- +600 SP vs undead; SP is secondary but real
+  ["Verdant Ward"] = "B", ["Warm-Blooded"] = "B",
   ["Widow's Venom"] = "B", ["Wild Hazard"] = "B",
-  ["Paladin - Arcane Bombardment"] = "B", ["Paladin - Ember Spark"] = "B",
-  ["Paladin - Stonefist Barrage"] = "B",
-  -- F: dead weight for Ret (caster/mana/spirit/healer-only, threat, niche)
+  -- F: verified dead weight or traps for this build
   ["Accelerated Spirit"] = "F", ["Agility Boost"] = "F", ["Arcane Burn"] = "F",
-  ["Arcane Hazard"] = "F", ["Arcane Surge"] = "F", ["Beast Bane"] = "F",
+  ["Arcane Hazard"] = "F", ["Arcane Surge"] = "F",
+  ["Armor Mastery"] = "F",      -- you already wear plate
+  ["Beast Bane"] = "F",
+  ["Bolstered Vitality"] = "F", -- +175 flat HP on a 111k pool
   ["Burning Touch"] = "F", ["Cavalry Instincts"] = "F", ["Demon Bane"] = "F",
   ["Divine Surge"] = "F", ["Dragonkin Bane"] = "F", ["Drained Reserves"] = "F",
   ["Efficient Casting"] = "F", ["Elemental Bane"] = "F",
+  ["Enhanced Recovery"] = "F",  -- verified: it's +1% healing received. One.
   ["Entropic Fusion"] = "F", ["Fel Hazard"] = "F", ["Fel Surge"] = "F",
   ["Giant Bane"] = "F", ["Glass Canon"] = "F", -- +dmg taken kills Hardcore runs
   ["Healing Cadence"] = "F", ["Healing Echo"] = "F",
+  ["Heavy Blows"] = "F",        -- verified: -30% attack speed; dual-wield poison
+  ["Heavy Incantations"] = "F", ["Holy Revelation"] = "F",
+  ["Hunting Hazard"] = "F", ["Inspiring Mending"] = "F", ["Leadfoot"] = "F",
   -- Tooltip-verified trap: -50% crit CHANCE for +30% crit damage. Zeroes a
   -- ~44% crit build; only sane at 90%+ crit. (Field report 2026-08-25.)
   ["Lethal Precision"] = "F",
-  ["Heavy Incantations"] = "F", ["Holy Revelation"] = "F",
-  ["Hunting Hazard"] = "F", ["Inspiring Mending"] = "F", ["Leadfoot"] = "F",
-  ["Lingering Inspiration"] = "F", ["Mana Infusion"] = "F",
+  ["Lingering Inspiration"] = "F",
   ["Mana Regeneration"] = "F", ["Mana Reservoir"] = "F",
   ["Mechanical Bane"] = "F", ["Meditative Flow"] = "F", ["Mind Expansion"] = "F",
   ["Nature's Surge"] = "F", ["Overwhelming Restoration"] = "F",
   ["Provoking Presence"] = "F", -- threat is meaningless solo
   ["Runic Momentum"] = "F",     -- runic power: dead resource for a paladin
   ["Spiritual Fortitude"] = "F", ["Steady Casting"] = "F",
-  ["Steady Channeling"] = "F", ["Storm of the Spellweaver"] = "F",
-  ["Subtle Presence"] = "F", ["Undead Bane"] = "F", ["Unstable Missiles"] = "F",
+  ["Steady Channeling"] = "F", ["Stitched Fury"] = "F", -- requires living <15% HP
+  ["Storm of the Spellweaver"] = "F", ["Subtle Presence"] = "F",
+  ["The Last Wall"] = "F",      -- verified: -60% healing received guts JoL sustain
+  ["Unbroken Focus"] = "F",     -- needs 5s without damage; solo melee never has it
+  ["Unstable Missiles"] = "F",
 }
 
 -- Echoes to disable / banish. Rage- and runic-power-scaling echoes are dead for
