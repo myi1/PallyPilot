@@ -64,37 +64,42 @@ end
 -- tier  = 1 survival spine, 2 echo economy, 3 offense, 4 quality of life
 -- perm  = survives a prestige ("Carry over Prestige" flag in the DB)
 AD.NODES = {
+  -- PERMANENT survival first: on a prestige loop the temp chains below get
+  -- WIPED every reset, so Endless Vitality (permanent Stamina, compounds
+  -- across prestiges) is the real survival backbone. Buy it deep.
+  { key = "vitality", name = "Endless Vitality", tier = 1, infinite = true,
+    ids = { 2000 }, costs = {},
+    effect = "+5 Stamina per rank, forever & PRESTIGE-PROOF (2,000 x 1.25^rank) — the survival that never needs rebuying", perm = true },
+  -- Temporary survival (all WIPED on prestige — only worth buying for a
+  -- deliberate long push run, NOT before a reset):
   { key = "secondwind", name = "Second Wind", tier = 1,
     ids = { 391 }, costs = { 1500, 3000, 5000 },
-    effect = "Out-of-combat self-heal (% max HP per tick)" },
+    effect = "Out-of-combat self-heal (% max HP per tick) — TEMP, wiped on prestige" },
   { key = "victoryfeast", name = "Victory Feast", tier = 1,
     ids = { 388 }, costs = { 7500, 15000, 25000 },
-    effect = "Restore % max HP on every XP/honor kill — solo sustain engine" },
+    effect = "Restore % max HP on every kill — solo sustain, but TEMP (wiped on prestige)" },
   { key = "borrowedtime", name = "Borrowed Time", tier = 1,
     ids = { 335, 336, 337, 338, 339 },
     costs = { 5000, 10000, 15000, 20000, 25000 },
-    effect = "Cheat Death: survive a killing blow, restored to % max HP (once per life, refreshes on reset)" },
+    effect = "Cheat Death: survive a killing blow — TEMP, wiped on prestige" },
   { key = "reserveoflife", name = "Reserve of Life", tier = 1,
     ids = { 342, 343, 344, 345, 346, 530, 849, 911 },
     costs = { 7500, 12500, 20000, 25000, 30000, 300000, 600000, 900000 },
-    effect = "+1 Cheat Death charge per rank" },
+    effect = "+1 Cheat Death charge per rank — TEMP, wiped on prestige" },
   { key = "undyingspark", name = "Undying Spark", tier = 1,
     ids = { 347, 348, 349, 531, 850, 910 },
     costs = { 5000, 15000, 50000, 500000, 750000, 1000000 },
-    effect = "+1 FREE resurrect per run per rank (skips the 10% ash toll; Hardcore: becomes damage reduction)" },
+    effect = "Hardcore: becomes damage reduction — TEMP, wiped on prestige" },
   { key = "refusedrequiem", name = "Refused Requiem", tier = 1,
     ids = { 340, 341, 628, 848, 909 },
     costs = { 25000, 25000, 250000, 500000, 750000 },
-    effect = "+1 resurrection accept per rank (more pay-to-continue uses; Hardcore: damage reduction)" },
-  { key = "vitality", name = "Endless Vitality", tier = 1, infinite = true,
-    ids = { 2000 }, costs = {},
-    effect = "+5 Stamina per rank, forever (2,000 x 1.25^rank)", perm = true },
+    effect = "Hardcore: damage reduction per rank — TEMP, wiped on prestige" },
   { key = "steadfast", name = "Steadfast Recovery", tier = 1,
     ids = { 1024 }, costs = { 20000, 50000, 100000, 150000, 250000, 500000 },
-    effect = "+healing received while below 35% health" },
+    effect = "+healing received below 35% health — TEMP, wiped on prestige" },
   { key = "lastresort", name = "Last Resort", tier = 1,
     ids = { 654 }, costs = { 1000000 },
-    effect = "Fatal blow -> immune + teleport to safety (escape a wipe intact)" },
+    effect = "Fatal blow -> immune + teleport — TEMP, wiped on prestige" },
 
   { key = "twistoffate", name = "Twist of Fate", tier = 2, perm = true,
     ids = { 407, 408, 409, 410, 411, 412, 413, 414, 415, 514, 515, 776, 792,

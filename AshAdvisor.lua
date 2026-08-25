@@ -461,6 +461,21 @@ function AA.RefreshRail()
   local committed = state and state.committed or nil
 
   local queue = BuyQueue(ranks, spendable)
+
+  -- Prestige-loop awareness: once you're at/past the gate you'll reset soon,
+  -- so temp (non-perm) nodes are near-worthless — permanent nodes rise to
+  -- the top and temp nodes are flagged. This is why callboard deaths after a
+  -- prestige mean "buy permanent HP", not "rebuy cheat-deaths".
+  local prestigeReady = committed and committed >= AD.PRESTIGE.gate
+  if prestigeReady then
+    local perm, temp = {}, {}
+    for _, q in ipairs(queue) do
+      if q.perm then perm[#perm + 1] = q else temp[#temp + 1] = q end
+    end
+    queue = {}
+    for _, q in ipairs(perm) do queue[#queue + 1] = q end
+    for _, q in ipairs(temp) do queue[#queue + 1] = q end
+  end
   ClearGlows()
 
   -- Split: what you can buy NOW (priority order) vs what you're saving for.
@@ -484,12 +499,14 @@ function AA.RefreshRail()
   -- Focal: the top thing you can actually buy right now.
   local top = affordable[1]
   if top then
-    rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
+    rail.nextHead:SetText(GOLD .. "BUY NOW"
+      .. (prestigeReady and (EMBER .. "  · PRESTIGE READY: permanent only" .. R) or "") .. R)
     rail.nextName:SetText(BRIGHT .. top.name .. R)
     local rankStr = top.infinite and ("r" .. (top.cur or "?"))
       or ((top.cur or "?") .. "/" .. top.total)
     rail.nextCost:SetText(VERD .. Fmt(top.cost) .. R .. DIM .. "  ·  " .. rankStr
-      .. (top.perm and "  ·  prestige-proof" or "") .. R)
+      .. (top.perm and ("  ·  " .. VERD .. "prestige-proof" .. R)
+          or (EMBER .. "  ·  TEMP (prestige wipes)" .. R)) .. R)
     rail.nextWhy:SetText(DIM .. (top.effect or "") .. R)
     if top.id then GlowNode(top.id, 1, 0.72, 0.20) end
   elseif #queue > 0 then
