@@ -592,8 +592,28 @@ end
 -- The rail: PallyPilot advice docked to the journal's right edge.
 function EF.RefreshRail()
   if not rail then return end
+  -- Active build mode: highlighted button + labeled line. No guessing.
+  local mode = PP.db.buildMode
+  if rail.poolFarm and rail.poolRaid then
+    if mode == "farm" then
+      rail.poolFarm:LockHighlight(); rail.poolRaid:UnlockHighlight()
+    elseif mode == "raid" then
+      rail.poolRaid:LockHighlight(); rail.poolFarm:UnlockHighlight()
+    else
+      rail.poolFarm:UnlockHighlight(); rail.poolRaid:UnlockHighlight()
+    end
+  end
   local buckets = PP.EchoAudit.Compute and select(1, PP.EchoAudit.Compute())
   local t = {}
+  if mode then
+    t[#t+1] = (mode == "farm" and EMBER or VERD) .. "BUILD: "
+      .. string.upper(mode) .. R .. DIM
+      .. (mode == "farm" and " (repeats uncapped)" or " (breadth)") .. R
+    t[#t+1] = " "
+  else
+    t[#t+1] = DIM .. "BUILD: not synced — click a pool button" .. R
+    t[#t+1] = " "
+  end
   if buckets then
     t[#t+1] = GOLD .. "LOCK NOW — best "
       .. PP.EchoAudit.LockSlots() .. " owned" .. R

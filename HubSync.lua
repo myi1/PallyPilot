@@ -206,7 +206,9 @@ function HS.Push(mode)
       .. " — select '" .. TITLE .. "' manually in EbonholdHub.")
     return
   end
-  PP.print("Synced and ACTIVE: '" .. TITLE .. "' — BREADTH doctrine, "
+  PP.db.buildMode = (mode == "farm") and "farm" or "raid"
+  PP.print("Synced and ACTIVE: '" .. TITLE .. "' — "
+    .. string.upper(PP.db.buildMode) .. " mode, "
     .. slots .. " lock slots, lock ids: " .. table.concat(lockedIds, ", "))
   PP.print("Locks: " .. table.concat(lockedNames, ", "))
 end
