@@ -372,14 +372,16 @@ SlashCmdList["PALLYPILOT"] = function(line)
   elseif cmd == "audit" or cmd == "echoes" then
     if PP.EchoAudit.Toggle then PP.EchoAudit.Toggle() end
   elseif cmd == "startrun" or cmd == "disable" then
+    local mode = (arg == "farm") and "farm" or "raid"
     local keep, disable = PP.EchoAudit.DisablePlan
-      and PP.EchoAudit.DisablePlan()
+      and PP.EchoAudit.DisablePlan(nil, mode)
     if not keep then
       PP.print("EbonholdHub not loaded — can't compute the pool plan.")
     else
-      PP.print("|cffe0b352LEVEL-1 POOL PLAN|r — keep " .. #keep
-        .. " enabled, RIGHT-CLICK these " .. #disable
-        .. " OFF in the Echoes catalog (level 1 only):")
+      PP.print("|cffe0b352LEVEL-1 POOL PLAN (" .. string.upper(mode)
+        .. ")|r — keep " .. #keep .. " enabled, RIGHT-CLICK these "
+        .. #disable .. " OFF in the Echoes catalog (level 1 only):"
+        .. (mode == "raid" and " (/pp startrun farm for the tight farm pool)" or ""))
       for i, nm in ipairs(disable) do
         DEFAULT_CHAT_FRAME:AddMessage("  |cffd9694a" .. i .. ".|r " .. nm)
       end
