@@ -371,6 +371,31 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.FarmQueue.Toggle then PP.FarmQueue.Toggle() end
   elseif cmd == "audit" or cmd == "echoes" then
     if PP.EchoAudit.Toggle then PP.EchoAudit.Toggle() end
+  elseif cmd == "startrun" or cmd == "disable" then
+    local keep, disable = PP.EchoAudit.DisablePlan
+      and PP.EchoAudit.DisablePlan()
+    if not keep then
+      PP.print("EbonholdHub not loaded — can't compute the pool plan.")
+    else
+      PP.print("|cffe0b352LEVEL-1 POOL PLAN|r — keep " .. #keep
+        .. " enabled, RIGHT-CLICK these " .. #disable
+        .. " OFF in the Echoes catalog (level 1 only):")
+      for i, nm in ipairs(disable) do
+        DEFAULT_CHAT_FRAME:AddMessage("  |cffd9694a" .. i .. ".|r " .. nm)
+      end
+      PP.print("Pool size target: " .. #keep .. " (change with /pp pool <n>). "
+        .. "Tighter pool = better draws; every enabled echo can still be a "
+        .. "+1% Adaptive unique when drafted.")
+    end
+  elseif cmd == "pool" then
+    local n = tonumber(arg)
+    if n and n >= 60 and n <= 200 then
+      PP.db.options.poolSize = n
+      PP.print("Enabled-pool target set to " .. n .. ".")
+    else
+      PP.print("Usage: /pp pool <60-200>  (currently "
+        .. (PP.db.options.poolSize or 82) .. ")")
+    end
   elseif cmd == "guide" or cmd == "raid" then
     if PP.RaidGuide.Toggle then PP.RaidGuide.Toggle() end
   elseif cmd == "boss" then

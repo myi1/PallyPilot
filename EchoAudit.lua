@@ -290,6 +290,53 @@ function A.BestOwned(n)
   return out
 end
 
+-- Level-1 pool curation: owned echoes feed the run's draw pool, and
+-- disabling (right-click, level 1 only) removes them from it. Optimal pool =
+-- the best ~(active cap + margin) owned echoes: breadth stays maxed, but
+-- every draw offers something worth taking. Returns keep, disable lists
+-- (plain display names, priority-ordered).
+function A.DisablePlan(keepN)
+  keepN = keepN or (PP.db and PP.db.options and PP.db.options.poolSize) or 82
+  local owned = OwnedSet()
+  if not owned then return nil end
+  local names, seen = CachedNames(), {}
+  local buckets = { CORE = {}, S = {}, A = {}, B = {}, C = {},
+                    DISABLE = {}, REROLL = {} }
+  for norm in pairs(owned) do
+    local base = StripQuality(norm)
+    if not seen[base] then
+      seen[base] = true
+      local v = Classify(base)
+      local display = names[base] or TitleCase(base)
+      if buckets[v] then
+        table.insert(buckets[v], display)
+      end
+    end
+  end
+  local ordOf = {}
+  for _, l in pairs(buckets) do
+    for _, nm in ipairs(l) do ordOf[nm] = TierOrderIndex(Norm(nm)) end
+    table.sort(l, function(a, b)
+      if ordOf[a] ~= ordOf[b] then return (ordOf[a] or 9999) < (ordOf[b] or 9999) end
+      return a < b
+    end)
+  end
+  local keep, disable = {}, {}
+  for _, key in ipairs({ "CORE", "S", "A", "B", "C" }) do
+    for _, nm in ipairs(buckets[key]) do
+      if #keep < keepN then
+        keep[#keep + 1] = nm
+      else
+        disable[#disable + 1] = nm .. " (" .. key .. ")"
+      end
+    end
+  end
+  -- Traps and rated-junk always go on the disable list.
+  for _, nm in ipairs(buckets.DISABLE) do disable[#disable + 1] = nm .. " (trap)" end
+  for _, nm in ipairs(buckets.REROLL) do disable[#disable + 1] = nm .. " (junk)" end
+  return keep, disable
+end
+
 -- Snapshot copy of the owned set, for precise added/removed diffing.
 function A.OwnedCopy()
   local owned = OwnedSet()
