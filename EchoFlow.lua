@@ -166,8 +166,10 @@ end
 -- One-click run-start: compute the pool plan, sync the matching build into
 -- EBH, and X-mark the disable tiles. No chat commands involved.
 function EF.ApplyPool(mode)
-  local keep, disable, set = PP.EchoAudit.DisablePlan
-    and PP.EchoAudit.DisablePlan(nil, mode)
+  if not (PP.EchoAudit and PP.EchoAudit.DisablePlan) then return end
+  -- Direct call: an and-chain would truncate the multiple returns
+  -- (the bug class that also ate the kill tracker).
+  local keep, disable, set = PP.EchoAudit.DisablePlan(nil, mode)
   if not keep then
     SetStatus("EbonholdHub data not found", EMBER)
     return
