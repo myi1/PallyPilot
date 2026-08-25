@@ -101,6 +101,56 @@ local function Purchasable(id, ranks)
   return false
 end
 
+-- Runtime node name via its spell id (client knows custom spells).
+local function NodeName(id)
+  local nd = NodeById(id)
+  if nd and nd.spells and nd.spells[1] then
+    local nm = GetSpellInfo(nd.spells[1])
+    if nm then return nm end
+  end
+  return "node #" .. tostring(id)
+end
+
+-- BFS the links graph from owned/start nodes to targetId; return the first
+-- UNOWNED node on a shortest path — the concrete next click toward a
+-- path-locked target. Turns "path locked" into "buy THIS next".
+local function PathNextBuy(targetId, ranks)
+  if not targetId then return nil end
+  if Purchasable(targetId, ranks) then return targetId end
+  local db = _G.TalentDatabase
+  local tree = db and db[0]
+  local nodes = tree and tree.nodes
+  if not nodes then return nil end
+  local adjG = BuildAdj()
+  local function isOwned(id)
+    local n = NodeById(id)
+    return (n and n.isStart) or (ranks and (ranks[id] or 0) > 0)
+  end
+  local seen, queue, head = {}, {}, 1
+  for _, n in ipairs(nodes) do
+    if n.id and isOwned(n.id) then
+      seen[n.id] = true
+      for _, nb in ipairs(adjG[n.id] or {}) do
+        if not seen[nb] then
+          seen[nb] = true
+          queue[#queue + 1] = { id = nb, first = nb }
+        end
+      end
+    end
+  end
+  while head <= #queue do
+    local cur = queue[head]; head = head + 1
+    if cur.id == targetId then return cur.first end
+    for _, nb in ipairs(adjG[cur.id] or {}) do
+      if not seen[nb] then
+        seen[nb] = true
+        queue[#queue + 1] = { id = nb, first = cur.first }
+      end
+    end
+  end
+  return nil
+end
+
 -- Max purchasable rank of a DB node.
 local function NodeMaxRank(nd)
   if not nd then return 0 end
@@ -544,17 +594,24 @@ function AA.RefreshRail()
     rail.nextWhy:SetText(DIM .. (top.effect or "") .. R)
     if top.id then GlowNode(top.id, 1, 0.72, 0.20) end
   elseif #queue > 0 then
-    rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
-    local anyLocked = false
-    for _, q in ipairs(queue) do if q.locked then anyLocked = true break end end
-    if anyLocked then
-      rail.nextName:SetText(EMBER .. "Paths not connected" .. R)
-      rail.nextCost:SetText(DIM .. "fresh tree: buy outward from the START" .. R)
-      rail.nextWhy:SetText(DIM .. "Recommendations unlock as your purchases "
-        .. "reach each branch. The infinites at the center are start nodes." .. R)
+    -- Nothing directly reachable: route toward the stance's top target by
+    -- finding the next connector node to buy along the tree's links.
+    rail.nextHead:SetText(GOLD .. "WORK TOWARD" .. R)
+    local target = queue[1]
+    local step = target and target.id and PathNextBuy(target.id, ranks)
+    if step and step ~= target.id then
+      local nd = NodeById(step)
+      local c = nd and NodeRankCost(nd, ((ranks and ranks[step]) or 0) + 1)
+      rail.nextName:SetText(BRIGHT .. NodeName(step) .. R)
+      rail.nextCost:SetText((c and ((spendable and c <= spendable and VERD or EMBER)
+        .. Fmt(c) .. R) or (DIM .. "?" .. R))
+        .. DIM .. "  ·  connector toward " .. (target.name or "?") .. R)
+      rail.nextWhy:SetText(DIM .. "Buy this to extend your path to "
+        .. (target.name or "your next target") .. "." .. R)
+      GlowNode(step, 1, 0.72, 0.20)
     else
-      rail.nextName:SetText(DIM .. "nothing in reach" .. R)
-      rail.nextCost:SetText(DIM .. "bank more ash" .. R)
+      rail.nextName:SetText(DIM .. "bank ash, then buy from the center" .. R)
+      rail.nextCost:SetText(DIM .. "the infinites are start nodes" .. R)
       rail.nextWhy:SetText("")
     end
   else
