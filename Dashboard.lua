@@ -15,56 +15,91 @@ local frame, fs, content
 local function H(t) return "\n" .. GOLD .. string.upper(t) .. R .. "\n" end
 local function line(t) return t .. "\n" end
 
+-- The focal element: one context-aware "what do I do right now?" line.
+-- Reads live state (level, zone, build mode, ash, raid) so the player never
+-- has to remember which of the tools/commands fits the moment.
+function D.NextAction()
+  local lvl = UnitLevel("player") or 80
+  local zone = GetRealZoneText() or ""
+  local mode = PP.db.buildMode
+  local modeWord = (mode == "farm" and "Farm pool") or "Raid pool"
+
+  -- 1. Run start (level-1 disable window) — the highest-leverage moment.
+  if lvl <= 5 then
+    return GOLD .. "Run start. " .. R
+      .. "Open Echoes, click " .. BRIGHT .. modeWord .. R
+      .. ", right-click the X-marked echoes off, and lock your six."
+  end
+  -- 2. Prestige ready — spend into permanents, then reset.
+  local st = PP.AshAdvisor and PP.AshAdvisor.GetState and PP.AshAdvisor.GetState()
+  local gate = PP.AshData and PP.AshData.PRESTIGE and PP.AshData.PRESTIGE.gate
+  if st and st.committed and gate and st.committed >= gate then
+    return GOLD .. "Prestige ready. " .. R
+      .. "Skill Tree \226\134\146 pour banked ash into the infinites (permanent), then prestige."
+  end
+  -- 3. Inside a known raid — route + boss cards.
+  local raid = PP.GuideData and PP.GuideData.RaidForZone
+    and PP.GuideData.RaidForZone(zone)
+  if raid then
+    local kills, n = PP.db.kills and PP.db.kills[zone], 0
+    if kills then for _ in pairs(kills) do n = n + 1 end end
+    return GOLD .. "In " .. raid.name .. ". " .. R
+      .. "Raid guide for the route; target a boss for its card."
+      .. (n > 0 and (DIM .. "  " .. n .. " down this lockout." .. R) or "")
+  end
+  -- 4. At 80, out in the world — farm or push.
+  if lvl >= 80 then
+    return GOLD .. "At 80. " .. R
+      .. "Open Echoes to Reroll junk / check the pool; Farm queue for missing tomes; "
+      .. "Skill Tree for ash."
+  end
+  -- 5. Leveling.
+  return GOLD .. "Leveling (" .. (mode and string.upper(mode) or "?") .. "). " .. R
+    .. "Auto-Pick is drafting — Rotation HUD for combat, Talents to guide points."
+end
+
+-- Trimmed reference: only what you actually re-read (stats, seal, rotation,
+-- locks, gear). Echo tiers + affix schools were removed — that data now
+-- lives as verdict dots on the journal tiles and character-sheet slots.
 local function BuildText()
   local B = PP.Build
   local t = {}
-  t[#t+1] = BRIGHT .. B.title .. R .. "\n"
-  t[#t+1] = DIM .. B.talents .. R .. "\n"
-
-  t[#t+1] = H("Stat Priority")
+  t[#t+1] = H("Stat priority")
   t[#t+1] = line(GOLD .. table.concat(B.statPriority, "  >  ") .. R)
   t[#t+1] = line(DIM .. B.statNote .. R)
-  t[#t+1] = line(DIM .. B.enchants .. R)
 
-  t[#t+1] = H("Seal, Blessing & Rotation")
-  t[#t+1] = line(GOLD .. "Seal: " .. R .. B.seal)
-  t[#t+1] = line(DIM .. B.sealWhy .. R)
-  t[#t+1] = line(GOLD .. "Blessing: " .. R .. B.blessing)
-  t[#t+1] = line(DIM .. B.blessingWhy .. R)
-  t[#t+1] = line(BRIGHT .. "Rotation: " .. R .. B.rotation)
+  t[#t+1] = H("Seal · blessing · rotation")
+  t[#t+1] = line(GOLD .. "Seal " .. R .. B.seal)
+  t[#t+1] = line(GOLD .. "Blessing " .. R .. B.blessing)
+  t[#t+1] = line(BRIGHT .. "Rotation  " .. R .. B.rotation)
 
-  t[#t+1] = H("Lock These Six Echoes")
-  for _, n in ipairs(B.locked) do t[#t+1] = line("  " .. BRIGHT .. "* " .. R .. n) end
+  t[#t+1] = H("Lock these six")
+  local locked = {}
+  for _, n in ipairs(B.locked) do locked[#locked + 1] = n end
+  t[#t+1] = line("  " .. BRIGHT .. table.concat(locked, DIM .. " · " .. BRIGHT) .. R)
 
-  t[#t+1] = H("Draw Priority — take highest offered")
-  t[#t+1] = line(BRIGHT .. "S  " .. R .. table.concat(B.tiers.S, ", "))
-  t[#t+1] = line(ASH .. "A  " .. R .. table.concat(B.tiers.A, ", "))
-  t[#t+1] = line(DIM .. "B  " .. R .. table.concat(B.tiers.B, ", "))
-
-  t[#t+1] = H("Disable / Banish")
-  t[#t+1] = line(EMBER .. table.concat(B.disable, ", ") .. R)
-  t[#t+1] = line(DIM .. B.disableNote .. R)
-
-  t[#t+1] = H("Affixes — Survival first (AotC I)")
-  for _, a in ipairs(B.affixSurvival) do
-    t[#t+1] = line("  " .. BRIGHT .. a.affix .. R .. " — " .. a.role .. DIM .. "  [" .. a.slots .. "]" .. R)
-  end
-  t[#t+1] = H("Affixes — Damage max (HC4+)")
-  for _, a in ipairs(B.affixDamage) do
-    t[#t+1] = line("  " .. BRIGHT .. a.affix .. R .. " — " .. a.role)
-  end
-  t[#t+1] = line(DIM .. B.affixNote .. R)
-
-  t[#t+1] = H("Gear Targets")
+  t[#t+1] = H("Gear targets")
   for _, g in ipairs(B.gear) do
-    t[#t+1] = line("  " .. BRIGHT .. g.slot .. R .. ": " .. g.target)
+    t[#t+1] = line("  " .. BRIGHT .. g.slot .. R .. " — " .. g.target)
   end
 
-  t[#t+1] = "\n" .. VERD .. "Tip: /pp farm shows which build tomes you're missing and ports you to farm them." .. R .. "\n"
+  t[#t+1] = "\n" .. DIM .. "Echo verdicts show as dots on the journal tiles ("
+    .. "Echo audit for the list). Gear + affix verdicts show on your character "
+    .. "sheet (Gear audit)." .. R
   return table.concat(t)
 end
 
 function D.Refresh()
+  if frame and frame.now then
+    frame.now:SetText(PP.safeCall and D.NextAction and D.NextAction() or "")
+    if frame.status then
+      local mode = PP.db.buildMode
+      frame.status:SetText(DIM .. "Lv " .. (UnitLevel("player") or "?")
+        .. "  ·  build " .. R
+        .. (mode == "farm" and EMBER .. "FARM" or (mode == "raid" and VERD .. "RAID" or DIM .. "unsynced"))
+        .. R)
+    end
+  end
   if not fs then return end
   fs:SetText(BuildText())
   if content then content:SetHeight((fs:GetHeight() or 600) + 20) end
@@ -94,56 +129,59 @@ function D.Init()
   end
 
   local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOP", frame, "TOP", 0, -16)
+  title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
   title:SetText(GOLD .. "PallyPilot" .. R)
+
+  frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  frame.status:SetPoint("LEFT", title, "RIGHT", 10, 0)
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
 
-  local farmBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  farmBtn:SetWidth(150); farmBtn:SetHeight(22)
-  farmBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -40)
-  farmBtn:SetText("Missing tomes to farm")
-  farmBtn:SetScript("OnClick", function() if PP.FarmQueue.Toggle then PP.FarmQueue.Toggle() end end)
+  -- Focal NOW card: a bordered panel holding the one next-action line.
+  local nowCard = CreateFrame("Frame", nil, frame)
+  nowCard:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
+  nowCard:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -42)
+  nowCard:SetHeight(58)
+  nowCard:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 14,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 },
+  })
+  nowCard:SetBackdropColor(0.12, 0.10, 0.06, 0.9)
+  nowCard:SetBackdropBorderColor(0.55, 0.45, 0.20, 0.8)
+  local nowHead = nowCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  nowHead:SetPoint("TOPLEFT", nowCard, "TOPLEFT", 10, -8)
+  nowHead:SetText(GOLD .. "NEXT" .. R)
+  frame.now = nowCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  frame.now:SetPoint("TOPLEFT", nowCard, "TOPLEFT", 10, -22)
+  frame.now:SetPoint("BOTTOMRIGHT", nowCard, "BOTTOMRIGHT", -10, 8)
+  frame.now:SetJustifyH("LEFT"); frame.now:SetJustifyV("TOP")
 
-  local saveT = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  saveT:SetWidth(95); saveT:SetHeight(22)
-  saveT:SetPoint("LEFT", farmBtn, "RIGHT", 8, 0)
-  saveT:SetText("Save talents")
-  saveT:SetScript("OnClick", function() if PP.Talents then PP.Talents.Save() end end)
-
-  local guideT = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  guideT:SetWidth(95); guideT:SetHeight(22)
-  guideT:SetPoint("LEFT", saveT, "RIGHT", 6, 0)
-  guideT:SetText("Guide talents")
-  guideT:SetScript("OnClick", function() if PP.Talents then PP.Talents.Guide() end end)
-
-  local rotT = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  rotT:SetWidth(95); rotT:SetHeight(22)
-  rotT:SetPoint("TOPLEFT", farmBtn, "BOTTOMLEFT", 0, -4)
-  rotT:SetText("Rotation HUD")
-  rotT:SetScript("OnClick", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end)
-
-  local auditT = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  auditT:SetWidth(95); auditT:SetHeight(22)
-  auditT:SetPoint("LEFT", rotT, "RIGHT", 8, 0)
-  auditT:SetText("Echo audit")
-  auditT:SetScript("OnClick", function() if PP.EchoAudit then PP.EchoAudit.Toggle() end end)
-
-  local guideB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  guideB:SetWidth(95); guideB:SetHeight(22)
-  guideB:SetPoint("LEFT", auditT, "RIGHT", 6, 0)
-  guideB:SetText("Raid guide")
-  guideB:SetScript("OnClick", function() if PP.RaidGuide then PP.RaidGuide.Toggle() end end)
-
-  local gearB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  gearB:SetWidth(95); gearB:SetHeight(22)
-  gearB:SetPoint("LEFT", guideB, "RIGHT", 6, 0)
-  gearB:SetText("Gear audit")
-  gearB:SetScript("OnClick", function() if PP.GearAudit then PP.GearAudit.Toggle() end end)
+  -- Tool buttons, grouped left-to-right by concern. 4 per row, 108 wide.
+  local tools = {
+    { "Echo audit", function() if PP.EchoAudit then PP.EchoAudit.Toggle() end end },
+    { "Gear audit", function() if PP.GearAudit then PP.GearAudit.Toggle() end end },
+    { "Farm tomes", function() if PP.FarmQueue then PP.FarmQueue.Toggle() end end },
+    { "Raid guide", function() if PP.RaidGuide then PP.RaidGuide.Toggle() end end },
+    { "Rotation HUD", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end },
+    { "Guide talents", function() if PP.Talents then PP.Talents.Guide() end end },
+    { "Save talents", function() if PP.Talents then PP.Talents.Save() end end },
+    { "Ash: /pp ash", function() if PP.AshAdvisor and PP.AshAdvisor.Command then PP.AshAdvisor.Command() end end },
+  }
+  for i, tb in ipairs(tools) do
+    local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    b:SetWidth(108); b:SetHeight(21)
+    local col = (i - 1) % 4
+    local row = math.floor((i - 1) / 4)
+    b:SetPoint("TOPLEFT", frame, "TOPLEFT", 18 + col * 112, -108 - row * 25)
+    b:SetText(tb[1])
+    b:SetScript("OnClick", tb[2])
+  end
 
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame, "UIPanelScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -100)
+  scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -164)
   scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
   content = CreateFrame("Frame", nil, scroll)
@@ -155,6 +193,16 @@ function D.Init()
   fs:SetWidth(416); fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
   fs:SetSpacing(2)
   fs:SetText("")
+
+  -- Keep the focal NOW line current while the panel is open (cheap, 3s).
+  frame.elapsed = 0
+  frame:SetScript("OnUpdate", function(self, e)
+    self.elapsed = self.elapsed + e
+    if self.elapsed > 3 then
+      self.elapsed = 0
+      if self.now then self.now:SetText(D.NextAction()) end
+    end
+  end)
 
   D.Refresh()
   frame:Hide()
