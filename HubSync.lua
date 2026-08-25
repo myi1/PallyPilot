@@ -140,6 +140,12 @@ function HS.Push(mode)
   if mode == "depth" then
     PP.print("Depth mode is retired — at the active cap the engine ranks the "
       .. "cores automatically (see wkpal-vs-pallypilot.md). Syncing breadth.")
+    mode = nil
+  end
+  if mode == "farm" then
+    PP.print("FARM sync: repeats uncapped so auto-pick drafts through "
+      .. "repeat windows (rank-ups). Use with the /pp startrun farm pool; "
+      .. "/pp hubsync for the raid/breadth build.")
   end
   local EB = EbonholdHub and EbonholdHub.Build
   if not (EB and EB.Create and EB.SetActive and EbonholdHubDB) then
@@ -164,14 +170,28 @@ function HS.Push(mode)
     title = TITLE,
     class = "PALADIN",
     spec = 3,
-    comments = "PallyPilot breadth build (Wkpal autopsy 2026-08-25): uniques "
-      .. "first for Adaptive Power; F only for negative riders; cross-class "
-      .. "procs rated A; spellId locks; tier order + synergy bundles.",
+    comments = "PallyPilot " .. (mode == "farm" and "FARM" or "breadth")
+      .. " build: " .. (mode == "farm"
+        and "repeats uncapped for rank-ups with a curated pool. "
+        or "uniques first for Adaptive Power. ")
+      .. "F only for negative riders; spellId locks; tier order + bundles. "
+      .. "/pp hubsync [farm] to switch.",
     lockedEchoes = lockedIds,
     echoTiers = AssembleTiers(),
     echoTierOrder = AssembleTierOrder(),
     echoBundles = AssembleBundles(),
-    echoMaxPicks = {},  -- EMPTY on purpose: 1 copy each = breadth
+    echoMaxPicks = (function()
+      if mode ~= "farm" then return {} end -- empty = 1 copy each = breadth
+      -- Farm mode: the enabled pool is tiny (locks + epics), so nearly
+      -- every window is repeats — and repeats ARE the goal (rank-ups).
+      -- Uncap everything rated so auto-pick drafts through repeat windows
+      -- instead of stalling on them (post-prestige field bug 2026-08-25).
+      local mp = {}
+      for name, tier in pairs(AssembleTiers()) do
+        if tier ~= "F" then mp[name] = 0 end
+      end
+      return mp
+    end)(),
     settings = { aggressionLevel = 4, banishFamilyWhitelist = {} },
     automationEnabled = true,
     author = "PallyPilot",
