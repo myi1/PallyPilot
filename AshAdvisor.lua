@@ -63,6 +63,44 @@ local function HaveClientDb()
   return db ~= nil and db[0] ~= nil and db[0].nodes ~= nil
 end
 
+-- Reachability (matters post-prestige, when the tree is empty): a node is
+-- purchasable only if it's a start node, already ranked, or adjacent to an
+-- owned rank. Adjacency comes from the DB's links edge list.
+local adj
+local function BuildAdj()
+  if adj then return adj end
+  local db = _G.TalentDatabase
+  local tree = db and db[0]
+  local links = (tree and tree.links) or (db and db.links)
+  adj = {}
+  if links then
+    for _, e in ipairs(links) do
+      local a, b = e[1], e[2]
+      if a and b then
+        adj[a] = adj[a] or {}
+        adj[a][#adj[a] + 1] = b
+        adj[b] = adj[b] or {}
+        adj[b][#adj[b] + 1] = a
+      end
+    end
+  end
+  return adj
+end
+
+local function Purchasable(id, ranks)
+  local nd = NodeById(id)
+  if not nd then return true end             -- unknown node: don't block
+  if nd.isStart then return true end
+  if not ranks then return true end          -- no server state: can't judge
+  if (ranks[id] or 0) > 0 then return true end
+  local a = BuildAdj()[id]
+  if not a then return true end              -- no edges known: don't block
+  for _, nb in ipairs(a) do
+    if (ranks[nb] or 0) > 0 then return true end
+  end
+  return false
+end
+
 -- Max purchasable rank of a DB node.
 local function NodeMaxRank(nd)
   if not nd then return 0 end
@@ -87,6 +125,8 @@ end
 local function NextBuy(entry, ranks)
   local cur, total = 0, 0
   local bestCost = nil
+  local lockedCost, lockedId = nil, nil
+  entry._locked = nil
   for _, id in ipairs(entry.ids) do
     local nd = NodeById(id)
     if nd then
@@ -97,12 +137,25 @@ local function NextBuy(entry, ranks)
       cur = cur + r
       if r < maxR then
         local c = NodeRankCost(nd, r + 1)
-        if c and (bestCost == nil or c < bestCost) then
-          bestCost = c
-          entry._bestId = id
+        if c then
+          if Purchasable(id, ranks) then
+            if bestCost == nil or c < bestCost then
+              bestCost = c
+              entry._bestId = id
+            end
+          elseif lockedCost == nil or c < lockedCost then
+            lockedCost, lockedId = c, id
+          end
         end
       end
     end
+  end
+  if bestCost == nil and lockedCost then
+    -- Frontier exists but nothing is connected yet (fresh post-prestige
+    -- tree): report it, flagged locked, so the rail can say so.
+    bestCost = lockedCost
+    entry._bestId = lockedId
+    entry._locked = true
   end
   if total == 0 then
     -- client DB missing: fall back to baked extract, ranks unknowable
@@ -392,7 +445,9 @@ local function BuyQueue(ranks, spendable)
         name = entry.name, tier = entry.tier, effect = entry.effect,
         cur = cur, total = total, cost = cost, id = entry._bestId,
         infinite = entry.infinite, perm = entry.perm,
-        afford = (cost and spendable and cost <= spendable) or false,
+        locked = entry._locked or false,
+        afford = (cost and spendable and cost <= spendable
+          and not entry._locked) or false,
       }
     end
   end
@@ -415,8 +470,8 @@ function AA.RefreshRail()
     if q.afford then
       affordable[#affordable + 1] = q
       affordTotal = affordTotal + (q.cost or 0)
-    elseif not saving and q.cost then
-      saving = q -- highest-priority thing out of reach
+    elseif not saving and q.cost and not q.locked then
+      saving = q -- highest-priority AFFORDABLE-someday thing (not path-locked)
     end
   end
 
@@ -439,9 +494,18 @@ function AA.RefreshRail()
     if top.id then GlowNode(top.id, 1, 0.72, 0.20) end
   elseif #queue > 0 then
     rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
-    rail.nextName:SetText(DIM .. "nothing in reach" .. R)
-    rail.nextCost:SetText(DIM .. "bank more ash" .. R)
-    rail.nextWhy:SetText("")
+    local anyLocked = false
+    for _, q in ipairs(queue) do if q.locked then anyLocked = true break end end
+    if anyLocked then
+      rail.nextName:SetText(EMBER .. "Paths not connected" .. R)
+      rail.nextCost:SetText(DIM .. "fresh tree: buy outward from the START" .. R)
+      rail.nextWhy:SetText(DIM .. "Recommendations unlock as your purchases "
+        .. "reach each branch. The infinites at the center are start nodes." .. R)
+    else
+      rail.nextName:SetText(DIM .. "nothing in reach" .. R)
+      rail.nextCost:SetText(DIM .. "bank more ash" .. R)
+      rail.nextWhy:SetText("")
+    end
   else
     rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
     rail.nextName:SetText(VERD .. "Everything tracked is maxed" .. R)
@@ -470,10 +534,11 @@ function AA.RefreshRail()
   end
   local dimmed = 0
   for _, q in ipairs(queue) do
-    if not q.afford and q ~= saving and q.cost and dimmed < 3 then
+    if not q.afford and q ~= saving and q.cost and dimmed < 4 then
       dimmed = dimmed + 1
       if dimmed == 1 then t[#t+1] = DIM .. "later:" .. R end
-      t[#t+1] = DIM .. "  " .. q.name .. " — " .. Fmt(q.cost) .. R
+      t[#t+1] = DIM .. "  " .. q.name .. " — " .. Fmt(q.cost)
+        .. (q.locked and "  [path locked]" or "") .. R
     end
   end
   rail.body:SetText(table.concat(t, "\n"))
