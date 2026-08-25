@@ -2,7 +2,7 @@
 PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
   GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
-  CombatMeter = {}, AshAdvisor = {},
+  CombatMeter = {}, AshAdvisor = {}, Waypoints = {},
 }
 local PP = PallyPilot
 
@@ -433,6 +433,13 @@ SlashCmdList["PALLYPILOT"] = function(line)
       PP.print("No kills recorded in " .. tostring(zone)
         .. " (tracking started v0.28 — earlier kills weren't captured).")
     end
+  elseif cmd == "mark" then
+    PP.safeCall(PP.Waypoints.Mark, arg)
+  elseif cmd == "marks" then
+    PP.safeCall(PP.Waypoints.List)
+  elseif cmd == "go" then
+    if arg == "off" then PP.safeCall(PP.Waypoints.Stop, "Waypoint chain stopped.")
+    else PP.safeCall(PP.Waypoints.Go) end
   elseif cmd == "where" then
     SetMapToCurrentZone()
     local x, y = GetPlayerMapPosition("player")
