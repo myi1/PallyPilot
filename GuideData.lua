@@ -306,10 +306,14 @@ G.raids = {
       .. "Hammer TELEPORTER PADS (they unlock per boss): PLAGUEWORKS is the "
       .. "orange/green wing (trash hall > Festergut's door on the RIGHT, "
       .. "Rotface's on the LEFT, both balconies feed Putricide's lab below) · "
-      .. "CRIMSON HALL is the red wing (Blood Princes > Lana'thel) · FROSTWING "
-      .. "is the blue wing (Valithria portal room; EXIT through the far side of "
-      .. "her room, up the dragon trash to Sindragosa) · FROZEN THRONE "
-      .. "teleporter lights when Putricide + Lana'thel + Sindragosa are dead.",
+      .. "CRIMSON HALL has NO teleporter and shows as 'ROYAL QUARTERS' on the "
+      .. "map: take The Upper Spire pad, then the RED-lit archway off the "
+      .. "circular chamber, down the stairs (Blood Princes throne room > up the "
+      .. "far stairs to Lana'thel) · FROSTWING is the blue wing (Valithria "
+      .. "portal room; EXIT through the far side of her room, up the dragon "
+      .. "trash to Sindragosa — her floor is 'The Frost Queen's Lair') · "
+      .. "FROZEN THRONE teleporter lights when Putricide + Lana'thel + "
+      .. "Sindragosa are dead.",
     bosses = {
       { n = "Lord Marrowgar", t = "Bubble is reserved for Bone Spike impale. Everything else is footwork.",
         tips = {
