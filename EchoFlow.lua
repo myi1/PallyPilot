@@ -35,6 +35,8 @@ local TIP_LABEL = {
 }
 
 local rail, status
+local SetStatus -- forward declaration: defined with the engine below,
+                -- used by ApplyPool which sits earlier in the file
 local Journal = function() return _G["ProjectEbonholdEchoJournal"] end
 local OrbBubble = function() return _G["EbonholdOrbBubble"] end
 
@@ -333,7 +335,7 @@ local function RunNameSet()
   return set
 end
 
-local function SetStatus(msg, color)
+function SetStatus(msg, color) -- assigns the forward-declared local
   if status then status:SetText((color or DIM) .. msg .. R) end
 end
 
