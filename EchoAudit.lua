@@ -168,6 +168,13 @@ end
 -- core first, then S, then A, then B — sized to the permanent slots the
 -- player has actually unlocked (/pp locks <n>).
 function A.LockSlots()
+  -- Server truth first (EBH queries GetMaximumPermanentEchoes live);
+  -- the manual /pp locks setting is only a fallback.
+  local EB = EbonholdHub and EbonholdHub.Build
+  if EB and EB.GetLockedSlotCount then
+    local ok, n = pcall(EB.GetLockedSlotCount)
+    if ok and type(n) == "number" and n > 0 then return n end
+  end
   return (PP.db and PP.db.options and PP.db.options.lockSlots) or 5
 end
 
