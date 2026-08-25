@@ -40,6 +40,10 @@ B.talents = "≈ 44 Protection / 49 Retribution hybrid for soloing (survivabilit
 
 -- The six echoes to lock so they persist across runs.
 B.locked = {
+  -- Ambidexterity first: it's an ENABLER, not a damage echo — with dual 1H
+  -- gear, the off-hand is dead weight until it's drafted, so it must be
+  -- guaranteed from level 1. (If you ever swap to a 2H, drop this.)
+  "Ambidexterity",
   "Sanguine Bulwark", "Twilight Equilibrium", "Constellations",
   "Pandemic", "Adaptive Power", "Exposed Heart",
 }
