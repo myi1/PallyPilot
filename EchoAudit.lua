@@ -312,7 +312,7 @@ function A.DisablePlan(keepN, mode)
       local base, q = StripQuality(norm)
       if q == "epic" then keepSet[base] = true end
     end
-    local seen = {}
+    local seen, disableSet = {}, {}
     for norm in pairs(owned) do
       local base = StripQuality(norm)
       if not seen[base] then
@@ -322,11 +322,12 @@ function A.DisablePlan(keepN, mode)
           keep[#keep + 1] = display
         else
           disable[#disable + 1] = display
+          disableSet[base] = true
         end
       end
     end
     table.sort(keep); table.sort(disable)
-    return keep, disable
+    return keep, disable, disableSet
   end
   local names, seen = CachedNames(), {}
   local buckets = { CORE = {}, S = {}, A = {}, B = {}, C = {},
@@ -350,20 +351,27 @@ function A.DisablePlan(keepN, mode)
       return a < b
     end)
   end
-  local keep, disable = {}, {}
+  local keep, disable, disableSet = {}, {}, {}
   for _, key in ipairs({ "CORE", "S", "A", "B", "C" }) do
     for _, nm in ipairs(buckets[key]) do
       if #keep < keepN then
         keep[#keep + 1] = nm
       else
         disable[#disable + 1] = nm .. " (" .. key .. ")"
+        disableSet[Norm(nm)] = true
       end
     end
   end
   -- Traps and rated-junk always go on the disable list.
-  for _, nm in ipairs(buckets.DISABLE) do disable[#disable + 1] = nm .. " (trap)" end
-  for _, nm in ipairs(buckets.REROLL) do disable[#disable + 1] = nm .. " (junk)" end
-  return keep, disable
+  for _, nm in ipairs(buckets.DISABLE) do
+    disable[#disable + 1] = nm .. " (trap)"
+    disableSet[Norm(nm)] = true
+  end
+  for _, nm in ipairs(buckets.REROLL) do
+    disable[#disable + 1] = nm .. " (junk)"
+    disableSet[Norm(nm)] = true
+  end
+  return keep, disable, disableSet
 end
 
 -- Snapshot copy of the owned set, for precise added/removed diffing.

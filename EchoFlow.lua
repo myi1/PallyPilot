@@ -120,13 +120,38 @@ local function SmartClick(f)
   return false
 end
 
+local function NormEF(name)
+  name = string.gsub(name or "", "\226\128\153", "'")
+  return string.lower(name)
+end
+
 local function RefreshBadges()
-  EachTile(Journal(), function(btn, _, verdict)
+  -- Active pool plan: X-mark the tiles to right-click OFF (level-1 ritual).
+  -- Expires automatically once you're past the disable window.
+  local plan = PP.db.poolPlan
+  if plan and (UnitLevel("player") or 1) > 5 then
+    PP.db.poolPlan = nil
+    plan = nil
+  end
+  EachTile(Journal(), function(btn, display, verdict)
     if not btn.__ppDot then
       local t = btn:CreateTexture(nil, "OVERLAY")
       t:SetWidth(9); t:SetHeight(9)
       t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -1, -1)
       btn.__ppDot = t
+    end
+    if not btn.__ppX then
+      local x = btn:CreateTexture(nil, "OVERLAY")
+      x:SetWidth(18); x:SetHeight(18)
+      x:SetPoint("CENTER", btn, "CENTER", 0, 0)
+      x:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
+      x:Hide()
+      btn.__ppX = x
+    end
+    if plan and plan.set and plan.set[NormEF(display)] then
+      btn.__ppX:Show()
+    else
+      btn.__ppX:Hide()
     end
     local c = DOT[verdict]
     if c then
@@ -136,6 +161,27 @@ local function RefreshBadges()
       btn.__ppDot:Hide()
     end
   end)
+end
+
+-- One-click run-start: compute the pool plan, sync the matching build into
+-- EBH, and X-mark the disable tiles. No chat commands involved.
+function EF.ApplyPool(mode)
+  local keep, disable, set = PP.EchoAudit.DisablePlan
+    and PP.EchoAudit.DisablePlan(nil, mode)
+  if not keep then
+    SetStatus("EbonholdHub data not found", EMBER)
+    return
+  end
+  PP.db.poolPlan = { mode = mode, set = set, t = time() }
+  if PP.HubSync and PP.HubSync.Push then
+    PP.safeCall(PP.HubSync.Push, mode == "farm" and "farm" or nil)
+  end
+  RefreshBadges()
+  SetStatus(string.upper(mode) .. " pool: right-click the " .. #disable
+    .. " X-marked tiles OFF (level 1 only)", BRIGHT)
+  PP.print(string.upper(mode) .. " pool plan: keep " .. #keep .. ", disable "
+    .. #disable .. " — the X-marked tiles in the journal. Build synced to "
+    .. mode .. " mode.")
 end
 
 local function FindTile(name)
@@ -297,7 +343,6 @@ local function StopEngine(msg)
     SetStatus(msg, EMBER)
   end
   if rail and rail.rerollBtn then rail.rerollBtn:SetText("Reroll junk") end
-  if rail and rail.upgradeBtn then rail.upgradeBtn:SetText("Upgrade Bs") end
   if rail then PP.safeCall(EF.RefreshRail) end
 end
 
@@ -486,7 +531,6 @@ local function StartQueue(list, label)
   engine.phase = "ORB"
   engine.waited = 0
   if rail and rail.rerollBtn then rail.rerollBtn:SetText("STOP") end
-  if rail and rail.upgradeBtn then rail.upgradeBtn:SetText("STOP") end
   PP.print(label .. ": " .. #list .. " echoes queued, "
     .. (PP.db.options.rerollOrbs or 1) .. " orb(s) each. Click STOP anytime.")
   SetStatus("starting — " .. engine.queue[1])
@@ -567,9 +611,6 @@ function EF.RefreshRail()
     if rail.rerollBtn and not engine.phase then
       rail.rerollBtn:SetText("Reroll junk (" .. inRun .. ")")
     end
-    if rail.upgradeBtn and not engine.phase then
-      rail.upgradeBtn:SetText("Bs stay: +" .. upgradable .. "% Adaptive")
-    end
   else
     t[#t+1] = EMBER .. "EbonholdHub data not found" .. R
   end
@@ -629,11 +670,19 @@ local function BuildRail()
   rail.rerollBtn:SetText("Reroll junk")
   rail.rerollBtn:SetScript("OnClick", function() PP.safeCall(EF.StartReroll) end)
 
-  rail.upgradeBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.upgradeBtn:SetWidth(182); rail.upgradeBtn:SetHeight(22)
-  rail.upgradeBtn:SetPoint("BOTTOM", rail, "BOTTOM", 0, 40)
-  rail.upgradeBtn:SetText("Upgrade Bs")
-  rail.upgradeBtn:SetScript("OnClick", function() PP.safeCall(EF.StartUpgrade) end)
+  -- Run-start pool buttons: one click computes the plan, syncs the build
+  -- mode, and X-marks the disable tiles.
+  rail.poolFarm = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.poolFarm:SetWidth(88); rail.poolFarm:SetHeight(22)
+  rail.poolFarm:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 40)
+  rail.poolFarm:SetText("Farm pool")
+  rail.poolFarm:SetScript("OnClick", function() PP.safeCall(EF.ApplyPool, "farm") end)
+
+  rail.poolRaid = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.poolRaid:SetWidth(88); rail.poolRaid:SetHeight(22)
+  rail.poolRaid:SetPoint("LEFT", rail.poolFarm, "RIGHT", 6, 0)
+  rail.poolRaid:SetText("Raid pool")
+  rail.poolRaid:SetScript("OnClick", function() PP.safeCall(EF.ApplyPool, "raid") end)
 
   status = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   status:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 94)
