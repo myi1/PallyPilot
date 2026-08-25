@@ -30,8 +30,11 @@ local function BuildText()
     t[#t+1] = "\n" .. GOLD .. "ROUTE" .. R .. "\n"
     t[#t+1] = raid.route .. "\n"
   end
+  local kills = (PP.db.kills and PP.db.kills[raid.zone]) or {}
   for _, boss in ipairs(raid.bosses) do
-    t[#t+1] = "\n" .. GOLD .. string.upper(boss.n) .. R .. "\n"
+    local k = kills[boss.n]
+    local mark = k and (VERD .. "[DEAD " .. (k.when or "") .. "]  " .. R) or ""
+    t[#t+1] = "\n" .. mark .. GOLD .. string.upper(boss.n) .. R .. "\n"
     t[#t+1] = EMBER .. boss.t .. R .. "\n"
     for _, tip in ipairs(boss.tips) do
       t[#t+1] = "  " .. BRIGHT .. "* " .. R .. tip .. "\n"

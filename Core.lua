@@ -421,6 +421,24 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.EchoFlow.ForceNext then PP.safeCall(PP.EchoFlow.ForceNext) end
   elseif cmd == "dps" then
     if PP.CombatMeter.Report then PP.safeCall(PP.CombatMeter.Report) end
+  elseif cmd == "killed" then
+    local zone = GetRealZoneText()
+    local kills = PP.db.kills and PP.db.kills[zone]
+    if kills and next(kills) then
+      PP.print("Recorded kills in " .. zone .. ":")
+      for boss, k in pairs(kills) do
+        DEFAULT_CHAT_FRAME:AddMessage("  |cff8aa96a" .. boss .. "|r — " .. (k.when or "?"))
+      end
+    else
+      PP.print("No kills recorded in " .. tostring(zone)
+        .. " (tracking started v0.28 — earlier kills weren't captured).")
+    end
+  elseif cmd == "where" then
+    SetMapToCurrentZone()
+    local x, y = GetPlayerMapPosition("player")
+    PP.print("Zone: " .. tostring(GetRealZoneText()) .. " — map position: "
+      .. string.format("%.3f, %.3f", x or 0, y or 0)
+      .. ((not x or (x == 0 and y == 0)) and " (no coords here — waypoint arrows can't work in this map)" or " (coords WORK here — arrows possible!)"))
   elseif cmd == "bench" then
     if arg == "off" or arg == "" then
       PP.db.benchTag = nil

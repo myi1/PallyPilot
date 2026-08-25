@@ -143,8 +143,39 @@ end
 
 local AFFIL_MINE = COMBATLOG_OBJECT_AFFILIATION_MINE or 0x00000001
 
+-- Boss-kill tracker: UNIT_DIED for a name in the raid guide records the kill
+-- (per zone, with the saved-instance id when one exists) — the raid map's
+-- skulls are static, so this is the only reliable "what's dead" source.
+local function SavedIdForZone(zone)
+  for i = 1, GetNumSavedInstances() do
+    local name, id = GetSavedInstanceInfo(i)
+    if name == zone then return id end
+  end
+  return nil
+end
+
+local function RecordBossKill(dstName)
+  local boss, raid = PP.GuideData and PP.GuideData.FindBoss
+    and PP.GuideData.FindBoss(dstName)
+  if not boss then return end
+  -- Exact-name kills only (FindBoss substring-matches; require equality so
+  -- trash with boss-like names can't false-positive).
+  if string.lower(boss.n) ~= string.lower(dstName) then return end
+  PP.db.kills = PP.db.kills or {}
+  local zone = raid.zone
+  PP.db.kills[zone] = PP.db.kills[zone] or {}
+  PP.db.kills[zone][boss.n] = {
+    t = time(), when = date("%Y-%m-%d %H:%M"),
+    savedId = SavedIdForZone(zone),
+  }
+  PP.print("|cff8aa96aBoss kill recorded:|r " .. boss.n .. " (" .. raid.name .. ")")
+end
+
 local function OnCLEU(timestamp, event, srcGUID, srcName, srcFlags,
                       dstGUID, dstName, dstFlags, ...)
+  if event == "UNIT_DIED" and dstName then
+    PP.safeCall(RecordBossKill, dstName)
+  end
   -- Damage the PLAYER takes (survivability side of the ledger).
   if dstGUID and dstGUID == UnitGUID("player") then
     if event == "SWING_DAMAGE" then
