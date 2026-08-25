@@ -294,6 +294,29 @@ local function RunAsh()
   return rd and tonumber(rd.soulPoints) or nil
 end
 
+-- Advisor stance: "loop" = spam-prestige farming (permanent nodes first,
+-- temp is wipe-fodder). "push" = committing to a long run for the next
+-- AotC (temp survival + offense are kept, so buy them; survival then
+-- offense by natural tier order, no perm-first reshuffle).
+local function Stance()
+  return (PP.db and PP.db.options and PP.db.options.ashStance) or "loop"
+end
+
+function AA.Command(arg)
+  arg = arg and string.lower(arg) or ""
+  if arg == "push" or arg == "loop" then
+    if not (PP.db.options) then PP.db.options = {} end
+    PP.db.options.ashStance = arg
+    PP.print("Ash stance: " .. GOLD .. string.upper(arg) .. R .. " — "
+      .. (arg == "push"
+        and "survival + offense to clear content (temp nodes worth it on a long run)."
+        or "permanent nodes first for the prestige loop."))
+    if AA.RefreshRail then PP.safeCall(AA.RefreshRail) end
+    return
+  end
+  AA.Report()
+end
+
 function AA.Render()
   local ranks = state and state.nodeRanks or nil
   local spendable = state and state.spendable or nil
@@ -466,8 +489,12 @@ function AA.RefreshRail()
   -- so temp (non-perm) nodes are near-worthless — permanent nodes rise to
   -- the top and temp nodes are flagged. This is why callboard deaths after a
   -- prestige mean "buy permanent HP", not "rebuy cheat-deaths".
+  local stance = Stance()
   local prestigeReady = committed and committed >= AD.PRESTIGE.gate
-  if prestigeReady then
+  -- Perm-first reshuffle applies only on the LOOP stance. In PUSH stance you
+  -- keep temp survival + offense (you're not resetting soon), so the natural
+  -- tier order (survival spine -> offense) stands.
+  if prestigeReady and stance == "loop" then
     local perm, temp = {}, {}
     for _, q in ipairs(queue) do
       if q.perm then perm[#perm + 1] = q else temp[#temp + 1] = q end
@@ -499,8 +526,15 @@ function AA.RefreshRail()
   -- Focal: the top thing you can actually buy right now.
   local top = affordable[1]
   if top then
-    rail.nextHead:SetText(GOLD .. "BUY NOW"
-      .. (prestigeReady and (EMBER .. "  · PRESTIGE READY: permanent only" .. R) or "") .. R)
+    local banner
+    if stance == "push" then
+      banner = VERD .. "  · PUSH: power up for content" .. R
+    elseif prestigeReady then
+      banner = EMBER .. "  · PRESTIGE READY: permanent only" .. R
+    else
+      banner = ""
+    end
+    rail.nextHead:SetText(GOLD .. "BUY NOW" .. banner .. R)
     rail.nextName:SetText(BRIGHT .. top.name .. R)
     local rankStr = top.infinite and ("r" .. (top.cur or "?"))
       or ((top.cur or "?") .. "/" .. top.total)
@@ -575,6 +609,9 @@ function AA.RefreshRail()
       .. Fmt(math.ceil(run * 0.1)) .. R
   end
   rail.footer:SetText(table.concat(bits, "\n"))
+  if rail.stanceBtn then
+    rail.stanceBtn:SetText(stance == "push" and "Stance: PUSH" or "Stance: LOOP")
+  end
 end
 
 function AA.InitRail()
@@ -625,9 +662,16 @@ function AA.InitRail()
   rail.footer = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   rail.footer:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 18, 40)
 
+  rail.stanceBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.stanceBtn:SetWidth(84); rail.stanceBtn:SetHeight(20)
+  rail.stanceBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 14)
+  rail.stanceBtn:SetScript("OnClick", function()
+    AA.Command(Stance() == "loop" and "push" or "loop")
+  end)
+
   local refresh = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  refresh:SetWidth(174); refresh:SetHeight(20)
-  refresh:SetPoint("BOTTOM", rail, "BOTTOM", 0, 14)
+  refresh:SetWidth(84); refresh:SetHeight(20)
+  refresh:SetPoint("BOTTOMRIGHT", rail, "BOTTOMRIGHT", -14, 14)
   refresh:SetText("Refresh")
   refresh:SetScript("OnClick", function()
     RequestState()

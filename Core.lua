@@ -420,7 +420,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     elseif arg == "ash" then PP.safeCall(PP.UiScanAsh)
     else PP.safeCall(PP.UiScan) end
   elseif cmd == "ash" then
-    if PP.AshAdvisor and PP.AshAdvisor.Report then PP.safeCall(PP.AshAdvisor.Report) end
+    if PP.AshAdvisor and PP.AshAdvisor.Command then PP.safeCall(PP.AshAdvisor.Command, arg)
+    elseif PP.AshAdvisor and PP.AshAdvisor.Report then PP.safeCall(PP.AshAdvisor.Report) end
   elseif cmd == "ashscan2" then
     PP.safeCall(PP.AshTreeScan)
   elseif cmd == "perkscan" then
