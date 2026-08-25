@@ -365,12 +365,12 @@ G.raids = {
           "Keleseth's Dark Nuclei: at your power, skip nucleus-collecting — out-heal his shadow damage with JoL.",
           "Empowered Vortex (Valanar): spread means nothing solo; just don't stand in Shock Vortex zones.",
         } },
-      { n = "Blood-Queen Lana'thel", t = "SOLO TIMER: ~75s. The bite has no one to pass to.",
+      { n = "Blood-Queen Lana'thel", t = "EBONHOLD-MODIFIED: no solo bite-wall. A 3-4 minute sustain fight.",
         tips = {
-          "Frenzied Bloodthirst hits YOU (highest damage = you). Solo there is nobody to bite, so when the timer ends you're mind-controlled = wipe. Kill her before it ends.",
-          "That means: full burst opener, Wings on pull, every cooldown, Bloodlust-tier echoes if you have them. This is THE DPS check of the wing.",
-          "Pact of the Darkfallen (links players): solo it should fizzle/self-clear — if it ticks on you anyway, stand ON her hitbox to break it.",
+          "Measured (keepsy, 2026-08-25): 210s kill, ~5k/s incoming the whole time, no mind control — the retail 75s solo bite timer is removed or hugely relaxed here.",
+          "It's an endurance check, not a race: JoL uptime, steady rotation, treat her like a long Patchwerk with movement.",
           "Swarming Shadows: drop the shadow flames at the room edge, keep uptime.",
+          "Pact of the Darkfallen: solo it should fizzle — if it ticks on you anyway, stand ON her hitbox to break it.",
         } },
       { n = "Valithria Dreamwalker", t = "You WIN by healing her to full. Ret can, slowly.",
         tips = {
@@ -396,6 +396,23 @@ G.raids = {
         } },
     },
   },
+}
+
+-- Multi-body encounters die under their members' names in the combat log;
+-- map member (normalized, straight apostrophes, lowercase) -> guide boss.
+G.KILL_ALIASES = {
+  ["prince valanar"] = "Blood Prince Council",
+  ["prince keleseth"] = "Blood Prince Council",
+  ["prince taldaram"] = "Blood Prince Council",
+  ["fjola lightbane"] = "Twin Val'kyr", ["eydis darkbane"] = "Twin Val'kyr",
+  ["thane korth'azz"] = "The Four Horsemen",
+  ["baron rivendare"] = "The Four Horsemen",
+  ["lady blaumeux"] = "The Four Horsemen",
+  ["sir zeliek"] = "The Four Horsemen",
+  ["steelbreaker"] = "Assembly of Iron",
+  ["runemaster molgeim"] = "Assembly of Iron",
+  ["stormcaller brundir"] = "Assembly of Iron",
+  ["icehowl"] = "Northrend Beasts",
 }
 
 -- Flat lookup: normalized boss name -> { boss = entry, raid = raidEntry }.

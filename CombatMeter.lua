@@ -73,9 +73,15 @@ local function SaveFight(f)
   for i = 1, math.min(15, #sorted) do
     spells[i] = { n = sorted[i][1], d = math.floor(sorted[i][2]) }
   end
+  -- Bench tags only apply in the zone where they were set (an ICC evening
+  -- once inherited a stale HoR tag).
+  local tag = PP.db.benchTag
+  if tag and PP.db.benchZone and PP.db.benchZone ~= (GetRealZoneText() or "") then
+    tag = nil
+  end
   log[#log + 1] = {
     t = time(),
-    tag = PP.db.benchTag,
+    tag = tag,
     when = date("%Y-%m-%d %H:%M"),
     zone = GetRealZoneText() or "?",
     target = topTarget,
@@ -154,22 +160,41 @@ local function SavedIdForZone(zone)
   return nil
 end
 
-local function RecordBossKill(dstName)
-  local boss, raid = PP.GuideData and PP.GuideData.FindBoss
-    and PP.GuideData.FindBoss(dstName)
-  if not boss then return end
-  -- Exact-name kills only (FindBoss substring-matches; require equality so
-  -- trash with boss-like names can't false-positive).
-  if string.lower(boss.n) ~= string.lower(dstName) then return end
+local function KNorm(s)
+  s = string.gsub(s or "", "\226\128\153", "'")
+  return string.lower(s)
+end
+
+function CM.RecordBossKill(dstName)
+  if not (PP.GuideData and PP.GuideData.FindBoss) then return end
+  -- Multi-body bosses die under their members' names.
+  local alias = PP.GuideData.KILL_ALIASES
+    and PP.GuideData.KILL_ALIASES[KNorm(dstName)]
+  local lookup = alias or dstName
+  -- NOTE: multiple returns must come from a direct call — an and-chain
+  -- truncates to one value (the bug that silently ate every kill in v0.28).
+  local boss, raid = PP.GuideData.FindBoss(lookup)
+  if not boss or not raid then return end
+  -- Exact-name kills only (FindBoss substring-matches; require normalized
+  -- equality so trash with boss-like names can't false-positive).
+  if not alias and KNorm(boss.n) ~= KNorm(dstName) then return end
   PP.db.kills = PP.db.kills or {}
   local zone = raid.zone
   PP.db.kills[zone] = PP.db.kills[zone] or {}
+  if PP.db.kills[zone][boss.n]
+     and (time() - (PP.db.kills[zone][boss.n].t or 0)) < 3600 then
+    return -- council members: don't re-announce within the hour
+  end
   PP.db.kills[zone][boss.n] = {
     t = time(), when = date("%Y-%m-%d %H:%M"),
     savedId = SavedIdForZone(zone),
   }
   PP.print("|cff8aa96aBoss kill recorded:|r " .. boss.n .. " (" .. raid.name .. ")")
+  if PP.Waypoints and PP.Waypoints.OnBossKill then
+    PP.safeCall(PP.Waypoints.OnBossKill, boss.n, zone)
+  end
 end
+local RecordBossKill = CM.RecordBossKill
 
 local function OnCLEU(timestamp, event, srcGUID, srcName, srcFlags,
                       dstGUID, dstName, dstFlags, ...)

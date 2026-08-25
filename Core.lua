@@ -422,6 +422,13 @@ SlashCmdList["PALLYPILOT"] = function(line)
   elseif cmd == "dps" then
     if PP.CombatMeter.Report then PP.safeCall(PP.CombatMeter.Report) end
   elseif cmd == "killed" then
+    if arg and arg ~= "" then
+      -- Manual seed for kills the tracker missed (e.g. pre-fix kills).
+      if PP.CombatMeter.RecordBossKill then
+        PP.safeCall(PP.CombatMeter.RecordBossKill, arg)
+      end
+      return
+    end
     local zone = GetRealZoneText()
     local kills = PP.db.kills and PP.db.kills[zone]
     if kills and next(kills) then
@@ -452,8 +459,10 @@ SlashCmdList["PALLYPILOT"] = function(line)
       PP.print("Benchmark tag cleared — fights log untagged.")
     else
       PP.db.benchTag = arg
-      PP.print("Benchmark tag set: '" .. arg .. "' — every fight logs with it "
-        .. "until /pp bench off. Same route + same tag name across arms = clean A/B.")
+      PP.db.benchZone = GetRealZoneText()
+      PP.print("Benchmark tag set: '" .. arg .. "' for "
+        .. tostring(PP.db.benchZone) .. " — fights tag only in this zone; "
+        .. "/pp bench off clears.")
     end
   else
     PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
