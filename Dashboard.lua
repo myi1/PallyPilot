@@ -110,6 +110,24 @@ function D.Refresh()
   if content then content:SetHeight((fs:GetHeight() or 600) + 20) end
 end
 
+-- Palette (RGBA) for the solid-texture chrome. One warm-neutral hue, shifted
+-- only in lightness across surfaces; gold is the single accent, used sparingly.
+local WHITE = "Interface\\Buttons\\WHITE8X8"
+local C = {
+  bg      = { 0.086, 0.078, 0.067, 0.96 }, -- window ground
+  header  = { 0.135, 0.122, 0.102, 1 },    -- top strip (one step up)
+  card    = { 0.125, 0.112, 0.090, 1 },     -- NEXT hero card
+  divider = { 1, 1, 1, 0.09 },              -- hairline separators
+  hover   = { 1, 1, 1, 0.06 },              -- nav hover wash
+  bar     = { 0.878, 0.702, 0.322, 1 },     -- gold active accent
+}
+local TX = {
+  active    = { 0.96, 0.85, 0.53 },  -- active nav / focal
+  primary   = { 0.87, 0.83, 0.74 },  -- default nav
+  secondary = { 0.72, 0.66, 0.56 },  -- tools
+  muted     = { 0.55, 0.50, 0.42 },  -- section labels
+}
+
 -- Viewport views: sub-panels that swap into the shell in place. Each module
 -- exposes GetFrame() (built on demand) + Refresh() (and optionally OnShow()).
 local VIEWS = {
@@ -121,24 +139,21 @@ local VIEWS = {
 }
 
 -- Swap the viewport to a view id ("home" or a VIEWS key). Reparents the target
--- panel into the shell, strips its window chrome, and updates the breadcrumb.
+-- panel into the shell, strips its window chrome, marks the active rail item.
 function D.ShowView(id)
   if not frame then return end
   id = id or "home"
-  -- Hide whatever is currently embedded.
   if frame.shownFrame then frame.shownFrame:Hide(); frame.shownFrame = nil end
   frame.home:Hide()
 
   if id == "home" then
     frame.home:Show()
-    frame.crumb:SetText(DIM .. "Home" .. R)
-    frame.back:Hide()
+    frame.crumb:SetText("Home")
   else
     local v = VIEWS[id]
     local m = v and v.mod()
     if not m or not m.GetFrame then
-      frame.home:Show(); frame.crumb:SetText(DIM .. "Home" .. R); frame.back:Hide()
-      id = "home"
+      frame.home:Show(); frame.crumb:SetText("Home"); id = "home"
     else
       local f = m.GetFrame()
       f:SetParent(frame.viewport)
@@ -148,15 +163,18 @@ function D.ShowView(id)
       if m.OnShow then PP.safeCall(m.OnShow) elseif m.Refresh then PP.safeCall(m.Refresh) end
       f:Show()
       frame.shownFrame = f
-      frame.crumb:SetText(GOLD .. v.label .. R)
-      frame.back:Show()
+      frame.crumb:SetText(v.label)
     end
   end
   frame.view = id
-  -- Colorblind-safe active marker: ">" prefix on the active nav button.
+  -- Active state: gold left bar + brighter label on the current view; the
+  -- ">" text prefix carries it too, so it reads without color.
   if frame.navBtns then
     for vid, b in pairs(frame.navBtns) do
-      b:SetText((vid == id and "> " or "") .. b.ppLabel)
+      local on = (vid == id)
+      if on then b.bar:Show() else b.bar:Hide() end
+      b.label:SetText((on and "> " or "") .. b.ppLabel)
+      b.label:SetTextColor(unpack(on and TX.active or TX.primary))
     end
   end
 end
@@ -169,10 +187,37 @@ function D.Open(id)
   D.ShowView(id or "home")
 end
 
+-- Flat nav item: hover wash + gold active bar. Returns the button.
+local function NavItem(parent, y, label, secondary)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetWidth(142); b:SetHeight(23)
+  b:SetPoint("TOPLEFT", parent, "TOPLEFT", 8, y)
+  local hl = b:CreateTexture(nil, "BACKGROUND")
+  hl:SetPoint("TOPLEFT", b, "TOPLEFT", 6, 0)
+  hl:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+  hl:SetTexture(unpack(C.hover)); hl:Hide()
+  b.bar = b:CreateTexture(nil, "OVERLAY")
+  b.bar:SetPoint("LEFT", b, "LEFT", 3, 0); b.bar:SetWidth(3); b.bar:SetHeight(15)
+  b.bar:SetTexture(unpack(C.bar)); b.bar:Hide()
+  b.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  b.label:SetPoint("LEFT", b, "LEFT", 14, 0)
+  b.label:SetText(label)
+  b.label:SetTextColor(unpack(secondary and TX.secondary or TX.primary))
+  b:SetScript("OnEnter", function() hl:Show() end)
+  b:SetScript("OnLeave", function() hl:Hide() end)
+  return b
+end
+
+local function SectionLabel(parent, y, text)
+  local f = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  f:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, y)
+  f:SetText(text); f:SetTextColor(unpack(TX.muted))
+end
+
 function D.Init()
   if frame then return end
   frame = CreateFrame("Frame", "PallyPilotFrame", UIParent)
-  frame:SetWidth(560); frame:SetHeight(600)
+  frame:SetWidth(640); frame:SetHeight(560)
   frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   frame:SetMovable(true); frame:EnableMouse(true); frame:RegisterForDrag("LeftButton")
   frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
@@ -181,106 +226,121 @@ function D.Init()
     local _, _, _, x, y = self:GetPoint()
     PP.db.options.winPos = { x = x, y = y }
   end)
+  -- Clean dark panel + hairline border (no parchment).
   frame:SetBackdrop({
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true, tileSize = 32, edgeSize = 28,
-    insets = { left = 10, right = 10, top = 10, bottom = 10 },
+    bgFile = WHITE, edgeFile = WHITE, edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 },
   })
+  frame:SetBackdropColor(unpack(C.bg))
+  frame:SetBackdropBorderColor(1, 1, 1, 0.12)
   if PP.db.options.winPos then
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", UIParent, "CENTER", PP.db.options.winPos.x, PP.db.options.winPos.y)
   end
 
+  -- Header strip.
+  local header = frame:CreateTexture(nil, "ARTWORK")
+  header:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+  header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+  header:SetHeight(36); header:SetTexture(unpack(C.header))
+  local hdrLine = frame:CreateTexture(nil, "OVERLAY")
+  hdrLine:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
+  hdrLine:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, 0)
+  hdrLine:SetHeight(1); hdrLine:SetTexture(unpack(C.divider))
+
   local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
+  title:SetPoint("LEFT", frame, "TOPLEFT", 16, -19)
   title:SetText(GOLD .. "PallyPilot" .. R)
 
   frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  frame.status:SetPoint("LEFT", title, "RIGHT", 10, 0)
+  frame.status:SetPoint("LEFT", title, "RIGHT", 12, 0)
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+  close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
 
-  -- Persistent nav row. View buttons swap the viewport; action buttons fire
-  -- their own tool. 5 per row, two rows.
-  local nav = {
-    { "Home", view = "home" },
-    { "Build score", view = "score" },
-    { "Echo audit", view = "audit" },
-    { "Farm tomes", view = "farm" },
-    { "Gear audit", view = "gear" },
-    { "Raid guide", view = "raid" },
-    { "Tome on/off", act = function() if PP.TomeManager then PP.TomeManager.Command("") end end },
-    { "Rotation HUD", act = function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end },
-    { "Talents", act = function() if PP.Talents then PP.Talents.Guide() end end },
-    { "Ash tree", act = function() if PP.AshAdvisor and PP.AshAdvisor.Command then PP.AshAdvisor.Command() end end },
-  }
+  -- Left rail divider.
+  local railLine = frame:CreateTexture(nil, "OVERLAY")
+  railLine:SetPoint("TOPLEFT", frame, "TOPLEFT", 158, -37)
+  railLine:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 158, 8)
+  railLine:SetWidth(1); railLine:SetTexture(unpack(C.divider))
+
+  -- Left nav rail: Views (swap the viewport) then Tools (fire their own thing).
   frame.navBtns = {}
-  for i, item in ipairs(nav) do
-    local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    b:SetWidth(102); b:SetHeight(21)
-    local col = (i - 1) % 5
-    local row = math.floor((i - 1) / 5)
-    b:SetPoint("TOPLEFT", frame, "TOPLEFT", 18 + col * 106, -42 - row * 25)
-    b.ppLabel = item[1]
-    b:SetText(item[1])
-    if item.view then
-      frame.navBtns[item.view] = b
-      b:SetScript("OnClick", function() D.ShowView(item.view) end)
-    else
-      b:SetScript("OnClick", item.act)
-    end
+  SectionLabel(frame, -46, "VIEWS")
+  local views = {
+    { "Home", "home" }, { "Build score", "score" }, { "Echo audit", "audit" },
+    { "Farm tomes", "farm" }, { "Gear audit", "gear" }, { "Raid guide", "raid" },
+  }
+  local y = -64
+  for _, v in ipairs(views) do
+    local b = NavItem(frame, y, v[1], false)
+    b.ppLabel = v[1]
+    frame.navBtns[v[2]] = b
+    local vid = v[2]
+    b:SetScript("OnClick", function() D.ShowView(vid) end)
+    y = y - 24
   end
 
-  -- Breadcrumb bar: where you are + a Back-to-home button.
-  frame.crumb = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  frame.crumb:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -100)
-  frame.back = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  frame.back:SetWidth(70); frame.back:SetHeight(20)
-  frame.back:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -96)
-  frame.back:SetText("< Back")
-  frame.back:SetScript("OnClick", function() D.ShowView("home") end)
+  SectionLabel(frame, y - 8, "TOOLS")
+  y = y - 26
+  local tools = {
+    { "Tome on/off", function() if PP.TomeManager then PP.TomeManager.Command("") end end },
+    { "Rotation HUD", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end },
+    { "Talents", function() if PP.Talents then PP.Talents.Guide() end end },
+    { "Ash tree", function() if PP.AshAdvisor and PP.AshAdvisor.Command then PP.AshAdvisor.Command() end end },
+  }
+  for _, t in ipairs(tools) do
+    local b = NavItem(frame, y, t[1], true)
+    b:SetScript("OnClick", t[2])
+    y = y - 24
+  end
+
+  -- Content header: the current view name (breadcrumb).
+  frame.crumb = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  frame.crumb:SetPoint("TOPLEFT", frame, "TOPLEFT", 172, -48)
+  frame.crumb:SetTextColor(unpack(TX.active))
 
   -- Viewport: the swappable region every view lives in.
   frame.viewport = CreateFrame("Frame", nil, frame)
-  frame.viewport:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -124)
-  frame.viewport:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 14)
+  frame.viewport:SetPoint("TOPLEFT", frame, "TOPLEFT", 168, -74)
+  frame.viewport:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 10)
 
-  -- Home view lives inside the viewport: focal NEXT card + reference scroll.
+  -- Home lives inside the viewport: focal NEXT hero + reference scroll.
   frame.home = CreateFrame("Frame", nil, frame.viewport)
   frame.home:SetAllPoints(frame.viewport)
 
   local nowCard = CreateFrame("Frame", nil, frame.home)
-  nowCard:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 4, -2)
-  nowCard:SetPoint("TOPRIGHT", frame.home, "TOPRIGHT", -4, -2)
-  nowCard:SetHeight(60)
+  nowCard:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 0, 0)
+  nowCard:SetPoint("TOPRIGHT", frame.home, "TOPRIGHT", -6, 0)
+  nowCard:SetHeight(66)
   nowCard:SetBackdrop({
-    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 16, edgeSize = 14,
-    insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    bgFile = WHITE, edgeFile = WHITE, edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 },
   })
-  nowCard:SetBackdropColor(0.12, 0.10, 0.06, 0.9)
-  nowCard:SetBackdropBorderColor(0.55, 0.45, 0.20, 0.8)
+  nowCard:SetBackdropColor(unpack(C.card))
+  nowCard:SetBackdropBorderColor(1, 1, 1, 0.08)
+  local nowBar = nowCard:CreateTexture(nil, "OVERLAY")
+  nowBar:SetPoint("TOPLEFT", nowCard, "TOPLEFT", 0, 0)
+  nowBar:SetPoint("BOTTOMLEFT", nowCard, "BOTTOMLEFT", 0, 0)
+  nowBar:SetWidth(3); nowBar:SetTexture(unpack(C.bar))
   local nowHead = nowCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  nowHead:SetPoint("TOPLEFT", nowCard, "TOPLEFT", 10, -8)
+  nowHead:SetPoint("TOPLEFT", nowCard, "TOPLEFT", 14, -10)
   nowHead:SetText(GOLD .. "NEXT" .. R)
   frame.now = nowCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  frame.now:SetPoint("TOPLEFT", nowCard, "TOPLEFT", 10, -22)
-  frame.now:SetPoint("BOTTOMRIGHT", nowCard, "BOTTOMRIGHT", -10, 8)
+  frame.now:SetPoint("TOPLEFT", nowCard, "TOPLEFT", 14, -26)
+  frame.now:SetPoint("BOTTOMRIGHT", nowCard, "BOTTOMRIGHT", -12, 8)
   frame.now:SetJustifyH("LEFT"); frame.now:SetJustifyV("TOP")
 
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame.home, "UIPanelScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 4, -70)
+  scroll:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 0, -78)
   scroll:SetPoint("BOTTOMRIGHT", frame.home, "BOTTOMRIGHT", -26, 2)
   content = CreateFrame("Frame", nil, scroll)
-  content:SetWidth(500); content:SetHeight(10)
+  content:SetWidth(430); content:SetHeight(10)
   scroll:SetScrollChild(content)
   fs = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   fs:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
-  fs:SetWidth(496); fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
-  fs:SetSpacing(2)
+  fs:SetWidth(426); fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
+  fs:SetSpacing(3)
   fs:SetText("")
 
   -- Keep the focal NOW line current while the shell is open (cheap, 3s).
