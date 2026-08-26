@@ -24,11 +24,13 @@ function D.NextAction()
   local mode = PP.db.buildMode
   local modeWord = (mode == "farm" and "Farm pool") or "Raid pool"
 
-  -- 1. Run start (level-1 disable window) — the highest-leverage moment.
+  -- 1. Run start (level-1 window) — the highest-leverage moment.
   if lvl <= 5 then
     return GOLD .. "Run start. " .. R
-      .. "Open Echoes, click " .. BRIGHT .. modeWord .. R
-      .. ", right-click the X-marked echoes off, and lock your six."
+      .. "Have a saved loadout? " .. BRIGHT .. "Select a loadout \226\134\146 Activate" .. R
+      .. " — at level 1 that guarantees its rebuild. Otherwise " .. BRIGHT
+      .. modeWord .. R .. " + right-click the X-marked echoes off to design one, "
+      .. "then save it."
   end
   -- 2. Prestige ready — spend into permanents, then reset.
   local st = PP.AshAdvisor and PP.AshAdvisor.GetState and PP.AshAdvisor.GetState()
