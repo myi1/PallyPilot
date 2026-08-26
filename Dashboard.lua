@@ -110,10 +110,69 @@ function D.Refresh()
   if content then content:SetHeight((fs:GetHeight() or 600) + 20) end
 end
 
+-- Viewport views: sub-panels that swap into the shell in place. Each module
+-- exposes GetFrame() (built on demand) + Refresh() (and optionally OnShow()).
+local VIEWS = {
+  audit = { label = "Echo Audit", mod = function() return PP.EchoAudit end },
+  score = { label = "Build Score", mod = function() return PP.BuildScore end },
+  gear  = { label = "Gear Audit", mod = function() return PP.GearAudit end },
+  farm  = { label = "Farm Queue", mod = function() return PP.FarmQueue end },
+  raid  = { label = "Raid Guide", mod = function() return PP.RaidGuide end },
+}
+
+-- Swap the viewport to a view id ("home" or a VIEWS key). Reparents the target
+-- panel into the shell, strips its window chrome, and updates the breadcrumb.
+function D.ShowView(id)
+  if not frame then return end
+  id = id or "home"
+  -- Hide whatever is currently embedded.
+  if frame.shownFrame then frame.shownFrame:Hide(); frame.shownFrame = nil end
+  frame.home:Hide()
+
+  if id == "home" then
+    frame.home:Show()
+    frame.crumb:SetText(DIM .. "Home" .. R)
+    frame.back:Hide()
+  else
+    local v = VIEWS[id]
+    local m = v and v.mod()
+    if not m or not m.GetFrame then
+      frame.home:Show(); frame.crumb:SetText(DIM .. "Home" .. R); frame.back:Hide()
+      id = "home"
+    else
+      local f = m.GetFrame()
+      f:SetParent(frame.viewport)
+      f:ClearAllPoints(); f:SetAllPoints(frame.viewport)
+      f:SetBackdrop(nil); f:SetMovable(false)
+      if f.ppClose then f.ppClose:Hide() end
+      if m.OnShow then PP.safeCall(m.OnShow) elseif m.Refresh then PP.safeCall(m.Refresh) end
+      f:Show()
+      frame.shownFrame = f
+      frame.crumb:SetText(GOLD .. v.label .. R)
+      frame.back:Show()
+    end
+  end
+  frame.view = id
+  -- Colorblind-safe active marker: ">" prefix on the active nav button.
+  if frame.navBtns then
+    for vid, b in pairs(frame.navBtns) do
+      b:SetText((vid == id and "> " or "") .. b.ppLabel)
+    end
+  end
+end
+
+-- The one public entry: open the shell and show a view (default home).
+function D.Open(id)
+  if not frame then D.Init() end
+  D.Refresh()
+  frame:Show(); frame:Raise()
+  D.ShowView(id or "home")
+end
+
 function D.Init()
   if frame then return end
   frame = CreateFrame("Frame", "PallyPilotFrame", UIParent)
-  frame:SetWidth(480); frame:SetHeight(580)
+  frame:SetWidth(560); frame:SetHeight(600)
   frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   frame:SetMovable(true); frame:EnableMouse(true); frame:RegisterForDrag("LeftButton")
   frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
@@ -143,11 +202,59 @@ function D.Init()
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
 
-  -- Focal NOW card: a bordered panel holding the one next-action line.
-  local nowCard = CreateFrame("Frame", nil, frame)
-  nowCard:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
-  nowCard:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -42)
-  nowCard:SetHeight(58)
+  -- Persistent nav row. View buttons swap the viewport; action buttons fire
+  -- their own tool. 5 per row, two rows.
+  local nav = {
+    { "Home", view = "home" },
+    { "Build score", view = "score" },
+    { "Echo audit", view = "audit" },
+    { "Farm tomes", view = "farm" },
+    { "Gear audit", view = "gear" },
+    { "Raid guide", view = "raid" },
+    { "Tome on/off", act = function() if PP.TomeManager then PP.TomeManager.Command("") end end },
+    { "Rotation HUD", act = function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end },
+    { "Talents", act = function() if PP.Talents then PP.Talents.Guide() end end },
+    { "Ash tree", act = function() if PP.AshAdvisor and PP.AshAdvisor.Command then PP.AshAdvisor.Command() end end },
+  }
+  frame.navBtns = {}
+  for i, item in ipairs(nav) do
+    local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    b:SetWidth(102); b:SetHeight(21)
+    local col = (i - 1) % 5
+    local row = math.floor((i - 1) / 5)
+    b:SetPoint("TOPLEFT", frame, "TOPLEFT", 18 + col * 106, -42 - row * 25)
+    b.ppLabel = item[1]
+    b:SetText(item[1])
+    if item.view then
+      frame.navBtns[item.view] = b
+      b:SetScript("OnClick", function() D.ShowView(item.view) end)
+    else
+      b:SetScript("OnClick", item.act)
+    end
+  end
+
+  -- Breadcrumb bar: where you are + a Back-to-home button.
+  frame.crumb = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  frame.crumb:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -100)
+  frame.back = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  frame.back:SetWidth(70); frame.back:SetHeight(20)
+  frame.back:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -96)
+  frame.back:SetText("< Back")
+  frame.back:SetScript("OnClick", function() D.ShowView("home") end)
+
+  -- Viewport: the swappable region every view lives in.
+  frame.viewport = CreateFrame("Frame", nil, frame)
+  frame.viewport:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -124)
+  frame.viewport:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 14)
+
+  -- Home view lives inside the viewport: focal NEXT card + reference scroll.
+  frame.home = CreateFrame("Frame", nil, frame.viewport)
+  frame.home:SetAllPoints(frame.viewport)
+
+  local nowCard = CreateFrame("Frame", nil, frame.home)
+  nowCard:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 4, -2)
+  nowCard:SetPoint("TOPRIGHT", frame.home, "TOPRIGHT", -4, -2)
+  nowCard:SetHeight(60)
   nowCard:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -164,58 +271,34 @@ function D.Init()
   frame.now:SetPoint("BOTTOMRIGHT", nowCard, "BOTTOMRIGHT", -10, 8)
   frame.now:SetJustifyH("LEFT"); frame.now:SetJustifyV("TOP")
 
-  -- Tool buttons, grouped left-to-right by concern. 4 per row, 108 wide.
-  local tools = {
-    { "Echo audit", function() if PP.EchoAudit then PP.EchoAudit.Toggle() end end },
-    { "Build score", function() if PP.BuildScore then PP.BuildScore.Report() end end },
-    { "Gear audit", function() if PP.GearAudit then PP.GearAudit.Toggle() end end },
-    { "Farm tomes", function() if PP.FarmQueue then PP.FarmQueue.Toggle() end end },
-    { "Tome on/off", function() if PP.TomeManager then PP.TomeManager.Command("") end end },
-    { "Raid guide", function() if PP.RaidGuide then PP.RaidGuide.Toggle() end end },
-    { "Rotation HUD", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end },
-    { "Guide talents", function() if PP.Talents then PP.Talents.Guide() end end },
-    { "Save talents", function() if PP.Talents then PP.Talents.Save() end end },
-    { "Ash: /pp ash", function() if PP.AshAdvisor and PP.AshAdvisor.Command then PP.AshAdvisor.Command() end end },
-  }
-  for i, tb in ipairs(tools) do
-    local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    b:SetWidth(108); b:SetHeight(21)
-    local col = (i - 1) % 4
-    local row = math.floor((i - 1) / 4)
-    b:SetPoint("TOPLEFT", frame, "TOPLEFT", 18 + col * 112, -108 - row * 25)
-    b:SetText(tb[1])
-    b:SetScript("OnClick", tb[2])
-  end
-
-  local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame, "UIPanelScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -190)
-  scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
-
+  local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame.home, "UIPanelScrollFrameTemplate")
+  scroll:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 4, -70)
+  scroll:SetPoint("BOTTOMRIGHT", frame.home, "BOTTOMRIGHT", -26, 2)
   content = CreateFrame("Frame", nil, scroll)
-  content:SetWidth(420); content:SetHeight(10)
+  content:SetWidth(500); content:SetHeight(10)
   scroll:SetScrollChild(content)
-
   fs = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   fs:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
-  fs:SetWidth(416); fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
+  fs:SetWidth(496); fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
   fs:SetSpacing(2)
   fs:SetText("")
 
-  -- Keep the focal NOW line current while the panel is open (cheap, 3s).
+  -- Keep the focal NOW line current while the shell is open (cheap, 3s).
   frame.elapsed = 0
   frame:SetScript("OnUpdate", function(self, e)
     self.elapsed = self.elapsed + e
     if self.elapsed > 3 then
       self.elapsed = 0
-      if self.now then self.now:SetText(D.NextAction()) end
+      if self.now and self.view == "home" then self.now:SetText(D.NextAction()) end
     end
   end)
 
   D.Refresh()
+  D.ShowView("home")
   frame:Hide()
 end
 
 function D.Toggle()
   if not frame then D.Init() end
-  if frame:IsShown() then frame:Hide() else D.Refresh(); frame:Show() end
+  if frame:IsShown() then frame:Hide() else D.Open("home") end
 end

@@ -229,6 +229,7 @@ function BS.Init()
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+  frame.ppClose = close
 
   local refresh = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   refresh:SetWidth(70); refresh:SetHeight(20)
@@ -327,16 +328,14 @@ function BS.Refresh()
   end
 end
 
-function BS.Toggle()
+-- Embeddable: return the frame (built on demand) for the console shell.
+function BS.GetFrame()
   if not frame then BS.Init() end
-  if frame:IsShown() then frame:Hide() else BS.Refresh(); frame:Show() end
+  return frame
 end
 
--- Command / button entry point: always show fresh (no chat output). Close via
--- the panel's X.
+-- Command / button entry point: show the score view in the console shell.
 function BS.Report()
-  if not frame then BS.Init() end
-  BS.Refresh()
-  frame:Show()
-  frame:Raise()
+  if PP.Dashboard and PP.Dashboard.Open then PP.Dashboard.Open("score") end
 end
+BS.Toggle = BS.Report

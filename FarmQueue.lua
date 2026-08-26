@@ -290,6 +290,7 @@ function F.Init()
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+  frame.ppClose = close
 
   frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   frame.status:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -44)
@@ -311,7 +312,12 @@ function F.Init()
   frame:Hide()
 end
 
-function F.Toggle()
+-- Embeddable: return the frame (built on demand) for the console shell.
+function F.GetFrame()
   if not frame then F.Init() end
-  if frame:IsShown() then frame:Hide() else F.Refresh(); frame:Show() end
+  return frame
+end
+
+function F.Toggle()
+  if PP.Dashboard and PP.Dashboard.Open then PP.Dashboard.Open("farm") end
 end

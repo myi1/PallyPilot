@@ -196,6 +196,7 @@ function GA.Init()
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+  frame.ppClose = close
 
   local refresh = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   refresh:SetWidth(80); refresh:SetHeight(20)
@@ -218,9 +219,14 @@ function GA.Init()
   frame:Hide()
 end
 
-function GA.Toggle()
+-- Embeddable: return the frame (built on demand) for the console shell.
+function GA.GetFrame()
   if not frame then GA.Init() end
-  if frame:IsShown() then frame:Hide() else GA.Refresh(); frame:Show() end
+  return frame
+end
+
+function GA.Toggle()
+  if PP.Dashboard and PP.Dashboard.Open then PP.Dashboard.Open("gear") end
 end
 
 -- ---------------------------------------------------------------------------

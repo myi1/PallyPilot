@@ -531,6 +531,7 @@ function A.Init()
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+  frame.ppClose = close
 
   local refresh = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   refresh:SetWidth(80); refresh:SetHeight(20)
@@ -553,9 +554,14 @@ function A.Init()
   frame:Hide()
 end
 
-function A.Toggle()
+-- Embeddable: return the frame (built on demand) for the console shell.
+function A.GetFrame()
   if not frame then A.Init() end
-  if frame:IsShown() then frame:Hide() else A.Refresh(); frame:Show() end
+  return frame
+end
+
+function A.Toggle()
+  if PP.Dashboard and PP.Dashboard.Open then PP.Dashboard.Open("audit") end
 end
 
 -- ---------------------------------------------------------------------------

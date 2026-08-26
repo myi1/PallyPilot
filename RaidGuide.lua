@@ -79,6 +79,7 @@ function RG.Init()
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+  frame.ppClose = close
 
   -- Raid selector: one small button per raid, wrapped in two rows.
   raidButtons = {}
@@ -112,15 +113,22 @@ function RG.Init()
   frame:Hide()
 end
 
-function RG.Toggle()
+-- Embeddable: return the frame (built on demand) for the console shell.
+function RG.GetFrame()
   if not frame then RG.Init() end
-  if frame:IsShown() then frame:Hide(); return end
-  -- Auto-select the raid you're standing in.
+  return frame
+end
+
+-- Called by the shell just before showing: auto-select the raid you're in.
+function RG.OnShow()
   local here = PP.GuideData.RaidForZone(GetRealZoneText())
   if here then selectedKey = here.key end
   if not selectedKey then selectedKey = PP.GuideData.raids[1].key end
   RG.Refresh()
-  frame:Show()
+end
+
+function RG.Toggle()
+  if PP.Dashboard and PP.Dashboard.Open then PP.Dashboard.Open("raid") end
 end
 
 -- /pp boss [name] — chat-print the guide for the named or targeted boss.
