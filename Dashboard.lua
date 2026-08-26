@@ -24,13 +24,13 @@ function D.NextAction()
   local mode = PP.db.buildMode
   local modeWord = (mode == "farm" and "Farm pool") or "Raid pool"
 
-  -- 1. Run start (level-1 window) — the highest-leverage moment.
+  -- 1. Run start — level to 80, banishing junk; the saved build restores at 80.
   if lvl <= 5 then
     return GOLD .. "Run start. " .. R
-      .. "Have a saved loadout? " .. BRIGHT .. "Select a loadout \226\134\146 Activate" .. R
-      .. " — at level 1 that guarantees its rebuild. Otherwise " .. BRIGHT
-      .. modeWord .. R .. " + right-click the X-marked echoes off to design one, "
-      .. "then save it."
+      .. "Level to 80 (" .. BRIGHT .. modeWord .. R
+      .. " + banish junk as it appears). Your saved build restores by "
+      .. BRIGHT .. "activating its Snapshot AT 80" .. R
+      .. " (full swap, Epic quality included) — the old level-1 guarantee is gone."
   end
   -- 2. Prestige ready — spend into permanents, then reset.
   local st = PP.AshAdvisor and PP.AshAdvisor.GetState and PP.AshAdvisor.GetState()
@@ -49,11 +49,12 @@ function D.NextAction()
       .. "Raid guide for the route; target a boss for its card."
       .. (n > 0 and (DIM .. "  " .. n .. " down this lockout." .. R) or "")
   end
-  -- 4. At 80, out in the world — farm or push.
+  -- 4. At 80 — activate a snapshot for full restore, or polish + save.
   if lvl >= 80 then
     return GOLD .. "At 80. " .. R
-      .. "Open Echoes to Reroll junk / check the pool; Farm queue for missing tomes; "
-      .. "Skill Tree for ash."
+      .. "Have a saved build? " .. BRIGHT .. "activate its Snapshot now" .. R
+      .. " for a full swap (Epic restored). Else polish (Reroll junk / orb-fish "
+      .. "on a banished pool) and " .. BRIGHT .. "save at 80" .. R .. "."
   end
   -- 5. Leveling.
   return GOLD .. "Leveling (" .. (mode and string.upper(mode) or "?") .. "). " .. R
