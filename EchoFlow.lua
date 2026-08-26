@@ -754,13 +754,22 @@ local function BuildRail()
   rail.poolRaid:SetText("Raid pool")
   rail.poolRaid:SetScript("OnClick", function() PP.safeCall(EF.ApplyPool, "raid") end)
 
-  -- Level-1 tome enable/disable advisor: lists what to right-click ON/OFF.
+  -- Level-1 tome enable/disable advisor + build score. Both read the catalog
+  -- tiles, so the rail (only up while the Echoes window is open) is their home.
   rail.tomeBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.tomeBtn:SetWidth(182); rail.tomeBtn:SetHeight(22)
+  rail.tomeBtn:SetWidth(88); rail.tomeBtn:SetHeight(22)
   rail.tomeBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 64)
-  rail.tomeBtn:SetText("Tome on/off plan")
+  rail.tomeBtn:SetText("Tome on/off")
   rail.tomeBtn:SetScript("OnClick", function()
     if PP.TomeManager then PP.safeCall(PP.TomeManager.Command, "") end
+  end)
+
+  rail.scoreBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.scoreBtn:SetWidth(88); rail.scoreBtn:SetHeight(22)
+  rail.scoreBtn:SetPoint("LEFT", rail.tomeBtn, "RIGHT", 6, 0)
+  rail.scoreBtn:SetText("Build score")
+  rail.scoreBtn:SetScript("OnClick", function()
+    if PP.BuildScore then PP.safeCall(PP.BuildScore.Report) end
   end)
 
   status = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")

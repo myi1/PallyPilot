@@ -167,6 +167,7 @@ function D.Init()
   -- Tool buttons, grouped left-to-right by concern. 4 per row, 108 wide.
   local tools = {
     { "Echo audit", function() if PP.EchoAudit then PP.EchoAudit.Toggle() end end },
+    { "Build score", function() if PP.BuildScore then PP.BuildScore.Report() end end },
     { "Gear audit", function() if PP.GearAudit then PP.GearAudit.Toggle() end end },
     { "Farm tomes", function() if PP.FarmQueue then PP.FarmQueue.Toggle() end end },
     { "Tome on/off", function() if PP.TomeManager then PP.TomeManager.Command("") end end },

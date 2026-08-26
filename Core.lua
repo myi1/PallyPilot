@@ -3,6 +3,7 @@ PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
   GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
   CombatMeter = {}, AshAdvisor = {}, Waypoints = {}, TomeManager = {},
+  BuildScore = {},
 }
 local PP = PallyPilot
 
@@ -448,6 +449,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     -- Reads the real learned-tome collection off the catalog tiles and can
     -- apply the enable/disable toggles for you (attended, level 1 only).
     PP.safeCall(PP.TomeManager.Command, arg)
+  elseif cmd == "score" or cmd == "optimize" then
+    if PP.BuildScore and PP.BuildScore.Report then PP.safeCall(PP.BuildScore.Report) end
   elseif cmd == "startrun" or cmd == "disable" then
     -- Old command names -> the new tile-based plan. "farm" -> tight pool.
     local a = (arg == "farm") and "tight" or ""

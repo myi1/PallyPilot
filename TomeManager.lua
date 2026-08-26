@@ -56,6 +56,30 @@ local function TomeName(tile)
   return n or ("Echo " .. tostring(id))
 end
 
+-- Public: every catalog tile in the current filter as records (owned AND
+-- unowned), for the build scorer. nil + reason ("closed"/"empty") if the
+-- Echoes window isn't showing tiles.
+function TM.AllTiles()
+  local child = ScrollChild()
+  if not child or not child.GetChildren then return nil, "closed" end
+  local out = {}
+  for _, f in ipairs({ child:GetChildren() }) do
+    if type(f) == "table" and f.spellId then
+      local name = TomeName(f)
+      out[#out + 1] = {
+        spellId = f.spellId, name = name,
+        tier = (PP.EchoAudit and PP.EchoAudit.ClassifyName
+          and PP.EchoAudit.ClassifyName(name)) or "REROLL",
+        known = (f.tomeKnown == true),
+        disabled = (f.tomeDisabled == true),
+        locked = (f.isLocked == true),
+      }
+    end
+  end
+  if #out == 0 then return nil, "empty" end
+  return out
+end
+
 -- ---------------------------------------------------------------------------
 -- Plan: which owned tomes to disable (junk currently ON) and which to
 -- re-enable (keepers currently OFF), for the given mode.
