@@ -169,6 +169,7 @@ function D.Init()
     { "Echo audit", function() if PP.EchoAudit then PP.EchoAudit.Toggle() end end },
     { "Gear audit", function() if PP.GearAudit then PP.GearAudit.Toggle() end end },
     { "Farm tomes", function() if PP.FarmQueue then PP.FarmQueue.Toggle() end end },
+    { "Tome on/off", function() if PP.TomeManager then PP.TomeManager.Command("") end end },
     { "Raid guide", function() if PP.RaidGuide then PP.RaidGuide.Toggle() end end },
     { "Rotation HUD", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end },
     { "Guide talents", function() if PP.Talents then PP.Talents.Guide() end end },
@@ -186,7 +187,7 @@ function D.Init()
   end
 
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame, "UIPanelScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -164)
+  scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -190)
   scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
   content = CreateFrame("Frame", nil, scroll)

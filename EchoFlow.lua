@@ -714,7 +714,7 @@ local function BuildRail()
   -- Orb spend per reroll: [-] n [+]
   local minus = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
   minus:SetWidth(22); minus:SetHeight(20)
-  minus:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 68)
+  minus:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 90)
   minus:SetText("-")
   local orbLabel = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   orbLabel:SetPoint("LEFT", minus, "RIGHT", 6, 0)
@@ -754,8 +754,17 @@ local function BuildRail()
   rail.poolRaid:SetText("Raid pool")
   rail.poolRaid:SetScript("OnClick", function() PP.safeCall(EF.ApplyPool, "raid") end)
 
+  -- Level-1 tome enable/disable advisor: lists what to right-click ON/OFF.
+  rail.tomeBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.tomeBtn:SetWidth(182); rail.tomeBtn:SetHeight(22)
+  rail.tomeBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 64)
+  rail.tomeBtn:SetText("Tome on/off plan")
+  rail.tomeBtn:SetScript("OnClick", function()
+    if PP.TomeManager then PP.safeCall(PP.TomeManager.Command, "") end
+  end)
+
   status = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  status:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 94)
+  status:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 116)
   status:SetWidth(182)
   status:SetJustifyH("LEFT")
 
