@@ -125,6 +125,12 @@ local BUNDLES = {
     echoes = { "Cinders of the Sanctum", "Cyclone of Cold Bones",
                "Permafrost Aura", "Frostfire Paradox", "Scorched Path",
                "Conjured Flame", "Flame Beacon", "Brittle Forging" } },
+  -- Measured top-damage package (150-fight report): the plague/goo web.
+  -- Malleable Goo amplifies Mutated Blight; they feed each other.
+  { id = "ppb-plague", tier = "S",
+    echoes = { "Malleable Goo", "Slime Spray", "Inhaled Blight",
+               "Hungering Curse", "Curse of the Plaguebringer",
+               "Necrotic Plague", "Mutagenic Fumes" } },
 }
 local function AssembleBundles()
   local out = {}

@@ -121,6 +121,11 @@ B.catalog = {
   ["Scent of Blood"] = "A",     -- +15% attack/cast speed in execute range
   ["Static Overflow"] = "A", ["Sudden Insight"] = "A",
   ["Sundered Formation"] = "A", -- +10% phys taken + cleave rider
+  -- MEASURED (150-fight build report 2026-08-26): the plague/goo web is
+  -- keepsy's top damage. Malleable Goo was #1 overall at 14.5% (rated B!),
+  -- Inhaled Blight's Pungent Blight 4.5%.
+  ["Malleable Goo"] = "S",
+  ["Inhaled Blight"] = "A",
   ["Sweeping Blows"] = "A", ["The Harvester's Tithe"] = "A",
   ["Tunnel Vision"] = "A",      -- +8% sustained single-target (bosses)
   -- B: fine filler (verified minor/situational; several trigger only off
@@ -153,7 +158,7 @@ B.catalog = {
   ["Hardened Resolve"] = "B", ["Hardened Skin"] = "B",
   ["Harpoon Barrage"] = "B", ["Holy Hazard"] = "B",
   ["Inhaled Blight"] = "B", ["Insulated Soul"] = "B",
-  ["Lightning Charged"] = "B", ["Machine Slayer"] = "B", ["Malleable Goo"] = "B",
+  ["Lightning Charged"] = "B", ["Machine Slayer"] = "B",
   ["Mana Infusion"] = "B",      -- verified: mana returns also heal above 80% mana
   ["Mutagenic Fumes"] = "B", ["Opening Split"] = "B",
   ["Permafrost Aura"] = "A",    -- measured: steady 3-4% + feeds the frost web

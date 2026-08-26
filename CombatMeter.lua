@@ -49,6 +49,14 @@ local PROC_ALIAS = {
   ["chain lightning"] = "Storm Conductor",
   ["pungent blight"] = "Inhaled Blight",
   ["void spike"] = "Idol of Yogg-Saron",
+  -- Edict of the Iron Council cycles these three:
+  ["rune of death"] = "Edict of the Iron Council",
+  ["overload"] = "Edict of the Iron Council",
+  ["fusion punch"] = "Edict of the Iron Council",
+  -- Edict of the Four cycles these:
+  ["meteor"] = "Edict of the Four",
+  ["void zone"] = "Edict of the Four",
+  ["unholy shadow"] = "Edict of the Four",
 }
 
 local fight = nil          -- { start, total, echo, spells = {name->amt} }
