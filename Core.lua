@@ -2,7 +2,7 @@
 PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
   GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
-  CombatMeter = {}, AshAdvisor = {}, Waypoints = {},
+  CombatMeter = {}, AshAdvisor = {}, Waypoints = {}, TomeManager = {},
 }
 local PP = PallyPilot
 
@@ -444,24 +444,14 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.FarmQueue.Toggle then PP.FarmQueue.Toggle() end
   elseif cmd == "audit" or cmd == "echoes" then
     if PP.EchoAudit.Toggle then PP.EchoAudit.Toggle() end
+  elseif cmd == "tomes" or cmd == "tome" then
+    -- Reads the real learned-tome collection off the catalog tiles and can
+    -- apply the enable/disable toggles for you (attended, level 1 only).
+    PP.safeCall(PP.TomeManager.Command, arg)
   elseif cmd == "startrun" or cmd == "disable" then
-    local mode = (arg == "farm") and "farm" or "raid"
-    local keep, disable = PP.EchoAudit.DisablePlan
-      and PP.EchoAudit.DisablePlan(nil, mode)
-    if not keep then
-      PP.print("EbonholdHub not loaded — can't compute the pool plan.")
-    else
-      PP.print("|cffe0b352LEVEL-1 POOL PLAN (" .. string.upper(mode)
-        .. ")|r — keep " .. #keep .. " enabled, RIGHT-CLICK these "
-        .. #disable .. " OFF in the Echoes catalog (level 1 only):"
-        .. (mode == "raid" and " (/pp startrun farm for the tight farm pool)" or ""))
-      for i, nm in ipairs(disable) do
-        DEFAULT_CHAT_FRAME:AddMessage("  |cffd9694a" .. i .. ".|r " .. nm)
-      end
-      PP.print("Pool size target: " .. #keep .. " (change with /pp pool <n>). "
-        .. "Tighter pool = better draws; every enabled echo can still be a "
-        .. "+1% Adaptive unique when drafted.")
-    end
+    -- Old command names -> the new tile-based plan. "farm" -> tight pool.
+    local a = (arg == "farm") and "tight" or ""
+    PP.safeCall(PP.TomeManager.Command, a)
   elseif cmd == "pool" then
     local n = tonumber(arg)
     if n and n >= 60 and n <= 200 then

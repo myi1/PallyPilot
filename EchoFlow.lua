@@ -1,5 +1,5 @@
 -- PallyPilot EchoFlow: advice rendered where echo decisions happen.
---  * Verdict dots on the Echo Journal's tiles
+--  * Verdict LETTER badges on the Echo Journal's tiles (colorblind-safe)
 --  * Verdict lines appended to echo tooltips
 --  * A rail bolted onto the journal: Lock Now six + one-click reroll queue
 --  * Reroll engine: drives orb -> tile -> slider -> Forget; you only make
@@ -14,7 +14,8 @@ local EMBER = "|cffd9694a"
 local VERD = "|cff8aa96a"
 local R = "|r"
 
--- Verdict -> dot color {r,g,b}. One language everywhere.
+-- Verdict -> dot color {r,g,b}. Used only for tooltip text now; the tile
+-- badges use LETTERS (below) because the user is colorblind.
 local DOT = {
   CORE = { 1.00, 0.72, 0.20 },
   S    = { 0.96, 0.85, 0.53 },
@@ -23,6 +24,12 @@ local DOT = {
   C    = { 0.45, 0.50, 0.55 },
   DISABLE = { 0.85, 0.25, 0.15 },
   REROLL  = { 0.85, 0.41, 0.29 },
+}
+-- Colorblind-safe tile badge: a LETTER, not a color. CORE shows "S+" so it
+-- never collides with the C tier. Junk (disable/reroll) shows "X".
+local LETTER = {
+  CORE = "S+", S = "S", A = "A", B = "B", C = "C",
+  DISABLE = "X", REROLL = "X",
 }
 local TIP_LABEL = {
   CORE = "CORE — lock, never lose",
@@ -136,11 +143,21 @@ local function RefreshBadges()
     plan = nil
   end
   EachTile(Journal(), function(btn, display, verdict)
+    -- Dark backing chip so the letter reads on any icon art.
     if not btn.__ppDot then
-      local t = btn:CreateTexture(nil, "OVERLAY")
-      t:SetWidth(9); t:SetHeight(9)
-      t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -1, -1)
+      local t = btn:CreateTexture(nil, "ARTWORK")
+      t:SetWidth(16); t:SetHeight(13)
+      t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0)
+      t:SetTexture(0, 0, 0, 0.72)
       btn.__ppDot = t
+    end
+    -- The verdict LETTER, white with a black outline: legible without color.
+    if not btn.__ppLtr then
+      local ls = btn:CreateFontString(nil, "OVERLAY")
+      ls:SetFont("Fonts\\ARIALN.TTF", 12, "OUTLINE")
+      ls:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -1, -1)
+      ls:SetTextColor(1, 1, 1, 1)
+      btn.__ppLtr = ls
     end
     if not btn.__ppX then
       local x = btn:CreateTexture(nil, "OVERLAY")
@@ -155,11 +172,13 @@ local function RefreshBadges()
     else
       btn.__ppX:Hide()
     end
-    local c = DOT[verdict]
-    if c then
-      btn.__ppDot:SetTexture(c[1], c[2], c[3], 0.95)
+    local letter = LETTER[verdict]
+    if letter then
+      btn.__ppLtr:SetText(letter)
+      btn.__ppLtr:Show()
       btn.__ppDot:Show()
     else
+      btn.__ppLtr:Hide()
       btn.__ppDot:Hide()
     end
   end)

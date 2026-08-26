@@ -121,6 +121,14 @@ local function Classify(norm)
   return "REROLL"
 end
 
+-- Public raw classifier by display name (no owned-set gate). Returns
+-- "CORE"|"S"|"A"|"B"|"C"|"DISABLE"|"REROLL". Used by TomeManager, which reads
+-- the catalog tiles directly instead of the run's active-echo set.
+function A.ClassifyName(name)
+  if not name then return "REROLL" end
+  return Classify(Norm(name))
+end
+
 -- Full audit: buckets of display names, sorted, plus counts. Quality-suffixed
 -- variants ("adaptive power - epic") merge into one base entry that lists its
 -- owned qualities.

@@ -141,7 +141,7 @@ B.catalog = {
   ["Backstabber's Edge"] = "B", ["Battle Tempo"] = "B",
   ["Battlefield Hazard"] = "B", ["Beast Slayer"] = "B",
   ["Blighted Hazard"] = "B", ["Broodmother's Webbing"] = "B",
-  ["Champion's Rally"] = "B", ["Chaotic Convergence"] = "B",
+  ["Champion's Rally"] = "F", ["Chaotic Convergence"] = "B",  -- pure healer, useless solo Ret
   ["Chill of the Bone Wyrm"] = "B",
   -- MEASURED (arm3 HoR-HC2 benchmark): its Fire Cyclone proc was the #1
   -- damage source (10-14% per fight) — the fire/frost echo web feeds it.
@@ -154,10 +154,12 @@ B.catalog = {
   ["Elemental Slayer"] = "B", ["Ember Spark"] = "B",
   ["Paladin - Ember Spark"] = "B",
   ["Ember Ward"] = "B", ["Emberlord's Gift"] = "B",
-  ["Emerald Vigor"] = "B",      -- ally-targeted; self may not count solo
+  ["Emerald Vigor"] = "F",      -- pure healer, ally-targeted; useless solo Ret
   ["Eonar's Seed"] = "B", ["Essence Tap"] = "B",
-  ["Flame Beacon"] = "B", ["Forged in Combat"] = "B", ["Fortress Soul"] = "B",
-  ["Frost Bite"] = "B", ["Frost Ward"] = "B", ["Frostfire Paradox"] = "B",
+  -- Nero Epic build keeper: Fire proc + AoE Fire Nova on death; feeds the fire web.
+  ["Flame Beacon"] = "A", ["Forged in Combat"] = "B", ["Fortress Soul"] = "B",
+  -- Nero Epic build keeper: Frost+Fire shatter combo; synergizes with the frost web.
+  ["Frost Bite"] = "B", ["Frost Ward"] = "B", ["Frostfire Paradox"] = "A",
   ["Frostguard Carapace"] = "B", ["Giant Slayer"] = "B", ["Grim Resolve"] = "B",
   ["Hardened Resolve"] = "B", ["Hardened Skin"] = "B",
   ["Harpoon Barrage"] = "B", ["Holy Hazard"] = "B",
@@ -166,7 +168,8 @@ B.catalog = {
   ["Mana Infusion"] = "B",      -- verified: mana returns also heal above 80% mana
   ["Mutagenic Fumes"] = "B", ["Opening Split"] = "B",
   ["Permafrost Aura"] = "A",    -- measured: steady 3-4% + feeds the frost web
-  ["Permeating Chill"] = "B", ["Polarity Shift"] = "B",
+  -- Nero Epic build keeper: +10% Frost damage-taken amp + shatter on death.
+  ["Permeating Chill"] = "A", ["Polarity Shift"] = "B",
   ["Prismatic Guard"] = "B", ["Raging Momentum"] = "B",
   ["Ravenous Bellow"] = "B", ["Reactive Retaliation"] = "B",
   ["Reinforced Shielding"] = "B", ["Relentless Energy"] = "B",
