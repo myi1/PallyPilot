@@ -449,6 +449,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if PP.EchoFlow.ForceNext then PP.safeCall(PP.EchoFlow.ForceNext) end
   elseif cmd == "dps" then
     if PP.CombatMeter.Report then PP.safeCall(PP.CombatMeter.Report) end
+  elseif cmd == "buildreport" or cmd == "report" then
+    if PP.CombatMeter.BuildReport then PP.safeCall(PP.CombatMeter.BuildReport) end
   elseif cmd == "killed" then
     if arg and arg ~= "" then
       -- Manual seed for kills the tracker missed (e.g. pre-fix kills).

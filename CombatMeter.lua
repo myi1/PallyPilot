@@ -27,6 +27,30 @@ local BASE_KIT = {
   ["Righteous Vengeance"] = true,
 }
 
+-- Proc spell name (lowercase) -> echo name, for procs the log names
+-- differently from their echo. Self-named procs (Cyclone of Cold Bones,
+-- Static Overflow, Permafrost Aura...) match the catalog directly and need
+-- no entry here. Seeded from tooltips + measured fights; extend as we learn.
+local PROC_ALIAS = {
+  ["fire cyclone"] = "Cinders of the Sanctum",
+  ["locust swarm"] = "Crypt Lord's Swarm",
+  ["coldflame"] = "Cyclone of Cold Bones",
+  ["mutated blight"] = "Slime Spray",
+  ["mutated infection"] = "Slime Spray",
+  ["sticky ooze"] = "Slime Spray",
+  ["decrepit fever"] = "The Unclean's Fever",
+  ["starfall"] = "Constellations",
+  ["falling star"] = "Constellations",
+  ["big bang"] = "Constellations",
+  ["shatter"] = "Brittle Forging",
+  ["deep breath"] = "Broodmother's Fury",
+  ["searing cinders"] = "Broodmother's Fury",
+  ["acid breath"] = "Paladin - Corrosive Breath",
+  ["chain lightning"] = "Storm Conductor",
+  ["pungent blight"] = "Inhaled Blight",
+  ["void spike"] = "Idol of Yogg-Saron",
+}
+
 local fight = nil          -- { start, total, echo, spells = {name->amt} }
 local lastFight = nil
 local bestDps = 0
@@ -219,6 +243,82 @@ local function OnCLEU(timestamp, event, srcGUID, srcName, srcFlags,
       or event == "RANGE_DAMAGE" or event == "DAMAGE_SHIELD" then
     local _, spellName, _, amount = ...
     if spellName then AddDamage(spellName, amount, dstName) end
+  end
+end
+
+-- Build report: aggregate every logged fight's per-spell damage, attribute
+-- each source to an echo + its rating, and flag rating/measurement
+-- disagreements so the build's direction is validated by data, not theory.
+function CM.BuildReport()
+  local log = PP.db.fights or {}
+  if #log == 0 then
+    PP.print("No fights logged yet — the report needs combat data.")
+    return
+  end
+  local agg, grand = {}, 0
+  local fights = 0
+  for _, f in ipairs(log) do
+    if f.spells then
+      fights = fights + 1
+      for _, s in ipairs(f.spells) do
+        agg[s.n] = (agg[s.n] or 0) + (s.d or 0)
+        grand = grand + (s.d or 0)
+      end
+    end
+  end
+  if grand == 0 then PP.print("Logged fights have no spell data.") return end
+
+  local function Fmt2(n)
+    if n >= 1000000 then return string.format("%.1fm", n / 1000000) end
+    if n >= 1000 then return string.format("%.0fk", n / 1000) end
+    return tostring(math.floor(n))
+  end
+  -- Attribute a measured spell name to {echo, tier}.
+  local function Attribute(name)
+    if BASE_KIT[name] then return name, "KIT" end
+    local low = string.lower(name)
+    local echo = PROC_ALIAS[low] or name
+    local tier = PP.EchoAudit and PP.EchoAudit.VerdictFor
+      and select(1, PP.EchoAudit.VerdictFor(echo))
+    return echo, tier
+  end
+
+  local rows = {}
+  for name, dmg in pairs(agg) do rows[#rows + 1] = { name = name, d = dmg } end
+  table.sort(rows, function(a, b) return a.d > b.d end)
+
+  PP.print(GOLD .. "Build report" .. R .. DIM .. " — " .. fights
+    .. " fights, " .. Fmt2(grand) .. " total damage" .. R)
+  local TIERC = { CORE = GOLD, S = BRIGHT, A = "|cff9db3bd", B = DIM, C = DIM,
+                  KIT = "|cff8899aa", REROLL = EMBER, DISABLE = EMBER }
+  local promote = {}
+  for i = 1, math.min(14, #rows) do
+    local r = rows[i]
+    local echo, tier = Attribute(r.name)
+    local pct = r.d / grand * 100
+    local tc = TIERC[tier or ""] or EMBER
+    local label = (tier == "KIT") and (DIM .. "[kit]" .. R)
+      or (tc .. "[" .. (tier or "unmapped") .. "]" .. R)
+    local via = (echo ~= r.name) and (DIM .. " <- " .. echo .. R) or ""
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("  %2d. %s %s%.1f%%%s  %s%s",
+      i, BRIGHT .. r.name .. R, DIM, pct, R, label, via))
+    -- Promote candidate: real damage from a low/unrated echo (not kit).
+    if tier ~= "KIT" and pct >= 3
+       and (tier == "B" or tier == "C" or tier == nil
+            or tier == "REROLL") then
+      promote[#promote + 1] = echo .. " (" .. string.format("%.0f%%", pct)
+        .. ", now " .. (tier or "unrated") .. ")"
+    end
+  end
+  if #promote > 0 then
+    PP.print(EMBER .. "Rating check — earning their damage but rated low:" .. R)
+    for _, p in ipairs(promote) do
+      DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. p .. R
+        .. DIM .. " -> consider promoting" .. R)
+    end
+    PP.print(DIM .. "Tell Claude these and the ratings get corrected from your data." .. R)
+  else
+    PP.print(VERD .. "Top damage sources all rated A+ — build direction confirmed." .. R)
   end
 end
 
