@@ -253,6 +253,41 @@ function A.RerollList()
   return out
 end
 
+-- Quality-fish targets: run echoes (from grantedPerks, keyed by name; each
+-- value is an array of stacks with individual .quality 0-4) that have a
+-- SUB-EPIC stack and are worth orbs (CORE/S/A keepers). Ordered CORE>S>A,
+-- lowest quality first (biggest upgrade). Epic=3. Returns {name, q, tier}.
+function A.RunQualityTargets()
+  local gp = ProjectEbonhold and ProjectEbonhold.Perks
+    and ProjectEbonhold.Perks.grantedPerks
+  if not gp then return nil end
+  local minQ = {}
+  for key, value in pairs(gp) do
+    if type(key) == "string" then
+      local stacks = (type(value) == "table" and value[1] ~= nil) and value or { value }
+      for _, e in ipairs(stacks) do
+        if type(e) == "table" and e.quality then
+          if minQ[key] == nil or e.quality < minQ[key] then minQ[key] = e.quality end
+        end
+      end
+    end
+  end
+  local rank = { CORE = 1, S = 2, A = 3 }
+  local out = {}
+  for name, q in pairs(minQ) do
+    if q < 3 then
+      local v = Classify(Norm(name))
+      if rank[v] then out[#out + 1] = { name = name, q = q, tier = v } end
+    end
+  end
+  table.sort(out, function(a, b)
+    if rank[a.tier] ~= rank[b.tier] then return rank[a.tier] < rank[b.tier] end
+    if a.q ~= b.q then return a.q < b.q end
+    return a.name < b.name
+  end)
+  return out
+end
+
 -- Cheap change signature for "did I just learn something?" polling.
 function A.OwnedSignature()
   local owned = OwnedSet()

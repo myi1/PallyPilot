@@ -425,7 +425,7 @@ local function EngineTick(elapsed)
   elseif engine.phase == "DIALOG" then
     local forget, slider = FindForgetDialog()
     if forget then
-      local orbs = (PP.db.options.rerollOrbs or 1)
+      local orbs = engine.orbs or (PP.db.options.rerollOrbs or 1)
       if slider and slider.SetValue then pcall(slider.SetValue, slider, orbs) end
       engine.forgetBtn = forget
       engine.phase = "FORGET"; engine.waited = 0
@@ -527,11 +527,12 @@ local function EngineTick(elapsed)
   end
 end
 
-local function StartQueue(list, label)
+local function StartQueue(list, label, orbs)
   engine.queue = list
   engine.total = #list
   engine.idx = 0
   engine.junkStreak = 0
+  engine.orbs = orbs  -- per-reroll orb count override (quality-fish uses cap)
   engine.phase = "ORB"
   engine.waited = 0
   if rail and rail.rerollBtn then rail.rerollBtn:SetText("STOP") end
@@ -571,25 +572,44 @@ function EF.StartReroll()
   -- whole owned collection.
   local list = RunJunk()
   if #list == 0 then
-    SetStatus("no junk in this run — try Upgrade Bs", VERD)
+    SetStatus("no junk in this run", VERD)
     return
   end
   StartQueue(list, "Reroll queue")
 end
 
--- RETIRED (breadth doctrine, 2026-08-25): rerolling a B below the active
--- cap trades a unique (-1% Adaptive Power + the B's effect) for one repeat
--- rank. Measured disaster: 71 -> 34 uniques. At the cap, the draw engine
--- ranks the cores automatically — no button needed.
-function EF.StartUpgrade()
+-- Context-aware: clear junk if any, else quality-fish sub-Epic keepers.
+function EF.StartRerollSmart()
+  if engine.phase then StopEngine("Queue stopped by you."); return end
+  if #RunJunk() > 0 then EF.StartReroll() else EF.StartQualityFish() end
+end
+
+-- Quality fish (mechanics confirmed 2026-08-26): an orb reroll forgets your
+-- LOWEST-quality stack and opens a RANDOM 3-echo draw from the enabled pool
+-- at boosted quality (~100 orbs = ~100% higher). So it can't target one
+-- echo's quality — it churns sub-Epic keeper stacks into higher-quality
+-- random pool draws. Banish/shrink the pool FIRST so the randoms stay in
+-- your build. Targets CORE/S/A keepers below Epic, best first, orbs at cap.
+function EF.StartQualityFish()
   if engine.phase then
     StopEngine("Queue stopped by you.")
     return
   end
-  PP.print("Upgrade-Bs is retired: below the ~72 active cap every B rerolled "
-    .. "is -1% Adaptive Power plus the B's own effect, traded for one repeat "
-    .. "rank. Your Bs ARE the build. Reroll junk only.")
-  SetStatus("Bs stay — they're breadth (+1% Adaptive each)", VERD)
+  local targets = PP.EchoAudit.RunQualityTargets and PP.EchoAudit.RunQualityTargets()
+  if not targets then
+    SetStatus("Need EbonholdHub + at level 80 to read run quality", EMBER)
+    return
+  end
+  if #targets == 0 then
+    SetStatus("no sub-Epic keepers — build is quality-maxed", VERD)
+    return
+  end
+  local names = {}
+  for _, t in ipairs(targets) do names[#names + 1] = t.name end
+  PP.print("Quality fish: " .. #names .. " sub-Epic keepers, orbs at cap (100) "
+    .. "each. NOTE: rerolls draw RANDOM from your pool — banish unwanted "
+    .. "echoes FIRST so replacements stay in-build. STOP anytime.")
+  StartQueue(names, "Quality fish", 100)
 end
 
 -- ---------------------------------------------------------------------------
@@ -626,14 +646,16 @@ function EF.RefreshRail()
     end
     local junk = #buckets.REROLL
     local inRun = #RunJunk()
-    local upgradable = #RunByVerdict("B")
+    local qt = PP.EchoAudit.RunQualityTargets and PP.EchoAudit.RunQualityTargets()
+    local subEpic = qt and #qt or 0
     t[#t+1] = " "
     t[#t+1] = DIM .. #buckets.CORE .. " core · " .. #buckets.S .. " S · "
       .. #buckets.A .. " A · " .. #buckets.B .. " B" .. R
     t[#t+1] = EMBER .. inRun .. " junk in run" .. R .. DIM .. " · " .. R
-      .. BRIGHT .. upgradable .. " Bs upgradable" .. R
+      .. BRIGHT .. subEpic .. " keepers sub-Epic" .. R
     if rail.rerollBtn and not engine.phase then
-      rail.rerollBtn:SetText("Reroll junk (" .. inRun .. ")")
+      rail.rerollBtn:SetText(inRun > 0 and ("Reroll junk (" .. inRun .. ")")
+        or ("Quality fish (" .. subEpic .. ")"))
     end
   else
     t[#t+1] = EMBER .. "EbonholdHub data not found" .. R
@@ -692,7 +714,7 @@ local function BuildRail()
   rail.rerollBtn:SetWidth(182); rail.rerollBtn:SetHeight(22)
   rail.rerollBtn:SetPoint("BOTTOM", rail, "BOTTOM", 0, 16)
   rail.rerollBtn:SetText("Reroll junk")
-  rail.rerollBtn:SetScript("OnClick", function() PP.safeCall(EF.StartReroll) end)
+  rail.rerollBtn:SetScript("OnClick", function() PP.safeCall(EF.StartRerollSmart) end)
 
   -- Run-start pool buttons: one click computes the plan, syncs the build
   -- mode, and X-marks the disable tiles.
