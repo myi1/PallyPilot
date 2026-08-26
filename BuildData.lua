@@ -98,6 +98,7 @@ B.catalog = {
   ["Stonefist Barrage"] = "A", ["Paladin - Stonefist Barrage"] = "A",   -- every Judgement hurls an AoE boulder
   ["Blade Tempest"] = "A",      -- phys-on-DoT summons 36k/s whirlwind clone
   ["Broodmother's Fury"] = "A", -- cinder stacks into 121k Deep Breath
+  ["Brittle Forging"] = "A",    -- fire-web: Heat -> Brittle (+20% crit) -> Shatter AoE
   ["Call of the Lich King"] = "A",
   ["Crimson Reprisal"] = "A",   -- JoL/FoL heals deal 15% as damage
   ["Crusader's Surge"] = "A",   -- chance for instant Exorcism/FoL/HL
@@ -125,6 +126,9 @@ B.catalog = {
   -- B: fine filler (verified minor/situational; several trigger only off
   -- OTHER echoes' fire/frost/shadow/nature damage — synergy picks)
   ["Archmage's Mark"] = "B", ["Arcane Ward"] = "B",
+  -- The PALADIN variant procs off Consecration/Divine Storm (the cross-class
+  -- ones are dead — they key off other classes' abilities).
+  ["Paladin - Corrosive Breath"] = "B",
   ["Backstabber's Edge"] = "B", ["Battle Tempo"] = "B",
   ["Battlefield Hazard"] = "B", ["Beast Slayer"] = "B",
   ["Blighted Hazard"] = "B", ["Broodmother's Webbing"] = "B",

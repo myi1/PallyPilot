@@ -124,7 +124,7 @@ local BUNDLES = {
   { id = "ppb-cyclones", tier = "S",
     echoes = { "Cinders of the Sanctum", "Cyclone of Cold Bones",
                "Permafrost Aura", "Frostfire Paradox", "Scorched Path",
-               "Conjured Flame", "Flame Beacon" } },
+               "Conjured Flame", "Flame Beacon", "Brittle Forging" } },
 }
 local function AssembleBundles()
   local out = {}
