@@ -181,11 +181,16 @@ function EF.ApplyPool(mode)
     PP.safeCall(PP.HubSync.Push, mode == "farm" and "farm" or nil)
   end
   RefreshBadges()
-  SetStatus(string.upper(mode) .. " pool: right-click the " .. #disable
-    .. " X-marked tiles OFF (level 1 only)", BRIGHT)
-  PP.print(string.upper(mode) .. " pool plan: keep " .. #keep .. ", disable "
-    .. #disable .. " — the X-marked tiles in the journal. Build synced to "
-    .. mode .. " mode.")
+  SetStatus(string.upper(mode) .. " pool: right-click these " .. #disable
+    .. " OFF (level 1)", BRIGHT)
+  PP.print(GOLD .. string.upper(mode) .. " POOL" .. R .. " — keep " .. #keep
+    .. ", RIGHT-CLICK these " .. #disable .. " OFF (they also show a red X on "
+    .. "visible tiles). Build synced to " .. mode .. " mode.")
+  -- Print the full numbered list — reliable even across the scrolling catalog
+  -- where only on-screen tiles can show an X.
+  for i, nm in ipairs(disable) do
+    DEFAULT_CHAT_FRAME:AddMessage("  " .. EMBER .. i .. "." .. R .. " " .. nm)
+  end
 end
 
 local function FindTile(name)
