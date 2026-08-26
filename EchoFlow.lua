@@ -432,8 +432,48 @@ local function StopEngine(msg)
   if rail then PP.safeCall(EF.RefreshRail) end
 end
 
--- Find the visible Forget dialog: a Button labeled "Forget" plus a Slider
--- somewhere on the same parent.
+-- Recursively find the first visible Slider under a frame (the orb-count
+-- slider is not always a direct child of the Forget button's parent — when we
+-- missed it, the orb count was never set and the game used its own default,
+-- which is why the first reroll spent the max and the rest spent 1).
+local function FindSliderIn(root, depth)
+  if not root or depth > 5 then return nil end
+  local ok, kids = pcall(function() return { root:GetChildren() } end)
+  if not ok then return nil end
+  for _, c in ipairs(kids) do
+    local okt, t = pcall(function() return c:GetObjectType() end)
+    if okt and t == "Slider" then
+      local okv, vis = pcall(function() return c:IsVisible() end)
+      if okv and vis then return c end
+    end
+    local nested = FindSliderIn(c, depth + 1)
+    if nested then return nested end
+  end
+  return nil
+end
+
+-- Set an orb slider to `orbs`, clamped to its range, and fire OnValueChanged so
+-- the game registers the value even when SetValue alone doesn't. Returns the
+-- value actually applied (clamped) or nil.
+local function SetSlider(slider, orbs)
+  if not slider or not slider.SetValue then return nil end
+  local applied
+  pcall(function()
+    if slider.GetMinMaxValues then
+      local lo, hi = slider:GetMinMaxValues()
+      if hi and hi > 0 and orbs > hi then orbs = hi end
+      if lo and orbs < lo then orbs = lo end
+    end
+    slider:SetValue(orbs)
+    local h = slider.GetScript and slider:GetScript("OnValueChanged")
+    if h then pcall(h, slider, orbs) end
+    applied = orbs
+  end)
+  return applied
+end
+
+-- Find the visible Forget dialog: a Button labeled "Forget" plus its orb slider
+-- (searched through the whole dialog subtree, then one ancestor up).
 local function FindForgetDialog()
   local f = EnumerateFrames()
   while f do
@@ -448,11 +488,9 @@ local function FindForgetDialog()
     end)
     if ok and hit then
       local parent = hit:GetParent()
-      local slider
-      if parent then
-        for _, c in ipairs({ parent:GetChildren() }) do
-          if c.GetObjectType and c:GetObjectType() == "Slider" then slider = c; break end
-        end
+      local slider = FindSliderIn(parent, 0)
+      if not slider and parent then
+        slider = FindSliderIn(parent:GetParent(), 0)
       end
       return hit, slider
     end
@@ -507,12 +545,24 @@ local function EngineTick(elapsed)
   elseif engine.phase == "DIALOG" then
     local forget, slider = FindForgetDialog()
     if forget then
-      local orbs = engine.orbs or (PP.db.options.rerollOrbs or 1)
-      if slider and slider.SetValue then pcall(slider.SetValue, slider, orbs) end
+      local orbs = PP.db.options.rerollOrbs or 1
+      local applied = SetSlider(slider, orbs)
       engine.forgetBtn = forget
+      engine.forgetSlider = slider
       engine.phase = "FORGET"; engine.waited = 0
+      if slider then
+        SetStatus("spending " .. (applied or orbs) .. " orb(s) on " .. name)
+      else
+        SetStatus("orb slider not found — using the game default", EMBER)
+      end
     end
   elseif engine.phase == "FORGET" then
+    -- Re-assert the orb count right before committing: the dialog can reset the
+    -- slider to 1 between opening and our click, which is what made every
+    -- reroll after the first spend only 1 orb.
+    if engine.forgetSlider then
+      SetSlider(engine.forgetSlider, PP.db.options.rerollOrbs or 1)
+    end
     engine.prevOwned = PP.EchoAudit.OwnedCopy()
     engine.prevStats = StatSnap()
     engine.runSnapshot = RunNameSet()
@@ -521,6 +571,7 @@ local function EngineTick(elapsed)
     engine.lastPickName = nil
     SmartClick(engine.forgetBtn)
     engine.forgetBtn = nil
+    engine.forgetSlider = nil
     engine.phase = "DRAW"; engine.waited = 0
     engine.drawWait = 0
     engine.idx = engine.idx + 1
@@ -609,12 +660,13 @@ local function EngineTick(elapsed)
   end
 end
 
-local function StartQueue(list, label, orbs)
+-- Every reroll spends the orbs/reroll toggle value (PP.db.options.rerollOrbs) —
+-- one source of truth, applied fresh at each dialog. No per-queue override.
+local function StartQueue(list, label)
   engine.queue = list
   engine.total = #list
   engine.idx = 0
   engine.junkStreak = 0
-  engine.orbs = orbs  -- per-reroll orb count override (quality-fish uses cap)
   engine.phase = "ORB"
   engine.waited = 0
   if rail and rail.rerollBtn then rail.rerollBtn:SetText("STOP") end
@@ -688,10 +740,12 @@ function EF.StartQualityFish()
   end
   local names = {}
   for _, t in ipairs(targets) do names[#names + 1] = t.name end
-  PP.print("Quality fish: " .. #names .. " sub-Epic keepers, orbs at cap (100) "
-    .. "each. NOTE: rerolls draw RANDOM from your pool — banish unwanted "
-    .. "echoes FIRST so replacements stay in-build. STOP anytime.")
-  StartQueue(names, "Quality fish", 100)
+  local orbs = PP.db.options.rerollOrbs or 1
+  PP.print("Quality fish: " .. #names .. " sub-Epic keepers at " .. orbs
+    .. " orb(s) each" .. (orbs < 50 and " — crank orbs/reroll up (to ~100) for a "
+      .. "bigger quality jump" or "") .. ". NOTE: rerolls draw RANDOM from your "
+    .. "pool — banish unwanted echoes FIRST so replacements stay in-build. STOP anytime.")
+  StartQueue(names, "Quality fish")
   -- Fishing mode: the pick toast switches to the breadth-vs-quality readout,
   -- baselined to your unique count right now so you can see Adaptive drift.
   engine.fishing = true
@@ -788,13 +842,16 @@ local function BuildRail()
   plus:SetText("+")
   local function orbText()
     orbLabel:SetText(DIM .. "orbs/reroll: " .. R .. GOLD
-      .. (PP.db.options.rerollOrbs or 1) .. R)
+      .. (PP.db.options.rerollOrbs or 1) .. R .. DIM .. "  (shift +/-10)" .. R)
   end
+  -- Shift-click steps by 10 (1..100) so fishing values are reachable fast.
   minus:SetScript("OnClick", function()
-    PP.db.options.rerollOrbs = math.max(1, (PP.db.options.rerollOrbs or 1) - 1); orbText()
+    local step = IsShiftKeyDown() and 10 or 1
+    PP.db.options.rerollOrbs = math.max(1, (PP.db.options.rerollOrbs or 1) - step); orbText()
   end)
   plus:SetScript("OnClick", function()
-    PP.db.options.rerollOrbs = math.min(25, (PP.db.options.rerollOrbs or 1) + 1); orbText()
+    local step = IsShiftKeyDown() and 10 or 1
+    PP.db.options.rerollOrbs = math.min(100, (PP.db.options.rerollOrbs or 1) + step); orbText()
   end)
   orbText()
 
