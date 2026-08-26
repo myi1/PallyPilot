@@ -86,9 +86,9 @@ local function BuildText()
     t[#t+1] = line("  " .. BRIGHT .. g.slot .. R .. " — " .. g.target)
   end
 
-  t[#t+1] = "\n" .. DIM .. "Echo verdicts show as dots on the journal tiles ("
-    .. "Echo audit for the list). Gear + affix verdicts show on your character "
-    .. "sheet (Gear audit)." .. R
+  t[#t+1] = "\n" .. DIM .. "Echo verdicts show as LETTER badges on the journal "
+    .. "tiles (S+/S/A/B/C/X — Echo audit for the list). Gear + affix verdicts "
+    .. "show on your character sheet (Gear audit)." .. R
   return table.concat(t)
 end
 
@@ -97,9 +97,11 @@ function D.Refresh()
     frame.now:SetText(PP.safeCall and D.NextAction and D.NextAction() or "")
     if frame.status then
       local mode = PP.db.buildMode
+      -- Mode chip carries the WORD (FARM/RAID) so it reads without color;
+      -- FARM=ember, RAID=ash deliberately avoids a red/green pair.
       frame.status:SetText(DIM .. "Lv " .. (UnitLevel("player") or "?")
         .. "  ·  build " .. R
-        .. (mode == "farm" and EMBER .. "FARM" or (mode == "raid" and VERD .. "RAID" or DIM .. "unsynced"))
+        .. (mode == "farm" and (EMBER .. "[FARM]") or (mode == "raid" and (ASH .. "[RAID]") or (DIM .. "[unsynced]")))
         .. R)
     end
   end

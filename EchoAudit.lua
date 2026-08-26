@@ -12,6 +12,14 @@ local VERD = "|cff8aa96a"
 local ASH = "|cff9db3bd"
 local R = "|r"
 
+-- Colorblind-safe verdict markers (the user is colorblind — never rely on
+-- color alone). CORE shows "S+" so it never reads as the C tier; junk shows
+-- X (reroll fodder) or ! (actively bad).
+local MARK = {
+  CORE = "S+", S = "S", A = "A", B = "B", C = "C",
+  DISABLE = "!", REROLL = "X",
+}
+
 local frame, fs, content
 
 local function Norm(name)
@@ -472,21 +480,20 @@ local function BuildText()
       .. "As farmed tomes land, better echoes push weaker ones out — new learns are "
       .. "announced in chat with their verdict." .. R .. "\n"
     for _, p in ipairs(lockNow) do
-      local tag = (p.tier == "CORE") and (GOLD .. "core" .. R)
-        or (p.tier == "S" and (BRIGHT .. "S" .. R))
-        or (p.tier == "A" and (ASH .. "A" .. R))
-        or (DIM .. "B" .. R)
-      t[#t+1] = "  " .. GOLD .. "* " .. R .. p.name .. "  [" .. tag .. "]" .. "\n"
+      t[#t+1] = "  " .. GOLD .. "[" .. (MARK[p.tier] or "?") .. "]" .. R
+        .. " " .. p.name .. "\n"
     end
   end
   for _, sec in ipairs(SECTIONS) do
     local list = buckets[sec.key]
     if #list > 0 then
-      t[#t+1] = "\n" .. sec.color .. string.upper(sec.title)
+      local mk = "[" .. (MARK[sec.key] or "?") .. "] "
+      t[#t+1] = "\n" .. sec.color .. mk .. string.upper(sec.title)
         .. "  (" .. #list .. ")" .. R .. "\n"
       if sec.note then t[#t+1] = DIM .. sec.note .. R .. "\n" end
       for _, name in ipairs(list) do
-        t[#t+1] = "  " .. sec.color .. "* " .. R .. name .. "\n"
+        t[#t+1] = "  " .. sec.color .. "[" .. (MARK[sec.key] or "?") .. "]" .. R
+          .. " " .. name .. "\n"
       end
     end
   end
@@ -556,13 +563,13 @@ end
 -- snapshot. New learns are announced in chat with their build verdict, so
 -- farmed tomes report in the moment they're read.
 local VERDICT_LABEL = {
-  CORE = GOLD .. "CORE — lock it" .. R,
-  S = BRIGHT .. "S tier — KEEP (lock candidate)" .. R,
-  A = ASH .. "A tier — keep" .. R,
-  B = DIM .. "B tier — fine" .. R,
-  C = DIM .. "C — breadth filler (+1% Adaptive)" .. R,
-  DISABLE = EMBER .. "DISABLE — bad for the build" .. R,
-  REROLL = EMBER .. "unrated — reroll fodder unless it reads strong" .. R,
+  CORE = GOLD .. "[S+] CORE — lock it" .. R,
+  S = BRIGHT .. "[S] S tier — KEEP (lock candidate)" .. R,
+  A = ASH .. "[A] A tier — keep" .. R,
+  B = DIM .. "[B] B tier — fine" .. R,
+  C = DIM .. "[C] breadth filler (+1% Adaptive)" .. R,
+  DISABLE = EMBER .. "[!] DISABLE — bad for the build" .. R,
+  REROLL = EMBER .. "[X] unrated — reroll fodder unless it reads strong" .. R,
 }
 
 local function Snapshot()
