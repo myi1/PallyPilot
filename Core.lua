@@ -360,6 +360,79 @@ function PP.EchoTextScan()
   PP.print("Scanning " .. #ids .. " echo tooltips (a few seconds)...")
 end
 
+-- Diagnostic: dump the current run's granted echoes with their QUALITY, so
+-- the quality-fish reroll can target sub-Epic stacks. Reads
+-- ProjectEbonhold.Perks.grantedPerks and resolves each spellId against
+-- PerkDatabase (name + quality). Also captures the orb dialog's slider cap
+-- if the Forget window is open. Writes to PallyPilotDB.scans.quality.
+function PP.QualityScan()
+  local out = {}
+  local function add(s) out[#out + 1] = s end
+  local db = ProjectEbonhold and ProjectEbonhold.PerkDatabase
+  local gp = ProjectEbonhold and ProjectEbonhold.Perks
+    and ProjectEbonhold.Perks.grantedPerks
+  if not gp then
+    add("grantedPerks NOT FOUND (ProjectEbonhold.Perks.grantedPerks nil)")
+  else
+    local QNAME = { [0] = "Common", [1] = "Uncommon", [2] = "Rare",
+                    [3] = "Epic", [4] = "Legendary" }
+    local function dumpEntry(prefix, e)
+      if type(e) ~= "table" then
+        add(prefix .. " = " .. tostring(e)); return
+      end
+      local bits = {}
+      for k, v in pairs(e) do
+        local tv = type(v)
+        if tv == "string" or tv == "number" or tv == "boolean" then
+          bits[#bits + 1] = tostring(k) .. "=" .. tostring(v)
+        end
+      end
+      table.sort(bits)
+      -- resolve quality/name from PerkDatabase via spellId if present
+      local sid = e.spellId or e.spell or e.id
+      local resolved = ""
+      if sid and db and db[sid] then
+        local d = db[sid]
+        resolved = "  || DB: " .. tostring(d.comment or "?")
+          .. " q=" .. tostring(d.quality) .. " (" .. (QNAME[d.quality or -1] or "?") .. ")"
+      end
+      add(prefix .. " { " .. table.concat(bits, ", ") .. " }" .. resolved)
+    end
+    local n = 0
+    for key, value in pairs(gp) do
+      n = n + 1
+      if type(value) == "table" and value[1] ~= nil then
+        for i, e in ipairs(value) do dumpEntry("[" .. tostring(key) .. "][" .. i .. "]", e) end
+      else
+        dumpEntry("[" .. tostring(key) .. "]", value)
+      end
+    end
+    add("-- grantedPerks keys: " .. n)
+  end
+  -- Orb dialog slider cap (open the Forget dialog first to capture it).
+  local f = EnumerateFrames()
+  while f do
+    local ok = pcall(function()
+      if f.IsVisible and f:IsVisible() and f.GetObjectType and f:GetObjectType() == "Slider"
+         and f.GetMinMaxValues then
+        local lo, hi = f:GetMinMaxValues()
+        if hi and hi > 1 then
+          add("SLIDER visible: min=" .. tostring(lo) .. " max=" .. tostring(hi)
+            .. " name=" .. tostring(f.GetName and f:GetName() or "?"))
+        end
+      end
+    end)
+    if not ok then end
+    f = EnumerateFrames(f)
+  end
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.quality = out
+  PP.db.scans.qualityTime = date("%Y-%m-%d %H:%M")
+  PP.print("Quality scan: " .. #out .. " lines (run echoes + qualities). "
+    .. "/reload to save, then tell Claude. Open the orb Forget dialog first "
+    .. "to also capture the orb slider cap.")
+end
+
 SLASH_PALLYPILOT1 = "/pp"
 SLASH_PALLYPILOT2 = "/pallypilot"
 SlashCmdList["PALLYPILOT"] = function(line)
@@ -426,6 +499,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     PP.safeCall(PP.AshTreeScan)
   elseif cmd == "perkscan" then
     PP.safeCall(PP.PerkScan)
+  elseif cmd == "qualityscan" then
+    PP.safeCall(PP.QualityScan)
   elseif cmd == "echotext" then
     PP.safeCall(PP.EchoTextScan)
   elseif cmd == "run" then
