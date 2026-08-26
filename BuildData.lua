@@ -333,6 +333,18 @@ function B.FarmTargets()
   return out
 end
 
+-- The measured damage engine: the procs that carried 81-96% of keepsy's damage
+-- across the benchmark logs (fire/frost/plague school). These are the echoes
+-- whose EPIC quality actually moves your DPS — the ones worth spending orbs to
+-- Epic-ify. Everything else is breadth (keep it, don't fish it).
+function B.TopProcs()
+  return {
+    "Cinders of the Sanctum", "Malleable Goo", "Slime Spray",
+    "Cyclone of Cold Bones", "Inhaled Blight", "Necrotic Plague",
+    "Crypt Lord's Swarm", "Permafrost Aura",
+  }
+end
+
 -- Tier lookup for a given echo name (for DrawHelper).
 function B.TierOf(name)
   if not name then return nil end

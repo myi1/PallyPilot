@@ -514,7 +514,13 @@ SlashCmdList["PALLYPILOT"] = function(line)
   elseif cmd == "reroll" then
     if PP.EchoFlow.StartReroll then PP.safeCall(PP.EchoFlow.StartReroll) end
   elseif cmd == "qualityfish" or cmd == "fish" then
-    if PP.EchoFlow.StartQualityFish then PP.safeCall(PP.EchoFlow.StartQualityFish) end
+    if string.lower(arg or "") == "status" then
+      if PP.EchoFlow.FishReadout then PP.safeCall(PP.EchoFlow.FishReadout) end
+    elseif PP.EchoFlow.StartQualityFish then
+      PP.safeCall(PP.EchoFlow.StartQualityFish)
+    end
+  elseif cmd == "fishstatus" then
+    if PP.EchoFlow.FishReadout then PP.safeCall(PP.EchoFlow.FishReadout) end
   elseif cmd == "next" then
     if PP.EchoFlow.ForceNext then PP.safeCall(PP.EchoFlow.ForceNext) end
   elseif cmd == "dps" then

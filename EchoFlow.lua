@@ -44,6 +44,10 @@ local TIP_LABEL = {
 local rail, status
 local SetStatus -- forward declaration: defined with the engine below,
                 -- used by ApplyPool which sits earlier in the file
+local FishSubLine -- forward declaration: defined with the engine below,
+                  -- used by NotifyPick which sits earlier in the file
+local engine      -- forward declaration: the reroll engine state, read by
+                  -- NotifyPick (engine.fishing) which sits earlier in the file
 local Journal = function() return _G["ProjectEbonholdEchoJournal"] end
 local OrbBubble = function() return _G["EbonholdOrbBubble"] end
 
@@ -328,7 +332,11 @@ function EF.NotifyPick(name)
   else
     label, r, g, b = "junk pick!", 0.85, 0.41, 0.29
   end
-  ShowToast("+ " .. display .. " — " .. label, delta, r, g, b)
+  -- During quality fishing, the AP/HP delta is misleading (it ignores Adaptive
+  -- and proc quality) — show the breadth-vs-quality readout instead.
+  local sub = delta
+  if engine.fishing then sub = FishSubLine() end
+  ShowToast("+ " .. display .. " — " .. label, sub, r, g, b)
   rollingStats = StatSnap()
   lastPickAt = GetTime and GetTime() or 0
 end
@@ -343,7 +351,7 @@ end
 -- DRAW advances on ANY of three signals: EBH's pick event (auto-pick), a
 -- new tile appearing in the run panel (manual pick), or a new owned tome.
 -- Run draws don't change tome ownership, so ownership alone is NOT enough.
-local engine = { queue = {}, phase = nil, waited = 0, idx = 0, total = 0 }
+engine = { queue = {}, phase = nil, waited = 0, idx = 0, total = 0 }
 
 function EF.OnPickSignal(name)
   if engine.phase == "DRAW" then
@@ -363,8 +371,58 @@ function SetStatus(msg, color) -- assigns the forward-declared local
   if status then status:SetText((color or DIM) .. msg .. R) end
 end
 
+local QNAME = { [0] = "Common", [1] = "Uncommon", [2] = "Rare", [3] = "Epic", [4] = "Legend" }
+
+-- One-line fishing verdict for the pick toast's sub-line (glanceable).
+-- Assigns the forward-declared local so NotifyPick (earlier) can call it.
+FishSubLine = function()
+  local st = PP.EchoAudit and PP.EchoAudit.FishStatus and PP.EchoAudit.FishStatus()
+  if not st then return "" end
+  local d = engine.fishBaseUniques and (st.uniques - engine.fishBaseUniques) or nil
+  local adapt = "Adaptive " .. st.uniques
+    .. (d and (" (" .. (d >= 0 and "+" or "") .. d .. ")") or "")
+  if st.allEpic then
+    return VERD .. "STOP" .. R .. DIM .. " · " .. R .. adapt .. DIM
+      .. " · top procs all Epic" .. R
+  end
+  return BRIGHT .. "KEEP" .. R .. DIM .. " · " .. R .. adapt .. DIM .. " · "
+    .. R .. EMBER .. st.subEpic .. " top sub-Epic" .. R
+end
+
+-- Full on-demand readout: /pp fishstatus. Lists only what still needs fishing.
+function EF.FishReadout()
+  local st = PP.EchoAudit and PP.EchoAudit.FishStatus and PP.EchoAudit.FishStatus()
+  if not st then
+    PP.print("Fishing readout needs your run loaded — check at level 80 in a run.")
+    return
+  end
+  local d = engine.fishBaseUniques and (st.uniques - engine.fishBaseUniques) or nil
+  local epicCount = #st.procs - st.subEpic - st.missing
+  PP.print(GOLD .. "FISH STATUS" .. R .. " — Adaptive " .. BRIGHT .. st.uniques
+    .. " uniques" .. R .. DIM .. " (+" .. st.uniques .. "% dmg"
+    .. (d and (", " .. (d >= 0 and "+" or "") .. d .. " since fishing start") or "")
+    .. ")" .. R .. "  ·  top procs Epic: " .. epicCount .. "/" .. #st.procs)
+  for _, p in ipairs(st.procs) do
+    if not p.owned then
+      DEFAULT_CHAT_FRAME:AddMessage("   " .. DIM .. "[--] " .. p.name
+        .. " — not in this run (draw/farm it first)" .. R)
+    elseif not p.epic then
+      DEFAULT_CHAT_FRAME:AddMessage("   " .. EMBER .. "[X] " .. p.name .. " — "
+        .. (QNAME[p.q] or ("q" .. tostring(p.q))) .. ", fish it" .. R)
+    end
+  end
+  if st.allEpic then
+    PP.print(VERD .. "STOP FISHING." .. R .. " Every top proc you own is Epic. "
+      .. "More rolls now just trade breadth (Adaptive) for little — save the build.")
+  else
+    PP.print(BRIGHT .. "KEEP FISHING." .. R .. " " .. st.subEpic .. " top proc(s) "
+      .. "above are still sub-Epic — each outweighs the ~1% Adaptive a roll costs.")
+  end
+end
+
 local function StopEngine(msg)
   engine.phase = nil
+  engine.fishing = false
   engine.queue = {}
   if msg then
     PP.print(msg)
@@ -634,6 +692,12 @@ function EF.StartQualityFish()
     .. "each. NOTE: rerolls draw RANDOM from your pool — banish unwanted "
     .. "echoes FIRST so replacements stay in-build. STOP anytime.")
   StartQueue(names, "Quality fish", 100)
+  -- Fishing mode: the pick toast switches to the breadth-vs-quality readout,
+  -- baselined to your unique count right now so you can see Adaptive drift.
+  engine.fishing = true
+  local st = PP.EchoAudit.FishStatus and PP.EchoAudit.FishStatus()
+  engine.fishBaseUniques = st and st.uniques or nil
+  PP.safeCall(EF.FishReadout)
 end
 
 -- ---------------------------------------------------------------------------

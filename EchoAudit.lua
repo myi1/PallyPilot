@@ -304,6 +304,43 @@ function A.RunQualityTargets()
   return out
 end
 
+-- Quality-fishing readout: the unique-echo count (= Adaptive Power %) and,
+-- for each measured top damage proc, whether it's Epic yet. This is the
+-- breadth-vs-quality tradeoff the reroll forces, made visible. Returns nil
+-- with no run loaded (needs grantedPerks — level 80, in a run).
+function A.FishStatus()
+  local gp = ProjectEbonhold and ProjectEbonhold.Perks
+    and ProjectEbonhold.Perks.grantedPerks
+  if not gp then return nil end
+  local byNorm, uniques = {}, 0
+  for key, value in pairs(gp) do
+    if type(key) == "string" then
+      uniques = uniques + 1
+      local stacks = (type(value) == "table" and value[1] ~= nil) and value or { value }
+      local m
+      for _, e in ipairs(stacks) do
+        if type(e) == "table" and e.quality and (not m or e.quality < m) then
+          m = e.quality
+        end
+      end
+      byNorm[Norm(key)] = m or 0
+    end
+  end
+  local procs, subEpic, missing = {}, 0, 0
+  for _, name in ipairs(PP.Build.TopProcs()) do
+    local q = byNorm[Norm(name)]
+    local owned = q ~= nil
+    local epic = owned and q >= 3          -- Epic = quality 3
+    if owned and not epic then subEpic = subEpic + 1 end
+    if not owned then missing = missing + 1 end
+    procs[#procs + 1] = { name = name, owned = owned, q = q, epic = epic }
+  end
+  return {
+    uniques = uniques, procs = procs,
+    subEpic = subEpic, missing = missing, allEpic = (subEpic == 0),
+  }
+end
+
 -- Cheap change signature for "did I just learn something?" polling.
 function A.OwnedSignature()
   local owned = OwnedSet()
