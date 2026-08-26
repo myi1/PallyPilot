@@ -104,7 +104,6 @@ B.catalog = {
   ["Crusader's Surge"] = "A",   -- chance for instant Exorcism/FoL/HL
   ["Crushing Finish"] = "A",    -- execute, scales with Expertise
   ["Crushing Force"] = "A",     -- crit-rating stat echo (stat prio #2)
-  ["Cyclone of Cold Bones"] = "A",
   ["Deathwhisper's Barrier"] = "A",
   ["Defile"] = "A", ["Demonic Awakening"] = "A",
   ["Echoing Tides"] = "A",      -- 30% double-tick on periodics (DoT build)
@@ -124,8 +123,13 @@ B.catalog = {
   -- MEASURED (150-fight build report 2026-08-26): the plague/goo web is
   -- keepsy's top damage. Malleable Goo was #1 overall at 14.5% (rated B!),
   -- Inhaled Blight's Pungent Blight 4.5%.
+  -- Double-validated (our 150-fight measured damage AND Nero's published
+  -- build both rate S at Epic): the plague/frost core.
   ["Malleable Goo"] = "S",
-  ["Inhaled Blight"] = "A",
+  ["Slime Spray"] = "S",
+  ["Cyclone of Cold Bones"] = "S",
+  ["Inhaled Blight"] = "S",
+  ["Curse of the Plaguebringer"] = "A", -- plague-web DoT spreader (Nero: S)
   ["Sweeping Blows"] = "A", ["The Harvester's Tithe"] = "A",
   ["Tunnel Vision"] = "A",      -- +8% sustained single-target (bosses)
   -- B: fine filler (verified minor/situational; several trigger only off
@@ -143,7 +147,7 @@ B.catalog = {
   -- damage source (10-14% per fight) — the fire/frost echo web feeds it.
   ["Cinders of the Sanctum"] = "S",
   ["Conjured Flame"] = "B", ["Crippling Strikes"] = "B",
-  ["Curse of the Plaguebringer"] = "B", ["Dark Nucleus"] = "B",
+  ["Dark Nucleus"] = "B",
   ["Demon Slayer"] = "B", ["Divine Resonance"] = "B", ["Dragon Slayer"] = "B",
   ["Drillmaster's Rebuke"] = "B", ["Earthen Snap"] = "B",
   ["Earthen Spike"] = "B", ["Earthen Stability"] = "B",
@@ -157,7 +161,7 @@ B.catalog = {
   ["Frostguard Carapace"] = "B", ["Giant Slayer"] = "B", ["Grim Resolve"] = "B",
   ["Hardened Resolve"] = "B", ["Hardened Skin"] = "B",
   ["Harpoon Barrage"] = "B", ["Holy Hazard"] = "B",
-  ["Inhaled Blight"] = "B", ["Insulated Soul"] = "B",
+  ["Insulated Soul"] = "B",
   ["Lightning Charged"] = "B", ["Machine Slayer"] = "B",
   ["Mana Infusion"] = "B",      -- verified: mana returns also heal above 80% mana
   ["Mutagenic Fumes"] = "B", ["Opening Split"] = "B",
@@ -174,7 +178,6 @@ B.catalog = {
   ["Shadow Crash"] = "B", ["Shadow Hazard"] = "B", ["Shadow Ward"] = "B",
   ["Sharpened Edge"] = "B",     -- verified: small flat adder, not % damage
   ["Shielded Steps"] = "B", ["Shock Vortex"] = "B",
-  ["Slime Spray"] = "A",        -- measured: Mutated Infection/Blight web = top-3 source
   ["Slimebound Husk"] = "B", ["Spell Harmony"] = "B", ["Spiteful Shard"] = "B",
   ["Spiteful Thorns"] = "B", ["Steady Grip"] = "B",
   ["Stone Shatter"] = "B", ["Stoneskin Threads"] = "B",
