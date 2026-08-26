@@ -19,8 +19,9 @@ local MARK = { CORE = "S+", S = "S", A = "A" }
 local RANK = { CORE = 1, S = 2, A = 3 }
 
 -- Weights sum to 1. Keeper pool is the biggest solo lever; Epic quality is ~10x
--- a Common proc so quality is weighted heavily too.
-local W = { locks = 0.30, keeper = 0.40, quality = 0.20, hygiene = 0.10 }
+-- a Common proc so quality is weighted heavily too. (Quality drops out and the
+-- rest renormalize when below level 80, where quality can't be measured.)
+local W = { locks = 0.15, keeper = 0.45, quality = 0.25, hygiene = 0.15 }
 
 local function Grade(n)
   if n >= 95 then return "A+" elseif n >= 90 then return "A"
@@ -81,14 +82,20 @@ function BS.Compute()
     return a.name < b.name
   end)
 
-  -- Locks: filled permanent slots / unlocked slot count.
+  -- Locks: PERSISTENT readiness — do you own enough keeper tomes to fill your
+  -- permanent slots? (Whether they're locked into THIS run is transient: at
+  -- level 1 a fresh run has none locked yet, which is not a build flaw.)
   local slots = (PP.EchoAudit and PP.EchoAudit.LockSlots
     and PP.EchoAudit.LockSlots()) or 6
-  local locksScore = slots > 0 and (math.min(filled, slots) / slots) or 1
+  local locksScore = slots > 0 and (math.min(owned, slots) / slots) or 1
 
-  -- Quality: keepers at Epic vs sub-Epic (run data).
+  -- Quality: keepers at Epic. A saved build only restores to Epic AT LEVEL 80,
+  -- so below 80 the run stacks show pre-restore quality — meaningless as a
+  -- build measure. Score it only at 80; otherwise it drops out (n/a).
+  local lvl = UnitLevel and UnitLevel("player") or 80
   local qTotal, qSub = QualityStats()
-  local qualityScore = qTotal and ((qTotal - qSub) / qTotal) or nil
+  local qualityScore
+  if lvl >= 80 and qTotal then qualityScore = (qTotal - qSub) / qTotal end
 
   -- Hygiene: junk enabled + keepers wrongly disabled (from the tome plan).
   local junkOn, keepersOff = 0, 0
@@ -112,7 +119,7 @@ function BS.Compute()
 
   return {
     score = score, grade = Grade(score),
-    locksScore = locksScore, filled = filled, slots = slots,
+    locksScore = locksScore, filled = filled, slots = slots, lvl = lvl,
     keeperScore = keeperScore, owned = owned, universe = universe,
     missing = missing,
     qualityScore = qualityScore, qTotal = qTotal, qSub = qSub,
@@ -131,9 +138,6 @@ local function ImprovementText(r)
   end
   if r.qualityScore and r.qSub > 0 then
     items[#items + 1] = { p = round(W.quality * (r.qSub / r.qTotal) * 100), kind = "quality" }
-  end
-  if r.locksScore < 1 then
-    items[#items + 1] = { p = round(W.locks * (1 - r.locksScore) * 100), kind = "locks" }
   end
   if (r.junkOn + r.keepersOff) > 0 then
     items[#items + 1] = { p = round(W.hygiene * (1 - r.hygieneScore) * 100), kind = "hygiene" }
@@ -165,10 +169,6 @@ local function ImprovementText(r)
       t[#t + 1] = GOLD .. "+" .. it.p .. " pts  " .. R .. "Orb-fish " .. r.qSub
         .. " sub-Epic keeper(s) to Epic." .. "\n"
       t[#t + 1] = DIM .. "     -> \047pp fish at level 80." .. R .. "\n\n"
-    elseif it.kind == "locks" then
-      t[#t + 1] = GOLD .. "+" .. it.p .. " pts  " .. R .. "Fill " .. (r.slots - r.filled)
-        .. " lock slot(s)." .. "\n"
-      t[#t + 1] = DIM .. "     -> Echo audit for the best owned to lock." .. R .. "\n\n"
     elseif it.kind == "hygiene" then
       t[#t + 1] = GOLD .. "+" .. it.p .. " pts  " .. R .. "Fix the draw pool: "
         .. r.junkOn .. " junk to disable, " .. r.keepersOff .. " keepers to re-enable." .. "\n"
@@ -310,12 +310,14 @@ function BS.Refresh()
     .. "this view. Farming new tomes raises the ceiling." .. R)
 
   SetBar(frame.rows.locks, r.locksScore, pct(r.locksScore),
-    r.filled .. "/" .. r.slots .. " permanent slots filled")
+    r.owned .. " keepers owned to fill your " .. r.slots .. " permanent slots"
+    .. (r.filled > 0 and ("  (" .. r.filled .. " locked this run)") or ""))
   SetBar(frame.rows.keeper, r.keeperScore, pct(r.keeperScore),
     r.owned .. " of " .. r.universe .. " keeper tomes owned")
   SetBar(frame.rows.quality, r.qualityScore, r.qualityScore and pct(r.qualityScore),
     r.qualityScore and ((r.qTotal - r.qSub) .. " of " .. r.qTotal
-      .. " run keepers at Epic") or "no run loaded — check at level 80")
+      .. " run keepers at Epic")
+      or "restores to Epic at level 80 — measured in a run there")
   SetBar(frame.rows.hygiene, r.hygieneScore, pct(r.hygieneScore),
     r.junkOn .. " junk enabled, " .. r.keepersOff .. " keepers disabled")
 
