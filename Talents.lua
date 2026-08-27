@@ -96,14 +96,22 @@ local function TalentAt(tab, tier, column)
 end
 
 -- Resolve the actual talent to click to progress toward (tab,index): if an
--- arrow prerequisite isn't satisfied, walk to that prerequisite (recursively).
+-- arrow prerequisite isn't fully ranked, walk to that prerequisite (recursively).
+-- Decision is by the prereq's actual rank vs max — NOT GetTalentPrereqs's
+-- isLearnable flag, whose meaning is unreliable and left the guide pointing at
+-- a locked talent (e.g. Fanaticism, which needs a point in Repentance).
 local function ResolveClickable(tab, index, depth)
   depth = depth or 0
   if depth > 8 or not GetTalentPrereqs then return tab, index end
-  local reqTier, reqColumn, isLearnable = GetTalentPrereqs(tab, index)
-  if reqTier and reqColumn and isLearnable == false then
+  local reqTier, reqColumn = GetTalentPrereqs(tab, index)
+  if reqTier and reqColumn then
     local pi = TalentAt(tab, reqTier, reqColumn)
-    if pi then return ResolveClickable(tab, pi, depth + 1) end
+    if pi then
+      local _, _, _, _, prank, pmax = GetTalentInfo(tab, pi)
+      if (prank or 0) < (pmax or 1) then
+        return ResolveClickable(tab, pi, depth + 1)
+      end
+    end
   end
   return tab, index
 end
