@@ -48,13 +48,21 @@ local function TreeRank(tab)
   if tab == 3 then return 1 elseif tab == 2 then return 2 else return 3 end
 end
 
--- All template talents still under target, with live tree info, sorted by
--- priority: tree, then tier, then column (so it's always tier-legal + best-first).
+-- All template talents still under target, with live tree info. Sorted by the
+-- template's IMPORTANCE priority when present (so scarce points buy the best
+-- talents first), else by tree/tier/column. Tier-legality is enforced later in
+-- NextLearnable, so a pure importance sort is safe.
 local function PlannedSteps()
-  local wants = PP.db and PP.db.talentBuild and PP.db.talentBuild.talents
+  local build = PP.db and PP.db.talentBuild
+  local wants = build and build.talents
   if not wants then return {} end
   local wl = {}
   for name, rank in pairs(wants) do wl[string.lower(name)] = rank end
+  -- Importance index from the priority list (lower = do first).
+  local prio = {}
+  if build.priority then
+    for idx, name in ipairs(build.priority) do prio[string.lower(name)] = idx end
+  end
   local steps = {}
   for tab = 1, GetNumTalentTabs() do
     for i = 1, GetNumTalents(tab) do
@@ -64,12 +72,14 @@ local function PlannedSteps()
         local target = math.min(want, maxRank or 0)
         if (rank or 0) < target then
           steps[#steps + 1] = { tab = tab, index = i, name = name,
-            tier = tier or 1, column = column or 1, rank = rank or 0, target = target }
+            tier = tier or 1, column = column or 1, rank = rank or 0, target = target,
+            prio = prio[string.lower(name)] or 9999 }
         end
       end
     end
   end
   table.sort(steps, function(a, b)
+    if a.prio ~= b.prio then return a.prio < b.prio end
     local ra, rb = TreeRank(a.tab), TreeRank(b.tab)
     if ra ~= rb then return ra < rb end
     if a.tier ~= b.tier then return a.tier < b.tier end
@@ -183,7 +193,8 @@ function T.Recommend(key)
   end
   local talents, total = {}, 0
   for name, rank in pairs(tpl.talents or {}) do talents[name] = rank; total = total + rank end
-  PP.db.talentBuild = { talents = talents, total = total, source = tpl.name }
+  PP.db.talentBuild = { talents = talents, total = total, source = tpl.name,
+    priority = tpl.priority }
   PP.print("Loaded " .. GOLD .. tpl.name .. R .. " (" .. total .. " pts of targets). " ..
     GOLD .. "/pp talents preview" .. R .. " to check, then " .. GOLD .. "/pp talents apply" .. R .. ".")
 end

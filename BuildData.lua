@@ -311,21 +311,45 @@ B.gear = {
 -- One-Handed Weapon Specialization (tier 6 = the dual-wield damage talent for
 -- Ambidexterity's two 1H weapons — never the Two-Handed one). Divine Storm
 -- (tier 11 / 50 Ret) is skipped: the echoes already carry the AoE.
+-- Full 96-point spec (base 71 + the 25 max ranks of the ash "Talent Overflow"
+-- node). 52 Ret / 44 Prot: deep Ret through Divine Storm PLUS a full Prot
+-- survival spine (Ardent Defender cheat-death) and One-Handed Weapon Spec for
+-- the dual-wield. The `priority` list is the IMPORTANCE order the applier fills
+-- in (tier-legal): with only ~83-87 points unlocked you still get every key
+-- talent; the last ~9 (climbing to 96) go to the filler at the tail.
 B.talentTemplates = {
   ["prot-ret"] = {
-    name = "Dual-Wield Ret/Prot Survival (71pt)",
+    name = "Dual-Wield Ret/Prot (96pt, ash-extended)",
     talents = {
-      -- Retribution (43): reaches Crusader Strike + Sheath of Light
+      -- Retribution (52) — through Divine Storm
       ["Deflection"] = 5, ["Improved Judgements"] = 2, ["Heart of the Crusader"] = 3,
       ["Improved Blessing of Might"] = 2, ["Conviction"] = 5, ["Seal of Command"] = 1,
       ["Crusade"] = 3, ["Sanctity of Battle"] = 3, ["Sanctified Retribution"] = 1,
       ["Vengeance"] = 3, ["Divine Purpose"] = 2, ["Judgements of the Wise"] = 3,
-      ["The Art of War"] = 2, ["Fanaticism"] = 3, ["Sanctified Wrath"] = 2,
-      ["Crusader Strike"] = 1, ["Sheath of Light"] = 2,
-      -- Protection (28): survival + One-Handed Weapon Specialization (dual-wield)
+      ["The Art of War"] = 2, ["Repentance"] = 1, ["Fanaticism"] = 3,
+      ["Sanctified Wrath"] = 2, ["Crusader Strike"] = 1, ["Sheath of Light"] = 3,
+      ["Swift Retribution"] = 3, ["Righteous Vengeance"] = 3, ["Divine Storm"] = 1,
+      -- Protection (44) — survival spine + dual-wield
       ["Divinity"] = 5, ["Divine Strength"] = 5, ["Anticipation"] = 5,
-      ["Toughness"] = 5, ["Improved Devotion Aura"] = 2, ["Reckoning"] = 3,
-      ["One-Handed Weapon Specialization"] = 3,
+      ["Guardian's Favor"] = 2, ["Stoicism"] = 1, ["Toughness"] = 5,
+      ["Improved Righteous Fury"] = 3, ["Improved Devotion Aura"] = 3,
+      ["Divine Guardian"] = 2, ["Reckoning"] = 5,
+      ["One-Handed Weapon Specialization"] = 3, ["Sacred Duty"] = 2,
+      ["Ardent Defender"] = 3,
+    },
+    -- Importance order (most valuable first); the applier fills these first,
+    -- always tier-legally, so scarce points buy the best talents.
+    priority = {
+      "Divinity", "Divine Strength", "Anticipation", "Toughness",
+      "One-Handed Weapon Specialization", "Conviction", "Ardent Defender",
+      "Heart of the Crusader", "Crusader Strike", "Sheath of Light",
+      "Judgements of the Wise", "Fanaticism", "Vengeance", "Crusade",
+      "Sanctity of Battle", "Divine Purpose", "Righteous Vengeance",
+      "Seal of Command", "The Art of War", "Sanctified Wrath", "Swift Retribution",
+      "Deflection", "Improved Blessing of Might", "Improved Judgements",
+      "Sanctified Retribution", "Reckoning", "Improved Devotion Aura",
+      "Sacred Duty", "Divine Storm", "Guardian's Favor", "Stoicism",
+      "Divine Guardian", "Improved Righteous Fury", "Repentance",
     },
   },
 }
