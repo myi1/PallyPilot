@@ -125,18 +125,24 @@ end
 -- Place -> portable zone. Landmark overrides first (many places are sub-zone
 -- landmarks or instances); otherwise the map's "Zone - sublocation" convention
 -- puts the real zone in the first segment.
+-- Landmarks / instances / sub-zones that name a spot but not a portable zone;
+-- map them to the zone the checkpoint system can actually reach (raid entrances
+-- map to their outdoor zone).
 local PLACE_ZONE = {
   ["hearthglen"] = "Western Plaguelands",
+  ["sorrow hill"] = "Western Plaguelands",
+  ["writhing haunt"] = "Western Plaguelands",
+  ["dalson's tears"] = "Western Plaguelands",
   ["blackrock stronghold"] = "Burning Steppes",
+  ["dreadmaul rock"] = "Burning Steppes",
+  ["grinding quarry"] = "Burning Steppes",
   ["render's rock"] = "Redridge Mountains",
   ["redrige mountain"] = "Redridge Mountains",
   ["redridge mountain"] = "Redridge Mountains",
-  ["dreadmaul rock"] = "Burning Steppes",
   ["scarlet encampments"] = "Tirisfal Glades",
   ["scarlet monastery"] = "Tirisfal Glades",
-  ["alterac mountains"] = "Alterac Mountains",
-  ["booty bay"] = "The Cape of Stranglethorn",
-  ["mosh'ogg"] = "Northern Stranglethorn",
+  ["booty bay"] = "Stranglethorn Vale",
+  ["mosh'ogg"] = "Stranglethorn Vale",
   ["malykriss"] = "Icecrown",
   ["bash'ir landing"] = "Blade's Edge Mountains",
   ["forge camp"] = "Blade's Edge Mountains",
@@ -146,14 +152,39 @@ local PLACE_ZONE = {
   ["tyr''s hand"] = "Eastern Plaguelands",
   ["pestilent scar"] = "Eastern Plaguelands",
   ["stratholme"] = "Eastern Plaguelands",
+  ["southwind village"] = "Silithus",
+  ["skulk rock"] = "The Hinterlands",
+  ["bonechewer ruins"] = "Terokkar Forest",
+  ["drak'sotra"] = "Zul'Drak",
   ["shattered halls"] = "Hellfire Peninsula",
   ["hellfire citadel"] = "Hellfire Peninsula",
+  ["black temple"] = "Shadowmoon Valley",
   ["naxxramas"] = "Dragonblight",
   ["ulduar"] = "The Storm Peaks",
   ["onyxia"] = "Dustwallow Marsh",
   ["trial of the crusader"] = "Icecrown",
   ["icecrown citadel"] = "Icecrown",
+  ["sunwell"] = "Isle of Quel'Danas",
 }
+
+-- Real WoW 3.3.5a zones that appear in the tome map (as a segment we can port
+-- to). Lower-cased for matching. Used to pick the true zone out of a placeName
+-- like "X - Hellfire Peninsula" regardless of which segment it's in.
+local KNOWN_ZONES = {}
+for _, z in ipairs({
+  "Eastern Plaguelands", "Western Plaguelands", "Stranglethorn Vale",
+  "Elwynn Forest", "Westfall", "Redridge Mountains", "Burning Steppes",
+  "Silverpine Forest", "Tirisfal Glades", "The Hinterlands", "Alterac Mountains",
+  "Silithus", "Feralas", "Dustwallow Marsh", "Tanaris",
+  "Hellfire Peninsula", "Zangarmarsh", "Terokkar Forest", "Nagrand",
+  "Blade's Edge Mountains", "Netherstorm", "Shadowmoon Valley", "Isle of Quel'Danas",
+  "Borean Tundra", "Howling Fjord", "Dragonblight", "Grizzly Hills",
+  "Zul'Drak", "Sholazar Basin", "Crystalsong Forest", "Icecrown",
+  "The Storm Peaks", "Wintergrasp", "Dalaran",
+}) do KNOWN_ZONES[string.lower(z)] = z end
+
+-- Resolve a placeName to a portable zone, or nil if none (open-world-anywhere,
+-- unknown, or a custom Ebonhold spot with no zone map).
 local function ZoneForPlace(place)
   if not place then return nil end
   local low = string.lower(place)
@@ -161,15 +192,22 @@ local function ZoneForPlace(place)
      or string.find(low, "unknown", 1, true) then
     return nil
   end
+  -- Landmark override wins (raids, sub-zones).
   for key, zone in pairs(PLACE_ZONE) do
     if string.find(low, key, 1, true) then return zone end
   end
-  local first = string.match(place, "^%s*([^%-]+)")
-  if first then
-    first = first:gsub("%s+$", "")
-    if first ~= "" then return first end
+  -- Split on " - " and take the last segment that is a real zone (the data
+  -- often ends with the zone: "Sublocation - Hellfire Peninsula").
+  local segs = {}
+  for seg in string.gmatch(place, "[^%-]+") do
+    seg = seg:gsub("^%s+", ""):gsub("%s+$", "")
+    if seg ~= "" then segs[#segs + 1] = seg end
   end
-  return place
+  for i = #segs, 1, -1 do
+    local z = KNOWN_ZONES[string.lower(segs[i])]
+    if z then return z end
+  end
+  return nil
 end
 
 local function ClearRows()
@@ -234,18 +272,30 @@ function F.Refresh()
 
     local info
     if item.hasLoc then
-      local mobs = item.mobs and (" \226\128\148 " .. table.concat(item.mobs, ", ")) or ""
-      info = DIM .. (item.place or "?") .. R .. mobs
+      local zone = ZoneForPlace(item.place)
+      -- Line 1: the portable ZONE (bright); then the specific spot if it adds
+      -- detail beyond the zone name.
+      local place = item.place or "?"
+      local head
+      if zone then
+        head = BRIGHT .. zone .. R
+        if string.lower(place) ~= string.lower(zone) then
+          head = head .. DIM .. "  \194\183  " .. place .. R
+        end
+      else
+        head = BRIGHT .. place .. R
+      end
+      local mobs = item.mobs and (DIM .. "kill: " .. table.concat(item.mobs, ", ") .. R) or nil
+      info = head
+      if mobs then info = info .. "\n" .. mobs end
       local note = item.notes
       if note and note ~= "" and not string.find(string.lower(note), "^source:") then
         info = info .. "\n" .. DIM .. note .. R
       end
-      local zone = ZoneForPlace(item.place)
       if zone then
         row.port:SetText("Port"); row.port:Enable()
         row.port:SetScript("OnClick", function()
-          PP.print("Farm " .. item.name .. " at " .. (item.place or "?")
-            .. " — porting to " .. tostring(zone) .. ".")
+          PP.print("Farm " .. item.name .. " \226\134\146 porting to " .. zone .. ".")
           PP.PortToZone(zone)
         end)
       else
