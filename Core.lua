@@ -245,6 +245,37 @@ end
 
 -- Diagnostic: dump the server's echo/perk database to SavedVariables so
 -- every echo in the game can be rated into BuildData tiers.
+-- Dump the CHARACTER talent trees (the class talents, not the Soul Ash tree).
+-- After the 2028-08-27 talent overhaul the baked recommendation is stale; this
+-- captures the new trees so a correct Ret template can be rebuilt.
+function PP.TalentScan()
+  if not GetNumTalentTabs then
+    PP.print("Talent API not available on this client.")
+    return
+  end
+  local lines, n = {}, 0
+  local tabs = GetNumTalentTabs() or 0
+  for tab = 1, tabs do
+    local tabName = (GetTalentTabInfo and select(1, GetTalentTabInfo(tab))) or ("Tab" .. tab)
+    n = n + 1; lines[n] = "== TAB " .. tab .. ": " .. tostring(tabName) .. " =="
+    local num = (GetNumTalents and GetNumTalents(tab)) or 0
+    for i = 1, num do
+      local name, _, tier, col, rank, maxRank = GetTalentInfo(tab, i)
+      if name then
+        n = n + 1
+        lines[n] = string.format("t%d.i%d  tier%s col%s  %s/%s  %s",
+          tab, i, tostring(tier), tostring(col), tostring(rank),
+          tostring(maxRank), tostring(name))
+      end
+    end
+  end
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.talents = lines
+  PP.db.scans.talentsTime = date("%Y-%m-%d %H:%M")
+  PP.print("Talent tree dump: " .. n .. " lines across " .. tabs
+    .. " tabs. /reload to save, then tell Claude — I'll rebuild the Ret template.")
+end
+
 function PP.PerkScan()
   local db = ProjectEbonhold and ProjectEbonhold.PerkDatabase
   if not db then
@@ -492,6 +523,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     PP.safeCall(PP.AshTreeScan)
   elseif cmd == "perkscan" then
     PP.safeCall(PP.PerkScan)
+  elseif cmd == "talentscan" then
+    PP.safeCall(PP.TalentScan)
   elseif cmd == "qualityscan" then
     PP.safeCall(PP.QualityScan)
   elseif cmd == "echotext" then

@@ -225,6 +225,13 @@ B.catalog = {
   ["Steady Casting"] = "C", ["Steady Channeling"] = "C", ["Stitched Fury"] = "C",
   ["Storm of the Spellweaver"] = "C", ["Subtle Presence"] = "C",
   ["Unbroken Focus"] = "C", ["Unstable Missiles"] = "C",
+  -- Reworked in the 2028-08-27 patch (were talent-conflicting):
+  -- Echoing Affliction now echoes 20% of your DoT damage to a 2nd enemy (30%
+  -- chance) — free AoE cleave for the plague/DoT school. Strong for pack farming.
+  ["Echoing Affliction"] = "A",
+  -- Unstable Infusion: crits have 30% chance for an AoE explosion (sp0.44+ap0.22).
+  -- Crit-gated, so only as good as your crit — B until your crit is real.
+  ["Unstable Infusion"] = "B",
 }
 
 -- Cross-class proc variants (Wkpal insight): they never proc for a paladin,
@@ -310,9 +317,13 @@ B.talentTemplates = {
       ["Swift Retribution"] = 3, ["Sheath of Light"] = 3, ["Righteous Vengeance"] = 3,
       ["Divine Storm"] = 1, ["Divine Purpose"] = 2, ["Crusader Strike"] = 1,
       -- Protection survival
-      ["Divinity"] = 5, ["Divine Strength"] = 5, ["Stoicism"] = 3,
+      ["Divinity"] = 5, ["Divine Strength"] = 5, ["Stoicism"] = 1,
       ["Guardian's Favor"] = 2, ["Anticipation"] = 5, ["Improved Righteous Fury"] = 3,
       ["Toughness"] = 5, ["Reckoning"] = 5,
+      -- Dual-wield (Ambidexterity) runs two 1H weapons, so ONE-Handed Weapon
+      -- Specialization boosts both — verified in the 2028-08-27 trees. Never the
+      -- Two-Handed version for this build.
+      ["One-Handed Weapon Specialization"] = 3,
       ["Sacred Duty"] = 2, ["Ardent Defender"] = 3, ["Redoubt"] = 3,
       ["Combat Expertise"] = 3, ["Touched by the Light"] = 3, ["Shield of the Templar"] = 3,
       ["Judgements of the Just"] = 2, ["Spiritual Attunement"] = 2,
@@ -320,6 +331,33 @@ B.talentTemplates = {
   },
 }
 B.defaultTemplate = "prot-ret"
+-- The full reworked (2028-08-27) Paladin trees, scraped from the site's Talent
+-- Calculator: NAME = maxRank, per tree. Reference for building/validating
+-- templates (the trees kept standard WotLK names + positions; effects were
+-- rebalanced). Used by nothing at runtime yet — data for the next tune.
+B.talentTrees = {
+  Retribution = {
+    ["Deflection"]=5, ["Benediction"]=5, ["Improved Judgements"]=2,
+    ["Heart of the Crusader"]=3, ["Improved Blessing of Might"]=2, ["Vindication"]=2,
+    ["Conviction"]=5, ["Seal of Command"]=1, ["Divine Steed"]=1, ["Eye for an Eye"]=2,
+    ["Sanctity of Battle"]=3, ["Crusade"]=3, ["Two-Handed Weapon Specialization"]=3,
+    ["Sanctified Retribution"]=1, ["Vengeance"]=3, ["Divine Purpose"]=2,
+    ["The Art of War"]=2, ["Repentance"]=1, ["Judgements of the Wise"]=3,
+    ["Fanaticism"]=3, ["Sanctified Wrath"]=2, ["Swift Retribution"]=3,
+    ["Crusader Strike"]=1, ["Sheath of Light"]=3, ["Righteous Vengeance"]=3,
+    ["Divine Storm"]=1,
+  },
+  Protection = {
+    ["Divinity"]=5, ["Divine Strength"]=5, ["Stoicism"]=1, ["Guardian's Favor"]=2,
+    ["Anticipation"]=5, ["Divine Sacrifice"]=1, ["Improved Righteous Fury"]=3,
+    ["Toughness"]=5, ["Divine Guardian"]=2, ["Improved Hammer of Justice"]=2,
+    ["Improved Devotion Aura"]=3, ["Blessing of Sanctuary"]=1, ["Reckoning"]=5,
+    ["Sacred Duty"]=2, ["One-Handed Weapon Specialization"]=3, ["Spiritual Attunement"]=2,
+    ["Holy Shield"]=1, ["Ardent Defender"]=3, ["Redoubt"]=3, ["Combat Expertise"]=3,
+    ["Touched by the Light"]=3, ["Avenger's Shield"]=1, ["Guarded by the Light"]=2,
+    ["Shield of the Templar"]=3, ["Judgements of the Just"]=2, ["Hammer of the Righteous"]=1,
+  },
+}
 
 -- Echoes that FarmQueue should treat as build targets worth farming Tomes for
 -- (locked core + S-tier). Returns a de-duplicated array of names.
