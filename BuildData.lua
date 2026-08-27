@@ -38,14 +38,28 @@ B.talents = "≈ 44 Protection / 49 Retribution hybrid for soloing (survivabilit
   .. "under full Ret damage). Pure-damage farmers drop the Prot side once the "
   .. "Soul Ash tree carries survival."
 
--- The six echoes to lock so they persist across runs.
+-- Echoes to lock so they persist across runs. ORDER = lock priority: only the
+-- top N fit your unlocked lock slots (5 as of the 2026-08-28 rebuild), so the
+-- proven engine + scaling enablers + survival come first; Edict/Exposed Heart
+-- lock as more slots open.
+--
+-- Grounded in the 150-fight combat log (2026-08-28): Twilight Equilibrium is
+-- the damage ENGINE (~33% of all damage). It is a school-flip machine — Light
+-- Essence stacks on Holy/Fire/Nature and dumps Darkburst on Shadow/Frost/Arcane
+-- (and mirror). The build must keep BOTH damage schools flowing or half the
+-- engine starves. Constellations was dropped from the locks: measured 0.2%, a
+-- wasted lock slot vs. Edict of the Iron Council (a real S carry).
 B.locked = {
   -- Ambidexterity first: it's an ENABLER, not a damage echo — with dual 1H
   -- gear, the off-hand is dead weight until it's drafted, so it must be
   -- guaranteed from level 1. (If you ever swap to a 2H, drop this.)
   "Ambidexterity",
-  "Sanguine Bulwark", "Twilight Equilibrium", "Constellations",
-  "Pandemic", "Adaptive Power", "Exposed Heart",
+  "Twilight Equilibrium",       -- the engine (~33% measured)
+  "Adaptive Power",             -- +1% dmg per unique active echo; compounds, want it early
+  "Pandemic",                   -- DoT engine: extends/spreads every periodic
+  "Sanguine Bulwark",           -- hardcore survival
+  "Edict of the Iron Council",  -- proven S carry (measured, in your best fights)
+  "Exposed Heart",
 }
 
 -- Draw priority tiers. On a level-up selection (and Orb rerolls), take the
@@ -54,6 +68,7 @@ B.tiers = {
   S = {
     "Twilight Equilibrium", "Constellations", "Pandemic", "Sanguine Bulwark",
     "Adaptive Power", "Exposed Heart", "Edict of the Four", "Edict of the Iron Council",
+    "Blade Tempest",  -- promoted A->S: measured ~8%, a top-3 carry (whirlwind clone)
     "Harbringer of Doom", "Blood Mirror", "Contagion", "Resonant Build",
     "Temporal Flow", "Chronoboost", "Energy Overflow", "Storm Conductor",
     "Flame Vents", "Nether Lord's Command", "Twin Casting", "Second Edge",
