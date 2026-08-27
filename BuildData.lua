@@ -304,29 +304,28 @@ B.gear = {
 -- paladin trees. Ebonhold grants far more than 71 points, so these are
 -- generous "take all the good stuff" lists; the applier fills what your points
 -- allow, lowest tiers first.
+-- Exact 71-point dual-wield survival spec for the reworked (2026-08-27) trees,
+-- built from the live /pp talentscan (tiers/columns verified). 43 Ret / 28 Prot.
+-- Ret goes to tier 9 for Crusader Strike (the CS gate is 40 pts) + Sheath of
+-- Light; Prot funds survival (Divinity/Anticipation/Toughness) and reaches
+-- One-Handed Weapon Specialization (tier 6 = the dual-wield damage talent for
+-- Ambidexterity's two 1H weapons — never the Two-Handed one). Divine Storm
+-- (tier 11 / 50 Ret) is skipped: the echoes already carry the AoE.
 B.talentTemplates = {
   ["prot-ret"] = {
-    name = "Prot/Ret Solo Hybrid",
+    name = "Dual-Wield Ret/Prot Survival (71pt)",
     talents = {
-      -- Retribution core (damage)
-      ["Deflection"] = 5, ["Benediction"] = 5, ["Improved Blessing of Might"] = 2,
-      ["Heart of the Crusader"] = 3, ["Improved Judgements"] = 2, ["Conviction"] = 5,
-      ["Seal of Command"] = 1, ["Crusade"] = 3,
-      ["Sanctified Retribution"] = 1, ["Vengeance"] = 3, ["The Art of War"] = 2,
-      ["Repentance"] = 1, ["Judgements of the Wise"] = 3, ["Fanaticism"] = 3,
-      ["Swift Retribution"] = 3, ["Sheath of Light"] = 3, ["Righteous Vengeance"] = 3,
-      ["Divine Storm"] = 1, ["Divine Purpose"] = 2, ["Crusader Strike"] = 1,
-      -- Protection survival
-      ["Divinity"] = 5, ["Divine Strength"] = 5, ["Stoicism"] = 1,
-      ["Guardian's Favor"] = 2, ["Anticipation"] = 5, ["Improved Righteous Fury"] = 3,
-      ["Toughness"] = 5, ["Reckoning"] = 5,
-      -- Dual-wield (Ambidexterity) runs two 1H weapons, so ONE-Handed Weapon
-      -- Specialization boosts both — verified in the 2028-08-27 trees. Never the
-      -- Two-Handed version for this build.
+      -- Retribution (43): reaches Crusader Strike + Sheath of Light
+      ["Deflection"] = 5, ["Improved Judgements"] = 2, ["Heart of the Crusader"] = 3,
+      ["Improved Blessing of Might"] = 2, ["Conviction"] = 5, ["Seal of Command"] = 1,
+      ["Crusade"] = 3, ["Sanctity of Battle"] = 3, ["Sanctified Retribution"] = 1,
+      ["Vengeance"] = 3, ["Divine Purpose"] = 2, ["Judgements of the Wise"] = 3,
+      ["The Art of War"] = 2, ["Fanaticism"] = 3, ["Sanctified Wrath"] = 2,
+      ["Crusader Strike"] = 1, ["Sheath of Light"] = 2,
+      -- Protection (28): survival + One-Handed Weapon Specialization (dual-wield)
+      ["Divinity"] = 5, ["Divine Strength"] = 5, ["Anticipation"] = 5,
+      ["Toughness"] = 5, ["Improved Devotion Aura"] = 2, ["Reckoning"] = 3,
       ["One-Handed Weapon Specialization"] = 3,
-      ["Sacred Duty"] = 2, ["Ardent Defender"] = 3, ["Redoubt"] = 3,
-      ["Combat Expertise"] = 3, ["Touched by the Light"] = 3, ["Shield of the Templar"] = 3,
-      ["Judgements of the Just"] = 2, ["Spiritual Attunement"] = 2,
     },
   },
 }
