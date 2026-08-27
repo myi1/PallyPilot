@@ -96,15 +96,36 @@ function F.Compute()
       end
     end
   else
-    -- Fallback (Echoes window closed): curated targets + EbonholdHub run set.
-    local runOwned
-    if EbonholdHub and EbonholdHub.EchoOwnership
-       and EbonholdHub.EchoOwnership.CollectOwnedSets then
-      local ok, s = pcall(EbonholdHub.EchoOwnership.CollectOwnedSets)
-      if ok and type(s) == "table" then runOwned = s end
+    -- Fallback (Echoes window closed): curated targets, cross-checked against
+    -- the Hub's learned-echo sets so tomes you've already read aren't listed.
+    -- Union CollectTomeOwnedSets (discovered echoes — the authoritative "have I
+    -- read this tome" signal) with CollectOwnedSets (active/granted); a tome you
+    -- read but haven't slotted (e.g. Arcane Cadence) is in the former only, and
+    -- without it the queue wrongly tells you to farm a tome you own.
+    local EO = EbonholdHub and EbonholdHub.EchoOwnership
+    local runOwned = {}
+    if EO then
+      for _, fn in ipairs({ "CollectTomeOwnedSets", "CollectOwnedSets" }) do
+        if EO[fn] then
+          local ok, s = pcall(EO[fn])
+          if ok and type(s) == "table" then
+            for k in pairs(s) do runOwned[k] = true end
+          end
+        end
+      end
+    end
+    -- Match both our Norm() and the Hub's own NormalizeName(), since the owned
+    -- sets are keyed by the latter (which also strips tome/quality affixes).
+    local function ownedHas(name)
+      if runOwned[Norm(name)] then return true end
+      if EO and EO.NormalizeName then
+        local nn = EO.NormalizeName(name)
+        if nn and runOwned[nn] then return true end
+      end
+      return false
     end
     for _, name in ipairs(PP.Build.FarmTargets()) do
-      if not (runOwned and runOwned[Norm(name)]) then
+      if not ownedHas(name) then
         local loc, continent = LocationFor(name)
         local tier = (PP.EchoAudit and PP.EchoAudit.ClassifyName
           and PP.EchoAudit.ClassifyName(name)) or "S"
