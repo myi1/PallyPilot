@@ -87,8 +87,9 @@ local function BuildText()
   end
 
   t[#t+1] = "\n" .. DIM .. "Echo verdicts show as LETTER badges on the journal "
-    .. "tiles (S+/S/A/B/C/X — Echo audit for the list). Gear + affix verdicts "
-    .. "show on your character sheet (Gear audit)." .. R
+    .. "tiles: S+ Keystone, S Carry, A Staple, B Filler, C Breadth, X Fodder "
+    .. "(Echo audit for the list). Gear + affix verdicts show on your character "
+    .. "sheet (Gear audit)." .. R
   return table.concat(t)
 end
 

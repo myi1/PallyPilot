@@ -32,13 +32,13 @@ local LETTER = {
   DISABLE = "X", REROLL = "X",
 }
 local TIP_LABEL = {
-  CORE = "CORE — lock, never lose",
-  S = "S tier — keep (lock candidate)",
-  A = "A tier — keep",
-  B = "B tier — fine filler",
-  C = "C — breadth filler (+1% Adaptive Power)",
-  DISABLE = "DISABLE — bad for this build",
-  REROLL = "unrated — reroll fodder",
+  CORE = "Keystone — lock, never lose",
+  S = "Carry — does the heavy lifting",
+  A = "Staple — strong, always keep",
+  B = "Filler — keep until something better",
+  C = "Breadth — kept for +1% Adaptive Power",
+  DISABLE = "Banish — bad for this build",
+  REROLL = "Fodder — feed to an Orb",
 }
 
 local rail, status
@@ -322,15 +322,15 @@ function EF.NotifyPick(name)
   local delta = rollingStats and StatDeltaText(rollingStats) or ""
   local label, r, g, b
   if verdict == "CORE" or verdict == "S" then
-    label, r, g, b = (verdict == "CORE" and "CORE!" or "S TIER"), 1, 0.85, 0.35
+    label, r, g, b = (verdict == "CORE" and "KEYSTONE!" or "CARRY"), 1, 0.85, 0.35
   elseif verdict == "A" then
-    label, r, g, b = "A tier", 0.62, 0.70, 0.74
+    label, r, g, b = "STAPLE", 0.62, 0.70, 0.74
   elseif verdict == "B" then
-    label, r, g, b = "B filler", 0.71, 0.65, 0.53
+    label, r, g, b = "FILLER", 0.71, 0.65, 0.53
   elseif verdict == "C" then
-    label, r, g, b = "breadth +1%", 0.45, 0.50, 0.55
+    label, r, g, b = "BREADTH +1%", 0.45, 0.50, 0.55
   else
-    label, r, g, b = "junk pick!", 0.85, 0.41, 0.29
+    label, r, g, b = "FODDER — reroll", 0.85, 0.41, 0.29
   end
   -- During quality fishing, the AP/HP delta is misleading (it ignores Adaptive
   -- and proc quality) — show the breadth-vs-quality readout instead.

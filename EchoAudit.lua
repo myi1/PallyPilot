@@ -479,19 +479,19 @@ function A.OwnedCopy()
 end
 
 local SECTIONS = {
-  { key = "REROLL", color = EMBER, title = "Reroll / feed to an Orb",
+  { key = "REROLL", color = EMBER, title = "Fodder — feed to an Orb",
     note = "Not in the build. These are your reroll currency — no build slot wants them." },
-  { key = "DISABLE", color = EMBER, title = "Disable / banish",
+  { key = "DISABLE", color = EMBER, title = "Banish — turn off",
     note = "Actively bad for this build. Turn them off; banish from draws when offered." },
-  { key = "C", color = DIM, title = "Breadth filler — keep active",
+  { key = "C", color = DIM, title = "Breadth — keep active",
     note = "No build value on their own, but every unique active echo is +1% "
       .. "damage via Adaptive Power. Never reroll these below the active cap." },
-  { key = "B", color = DIM, title = "Fine — keep, low priority",
-    note = "B tier. Fill slots when nothing better is available; replace as S/A arrive." },
-  { key = "A", color = ASH, title = "Keep — A tier", note = nil },
-  { key = "S", color = BRIGHT, title = "Keep — S tier", note = nil },
-  { key = "CORE", color = GOLD, title = "Core — LOCK these",
-    note = "The six that persist across runs. If any here isn't locked in the Echoes UI, lock it now." },
+  { key = "B", color = DIM, title = "Filler — keep, low priority",
+    note = "Fill slots when nothing better is available; replace as Carry/Staple arrive." },
+  { key = "A", color = ASH, title = "Staple — strong keep", note = nil },
+  { key = "S", color = BRIGHT, title = "Carry — heavy lifting", note = nil },
+  { key = "CORE", color = GOLD, title = "Keystone — LOCK these",
+    note = "The build-definers that persist across runs. If any here isn't locked in the Echoes UI, lock it now." },
 }
 
 local function BuildText()
@@ -606,13 +606,13 @@ end
 -- snapshot. New learns are announced in chat with their build verdict, so
 -- farmed tomes report in the moment they're read.
 local VERDICT_LABEL = {
-  CORE = GOLD .. "[S+] CORE — lock it" .. R,
-  S = BRIGHT .. "[S] S tier — KEEP (lock candidate)" .. R,
-  A = ASH .. "[A] A tier — keep" .. R,
-  B = DIM .. "[B] B tier — fine" .. R,
-  C = DIM .. "[C] breadth filler (+1% Adaptive)" .. R,
-  DISABLE = EMBER .. "[!] DISABLE — bad for the build" .. R,
-  REROLL = EMBER .. "[X] unrated — reroll fodder unless it reads strong" .. R,
+  CORE = GOLD .. "[S+] Keystone — lock it" .. R,
+  S = BRIGHT .. "[S] Carry — KEEP (lock candidate)" .. R,
+  A = ASH .. "[A] Staple — keep" .. R,
+  B = DIM .. "[B] Filler — keep, low priority" .. R,
+  C = DIM .. "[C] Breadth — +1% Adaptive Power" .. R,
+  DISABLE = EMBER .. "[!] Banish — bad for the build" .. R,
+  REROLL = EMBER .. "[X] Fodder — feed to an Orb unless it reads strong" .. R,
 }
 
 local function Snapshot()
