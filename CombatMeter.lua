@@ -32,6 +32,12 @@ local BASE_KIT = {
 -- Static Overflow, Permafrost Aura...) match the catalog directly and need
 -- no entry here. Seeded from tooltips + measured fights; extend as we learn.
 local PROC_ALIAS = {
+  -- Twilight Equilibrium (CORE) alternates schools: Light Essence unleashes
+  -- Darkburst (Shadow), Dark Essence unleashes Lightburst (Holy). The log names
+  -- the bursts, not the echo — without these two lines its ~33% of your damage
+  -- shows as "unmapped" and the build report undersells its own top pick.
+  ["darkburst"] = "Twilight Equilibrium",
+  ["lightburst"] = "Twilight Equilibrium",
   ["fire cyclone"] = "Cinders of the Sanctum",
   ["locust swarm"] = "Crypt Lord's Swarm",
   ["coldflame"] = "Cyclone of Cold Bones",
@@ -281,7 +287,9 @@ function CM.BuildReport()
     if n >= 1000 then return string.format("%.0fk", n / 1000) end
     return tostring(math.floor(n))
   end
-  -- Attribute a measured spell name to {echo, tier}.
+  -- Attribute a measured spell name to {echo, tier}. Procs roll up to the echo
+  -- that grants them (PROC_ALIAS), so e.g. Darkburst+Lightburst -> Twilight
+  -- Equilibrium instead of two "unmapped" rows.
   local function Attribute(name)
     if BASE_KIT[name] then return name, "KIT" end
     local low = string.lower(name)
@@ -291,42 +299,88 @@ function CM.BuildReport()
     return echo, tier
   end
 
+  -- Roll up BY ECHO (merge each proc into its parent), tracking fights seen.
+  local echoDmg, echoTier, echoFights = {}, {}, {}
+  for _, f in ipairs(log) do
+    if f.spells then
+      local seen = {}
+      for _, s in ipairs(f.spells) do
+        local echo, tier = Attribute(s.n)
+        echoDmg[echo] = (echoDmg[echo] or 0) + (s.d or 0)
+        echoTier[echo] = tier
+        if not seen[echo] then seen[echo] = true
+          echoFights[echo] = (echoFights[echo] or 0) + 1 end
+      end
+    end
+  end
   local rows = {}
-  for name, dmg in pairs(agg) do rows[#rows + 1] = { name = name, d = dmg } end
+  for echo, dmg in pairs(echoDmg) do
+    rows[#rows + 1] = { echo = echo, d = dmg, tier = echoTier[echo],
+                        seen = echoFights[echo] or 0 }
+  end
   table.sort(rows, function(a, b) return a.d > b.d end)
 
   PP.print(GOLD .. "Build report" .. R .. DIM .. " — " .. fights
-    .. " fights, " .. Fmt2(grand) .. " total damage" .. R)
+    .. " fights, " .. Fmt2(grand) .. " total damage (by echo)" .. R)
   local TIERC = { CORE = GOLD, S = BRIGHT, A = "|cff9db3bd", B = DIM, C = DIM,
                   KIT = "|cff8899aa", REROLL = EMBER, DISABLE = EMBER }
-  local promote = {}
-  for i = 1, math.min(14, #rows) do
+  local kitPct = 0
+  for _, r in ipairs(rows) do if r.tier == "KIT" then kitPct = kitPct + r.d end end
+  kitPct = kitPct / grand * 100
+
+  local promote, demote, unmapped = {}, {}, {}
+  for i = 1, math.min(16, #rows) do
     local r = rows[i]
-    local echo, tier = Attribute(r.name)
     local pct = r.d / grand * 100
+    local tier = r.tier
     local tc = TIERC[tier or ""] or EMBER
-    local label = (tier == "KIT") and (DIM .. "[kit]" .. R)
-      or (tc .. "[" .. (tier or "unmapped") .. "]" .. R)
-    local via = (echo ~= r.name) and (DIM .. " <- " .. echo .. R) or ""
-    DEFAULT_CHAT_FRAME:AddMessage(string.format("  %2d. %s %s%.1f%%%s  %s%s",
-      i, BRIGHT .. r.name .. R, DIM, pct, R, label, via))
-    -- Promote candidate: real damage from a low/unrated echo (not kit).
-    if tier ~= "KIT" and pct >= 3
-       and (tier == "B" or tier == "C" or tier == nil
-            or tier == "REROLL") then
-      promote[#promote + 1] = echo .. " (" .. string.format("%.0f%%", pct)
-        .. ", now " .. (tier or "unrated") .. ")"
+    local mark = (tier == "KIT") and (DIM .. "[kit]" .. R)
+      or (tc .. "[" .. (tier or "?") .. "]" .. R)
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("  %2d. %s%-24s%s %s%4.1f%%%s  %s",
+      i, BRIGHT, r.echo, R, DIM, pct, R, mark))
+  end
+  -- Two-way rating check across ALL echoes, not just the printed top rows.
+  for _, r in ipairs(rows) do
+    local pct = r.d / grand * 100
+    local tier = r.tier
+    if tier ~= "KIT" then
+      if tier == nil and pct >= 1.5 then
+        unmapped[#unmapped + 1] = string.format("%s (%.0f%%)", r.echo, pct)
+      elseif pct >= 3 and (tier == "B" or tier == "C" or tier == "REROLL") then
+        promote[#promote + 1] = string.format("%s (%.0f%%, now %s)", r.echo, pct, tier)
+      elseif pct < 0.5 and r.seen >= 8
+             and (tier == "CORE" or tier == "S" or tier == "A") then
+        demote[#demote + 1] = string.format("%s (%.1f%% over %d fights, rated %s)",
+          r.echo, pct, r.seen, tier)
+      end
+    end
+  end
+
+  PP.print(DIM .. "Kit " .. string.format("%.0f%%", kitPct) .. " / echoes "
+    .. string.format("%.0f%%", 100 - kitPct) .. R)
+  if #unmapped > 0 then
+    PP.print(EMBER .. "Unmapped carries — real damage, no echo mapping:" .. R)
+    for _, p in ipairs(unmapped) do
+      DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. p .. R
+        .. DIM .. " -> tell Claude the echo that grants this proc" .. R)
     end
   end
   if #promote > 0 then
-    PP.print(EMBER .. "Rating check — earning their damage but rated low:" .. R)
+    PP.print(BRIGHT .. "Earning their damage but rated low:" .. R)
     for _, p in ipairs(promote) do
-      DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. p .. R
-        .. DIM .. " -> consider promoting" .. R)
+      DEFAULT_CHAT_FRAME:AddMessage("  " .. VERD .. p .. R .. DIM .. " -> promote?" .. R)
     end
-    PP.print(DIM .. "Tell Claude these and the ratings get corrected from your data." .. R)
+  end
+  if #demote > 0 then
+    PP.print(EMBER .. "Rated high but barely earning (dead weight, or utility?):" .. R)
+    for _, p in ipairs(demote) do
+      DEFAULT_CHAT_FRAME:AddMessage("  " .. p)
+    end
+  end
+  if #unmapped == 0 and #promote == 0 and #demote == 0 then
+    PP.print(VERD .. "Ratings match measured damage — build direction confirmed." .. R)
   else
-    PP.print(VERD .. "Top damage sources all rated A+ — build direction confirmed." .. R)
+    PP.print(DIM .. "Tell Claude these lines and the ratings get corrected from your data." .. R)
   end
 end
 
