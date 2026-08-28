@@ -77,10 +77,11 @@ B.tiers = {
   S = {
     "Twilight Equilibrium", "Constellations", "Pandemic", "Sanguine Bulwark",
     "Adaptive Power", "Exposed Heart", "Edict of the Four", "Edict of the Iron Council",
-    "Blade Tempest",  -- promoted A->S: measured ~8%, a top-3 carry (whirlwind clone)
-    "Harbringer of Doom", "Blood Mirror", "Contagion", "Resonant Build",
+    "Blade Tempest",   -- measured top-3 carry (whirlwind clone)
+    "Brittle Forging", -- promoted A->S: measured ~5% (Heat -> Brittle -> Shatter AoE)
+    "Blood Mirror", "Contagion", "Resonant Build",
     "Temporal Flow", "Chronoboost", "Energy Overflow", "Storm Conductor",
-    "Flame Vents", "Nether Lord's Command", "Twin Casting", "Second Edge",
+    "Flame Vents", "Nether Lord's Command", "Twin Casting",
     "First Strike", "Perfect Timing", "Crypt Lord's Swarm", "Rage of the Colossus",
     "Burning Flames", "Spellweave",
     -- Catalog finds promoted to curated S (priority order matters for locks):
@@ -89,6 +90,9 @@ B.tiers = {
     "Ambidexterity",
   },
   A = {
+    -- Demoted S->A (measured ~0.2% over many fights, 2026-08-29 log). Revert if
+    -- they're execute/burst echoes that only shine in specific fights.
+    "Harbringer of Doom", "Second Edge",
     "Accelerated Decay", "Quickened Tempo", "Quickening Aura", "Arcane Density",
     "Rend the Weak", "Iron Constitution", "Brutal Might", "Scorching Wounds",
     "Battle Rhythm", "Relentless Rhythm", "Tempest Vortex", "Strength Training",
