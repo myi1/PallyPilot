@@ -544,6 +544,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     end
   elseif cmd == "gems" or cmd == "enchants" or cmd == "glyphs" or cmd == "gearopt" then
     if PP.GearOpt.Report then PP.safeCall(PP.GearOpt.Report) end
+  elseif cmd == "upgrades" or cmd == "upgrade" or cmd == "health" or cmd == "gearhealth" then
+    if PP.GearOpt.Upgrades then PP.safeCall(PP.GearOpt.Upgrades) end
   elseif cmd == "gear" then
     if PP.GearAudit.Toggle then PP.GearAudit.Toggle() end
   elseif cmd == "reroll" then
@@ -608,6 +610,6 @@ SlashCmdList["PALLYPILOT"] = function(line)
         .. "/pp bench to compare arms, /pp bench off to clear.")
     end
   else
-    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear (affixes) | /pp gems (enchants/gems/glyphs) | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare")
+    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear (affixes) | /pp gems (enchants/gems/glyphs) | /pp upgrades (gear health) | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare")
   end
 end

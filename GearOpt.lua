@@ -181,3 +181,107 @@ function GO.Report()
   Print(DIM .. "Enchants/gems/glyphs are standard WotLK — verify names at your "
     .. "trainer/AH; the picks lean Strength/AP per your build." .. R)
 end
+
+-- ------------------------------------------------------------ /pp upgrades
+
+-- Ebonhold gear is affix-driven: base items follow standard WotLK tiers (server
+-- is in the Ulduar phase), quest/crafted gear is stat-boosted, and the real
+-- per-slot power lever is the affix. So the "upgrade finder" isn't a BiS list —
+-- it ranks your slots by item level (where a base upgrade helps most) and folds
+-- in the affix + enchant + gem gaps (free power on any slot).
+local UP_SLOTS = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 }
+local BASE_SRC_DEFAULT = "Ulduar (10/25) / heroics + Emblems / boosted quest+craft"
+local BASE_SRC = {
+  [16] = "Ulduar / Trial of the Champion (H) / rep + craft",
+  [17] = "Ulduar / Trial of the Champion (H) / rep + craft",
+  [13] = "Ulduar / Trial of the Champion (H) / heroic dungeons",
+  [14] = "Ulduar / Trial of the Champion (H) / heroic dungeons",
+  [18] = "Libram: Emblem / reputation vendor",
+  [2]  = "Ulduar / Emblem vendor / heroics",
+  [11] = "Ulduar / Emblem vendor / heroics",
+  [12] = "Ulduar / Emblem vendor / heroics",
+  [15] = "Ulduar / Emblem vendor / heroics",
+}
+
+function GO.Upgrades()
+  Print(GOLD .. "Gear health" .. R .. DIM
+    .. " — where your upgrades are (Ebonhold: Ulduar tier, affix-driven)" .. R)
+
+  -- Affix verdicts by slot (from GearAudit).
+  local affix = {}
+  if PP.GearAudit and PP.GearAudit.Compute then
+    local ok, res = pcall(PP.GearAudit.Compute)
+    if ok and type(res) == "table" then
+      for _, r in ipairs(res) do affix[r.slot] = r end
+    end
+  end
+
+  -- Per-slot scan: ilvl + enchant/gem gaps.
+  local rows, sum, cnt = {}, 0, 0
+  for _, slot in ipairs(UP_SLOTS) do
+    local link = GetInventoryItemLink("player", slot)
+    if link then
+      local _, _, _, ilvl = GetItemInfo(link)
+      ilvl = ilvl or 0
+      local it = ParseLink(link)
+      local encMiss = false
+      local rec = ENCH[slot]
+      if it and rec and not rec.optional and (it.enchant or 0) == 0 then encMiss = true end
+      local sockets = SocketCount(link)
+      local slotted = 0
+      if it then for _, g in ipairs(it.gems) do if (g or 0) ~= 0 then slotted = slotted + 1 end end end
+      local emptyGems = math.max(0, sockets - slotted)
+      local a = affix[slot]
+      local affixGap = a and (a.status == "missing" or a.status == "swap")
+      rows[#rows + 1] = { slot = slot, ilvl = ilvl, enc = encMiss, gems = emptyGems,
+        affix = affixGap, affixStatus = a and a.status, name = a and a.item }
+      if ilvl > 0 then sum = sum + ilvl; cnt = cnt + 1 end
+    end
+  end
+  if cnt == 0 then Print("No gear detected.") return end
+  local avg = sum / cnt
+  Print(DIM .. "Average item level: " .. R .. BRIGHT .. string.format("%.0f", avg) .. R
+    .. DIM .. " across " .. cnt .. " slots." .. R)
+
+  -- BIGGEST BASE UPGRADES: lowest item level, most below average first.
+  local byIlvl = {}
+  for _, r in ipairs(rows) do byIlvl[#byIlvl + 1] = r end
+  table.sort(byIlvl, function(x, y) return x.ilvl < y.ilvl end)
+  Print(EMBER .. "Biggest base upgrades (lowest item level):" .. R)
+  local shown = 0
+  for _, r in ipairs(byIlvl) do
+    if shown < 5 and r.ilvl > 0 then
+      shown = shown + 1
+      local lag = avg - r.ilvl
+      local lagTxt = (lag >= 13) and (EMBER .. " (-" .. string.format("%.0f", lag) .. " vs avg)" .. R)
+        or (lag >= 6 and (DIM .. " (-" .. string.format("%.0f", lag) .. ")" .. R) or "")
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s%-10s%s ilvl %s%d%s%s",
+        BRIGHT, SLOT_NAMES[r.slot] or ("slot " .. r.slot), R, GOLD, r.ilvl, R, lagTxt))
+      DEFAULT_CHAT_FRAME:AddMessage("      " .. DIM .. (BASE_SRC[r.slot] or BASE_SRC_DEFAULT) .. R)
+    end
+  end
+
+  -- QUICK WINS: gaps that are free power at any item level.
+  local wins = {}
+  for _, r in ipairs(rows) do
+    local parts = {}
+    if r.affix then parts[#parts + 1] = (r.affixStatus == "missing" and "no affix" or "wrong affix") end
+    if r.enc then parts[#parts + 1] = "no enchant" end
+    if r.gems > 0 then parts[#parts + 1] = r.gems .. " empty socket" .. (r.gems > 1 and "s" or "") end
+    if #parts > 0 then wins[#wins + 1] = { slot = r.slot, txt = table.concat(parts, ", ") } end
+  end
+  if #wins > 0 then
+    Print(BRIGHT .. "Quick wins (free power, any slot):" .. R)
+    for _, w in ipairs(wins) do
+      DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. (SLOT_NAMES[w.slot] or ("slot " .. w.slot))
+        .. R .. DIM .. ": " .. w.txt .. R)
+    end
+    Print(DIM .. "Fix affixes in /pp gear, enchants/gems in /pp gems." .. R)
+  else
+    Print(VERD .. "No affix/enchant/gem gaps — every slot is fully kitted." .. R)
+  end
+
+  Print(DIM .. "On Ebonhold the affix usually beats a small base-ilvl bump, and "
+    .. "quest/crafted gear is boosted — a well-affixed quest piece can outrun a "
+    .. "raw raid drop. You keep gear across runs, so invest in the slot, not the run." .. R)
+end
