@@ -593,17 +593,19 @@ SlashCmdList["PALLYPILOT"] = function(line)
       .. string.format("%.3f, %.3f", x or 0, y or 0)
       .. ((not x or (x == 0 and y == 0)) and " (no coords here — waypoint arrows can't work in this map)" or " (coords WORK here — arrows possible!)"))
   elseif cmd == "bench" then
-    if arg == "off" or arg == "" then
+    if arg == "" or arg == "compare" or arg == "report" then
+      if PP.CombatMeter.BenchReport then PP.safeCall(PP.CombatMeter.BenchReport) end
+    elseif arg == "off" then
       PP.db.benchTag = nil
       PP.print("Benchmark tag cleared — fights log untagged.")
     else
       PP.db.benchTag = arg
       PP.db.benchZone = GetRealZoneText()
       PP.print("Benchmark tag set: '" .. arg .. "' for "
-        .. tostring(PP.db.benchZone) .. " — fights tag only in this zone; "
-        .. "/pp bench off clears.")
+        .. tostring(PP.db.benchZone) .. " — fights tag only in this zone. "
+        .. "/pp bench to compare arms, /pp bench off to clear.")
     end
   else
-    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto")
+    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare")
   end
 end

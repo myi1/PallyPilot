@@ -384,6 +384,91 @@ function CM.BuildReport()
   end
 end
 
+-- ------------------------------------------------------------ /pp bench compare
+
+local function Median(t)
+  local n = #t
+  if n == 0 then return 0 end
+  local s = {}
+  for i = 1, n do s[i] = t[i] end
+  table.sort(s)
+  if n % 2 == 1 then return s[(n + 1) / 2] end
+  return (s[n / 2] + s[n / 2 + 1]) / 2
+end
+
+-- Compare benchmark ARMS: group logged fights by their bench tag (set with
+-- /pp bench <name>) and show per-arm median/best dps, echo%, damage taken, level
+-- range and the most-fought target, so an A/B echo/talent swap gets a real
+-- side-by-side read instead of a single blended number.
+function CM.BenchReport()
+  local log = PP.db.fights or {}
+  local arms, order = {}, {}
+  for _, f in ipairs(log) do
+    if (f.dur or 0) >= 8 and (f.total or 0) > 0 then
+      local tag = f.tag or "(untagged)"
+      local a = arms[tag]
+      if not a then
+        a = { tag = tag, dps = {}, echo = {}, taken = {}, lo = 999, hi = 0, targets = {} }
+        arms[tag] = a; order[#order + 1] = a
+      end
+      a.dps[#a.dps + 1] = f.dps or 0
+      a.echo[#a.echo + 1] = f.echoPct or 0
+      a.taken[#a.taken + 1] = f.taken or 0
+      local lv = f.lvl or 0
+      if lv > 0 then
+        if lv < a.lo then a.lo = lv end
+        if lv > a.hi then a.hi = lv end
+      end
+      if f.target then a.targets[f.target] = (a.targets[f.target] or 0) + 1 end
+    end
+  end
+  if #order == 0 then
+    PP.print("No benchmark fights logged yet (fights under ~8s are ignored).")
+    return
+  end
+  for _, a in ipairs(order) do
+    a.n = #a.dps
+    a.medDps = Median(a.dps); a.medEcho = Median(a.echo); a.medTaken = Median(a.taken)
+    a.bestDps = 0
+    for _, v in ipairs(a.dps) do if v > a.bestDps then a.bestDps = v end end
+    local top, topN = "?", 0
+    for name, c in pairs(a.targets) do if c > topN then top, topN = name, c end end
+    a.top = top
+  end
+  table.sort(order, function(x, y) return x.medDps > y.medDps end)
+
+  PP.print(GOLD .. "Bench compare" .. R .. DIM .. " — median dps per arm, best first" .. R)
+  for i, a in ipairs(order) do
+    local lead = (i == 1 and #order > 1) and (VERD .. "> " .. R) or "  "
+    DEFAULT_CHAT_FRAME:AddMessage(string.format(
+      "%s%s%s%s  %sn=%d  med %s  best %s  echo %d%%  taken %s  L%s%s",
+      lead, BRIGHT, a.tag, R, DIM, a.n, R,
+      GOLD .. Fmt(a.medDps) .. R, Fmt(a.bestDps), a.medEcho, Fmt(a.medTaken),
+      (a.lo <= a.hi and (a.lo == a.hi and tostring(a.lo) or (a.lo .. "-" .. a.hi)) or "?"),
+      DIM .. "  vs " .. tostring(a.top) .. R))
+  end
+
+  if #order < 2 then
+    PP.print(DIM .. "Only one arm logged. To A/B: " .. R .. BRIGHT
+      .. "/pp bench armA" .. R .. DIM .. ", play, " .. R .. BRIGHT .. "/pp bench armB"
+      .. R .. DIM .. ", play, then /pp bench to compare." .. R)
+    PP.print(DIM .. "Compare arms on the SAME target + level for a fair read." .. R)
+  else
+    local a, b = order[1], order[2]
+    local gap = (b.medDps > 0) and ((a.medDps - b.medDps) / b.medDps * 100) or 0
+    PP.print(string.format("%s%s%s leads %s%s%s by %s%.0f%%%s median dps.",
+      BRIGHT, a.tag, R, BRIGHT, b.tag, R, GOLD, gap, R))
+    if a.top ~= b.top or math.abs(a.lo - b.lo) >= 4 then
+      PP.print(EMBER .. "Careful:" .. R .. DIM .. " these arms weren't fought on the "
+        .. "same target/level — the gap may be conditions, not the build." .. R)
+    end
+    if PP.db.benchTag then
+      PP.print(DIM .. "Now tagging: " .. R .. BRIGHT .. PP.db.benchTag .. R
+        .. DIM .. "  (/pp bench <name> to switch, /pp bench off to stop)." .. R)
+    end
+  end
+end
+
 function CM.Init()
   -- Restore the session-best from the persisted log.
   for _, f in ipairs((PP.db and PP.db.fights) or {}) do
