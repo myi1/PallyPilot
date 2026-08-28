@@ -8,16 +8,25 @@ PP.Build = B
 B.title = "Solo Retribution — Hardcore climb (AotC 1+2 done, HC2 unlocked)"
 B.spec = "Retribution"
 
--- Stat priority (Nero's endgame build): Strength is the keystone (AP -> SP),
--- then Crit + Haste. One non-Strength exception: a ToC25H Crit/Haste gun.
-B.statPriority = { "Strength", "Critical Strike", "Haste" }
-B.statNote = "Strength is king: it gives Attack Power, and AP converts to Spell "
-  .. "Power, feeding your whole hybrid kit. Reject gear with no Strength — the "
-  .. "only exception is a Crit/Haste (Agility) gun from ToC 25H in the ranged slot."
+-- Stat priority (Ebonhold #paladin consensus, Aug 2026 — Absolim/Spooh/Nero):
+-- Crit (to ~100%) -> Haste -> Strength -> Spellpower -> Attack Power.
+B.statPriority = { "Critical Strike", "Haste", "Strength" }
+B.statNote = "Crit -> Haste -> Strength. Push Crit toward ~100% (mostly from "
+  .. "affixes: Keen Strike / Relentless Crits). Haste has NO real cap here — "
+  .. "Accelerated Decay scales your DoT ticks past the GCD floor, so it keeps "
+  .. "paying. Strength is the keystone stat because it feeds BOTH Attack Power "
+  .. "AND Spellpower (Prot's Touched by the Light: 1 Str ~= 1.2 SP), so it "
+  .. "multiplies the whole hybrid kit — but don't pass a big Crit/Haste upgrade "
+  .. "just because its Strength is lower."
+-- Expertise: reach the 14% (56) HARDCAP for HC4/5 (no boss parry-haste) — but
+-- from the ash tree + Combat Expertise (Prot) + food, NOT gear stats.
+B.statExpertise = "Expertise hardcap 14% (56) for HC4/5; get it from ash tree + "
+  .. "Combat Expertise + food, not gear."
 
--- Weapon enchants and talent flex notes.
-B.enchants = "Weapons: Flurry + Vulnerability. Talent flex points into Divine "
-  .. "Storm for extra Arcane Cadence triggers."
+-- Weapon enchant + gems. (Flurry/Vulnerability are AFFIXES — see affixWeapon.)
+B.enchants = "Weapon ENCHANT: Black Magic (haste proc) — separate from the "
+  .. "Judgement/Vulnerability affix. Gems: Haste in every socket + 2 Haste/Stam "
+  .. "to activate the Chaotic Skyflare Diamond (3% crit) meta."
 
 -- Seal, blessing & rotation (asked a lot; not obvious from the echo list).
 B.seal = "Seal of Vengeance (Alliance) / Seal of Corruption (Horde) — the stacking-DoT seal."
@@ -265,6 +274,13 @@ do
   B.catalog["Arcane Bombardment"] = "A"
   B.catalog["Stonefist Barrage"] = "A"
   B.catalog["Ember Spark"] = "A"
+  -- Nero-endorsed damage echoes (Ebonhold #paladin, Aug 2026 — see
+  -- docs/ebonhold-paladin/echoes.md for his full import string + de-prioritized
+  -- list: Archmage / Echoing Tides / Emberlord).
+  B.catalog["Entropic Fusion"] = "A"
+  B.catalog["The Last Wall"] = "A"
+  B.catalog["Static Overflow"] = "A"
+  B.catalog["Hungering Curse"] = "A"
 end
 
 -- Echoes to disable / banish. Rage- and runic-power-scaling echoes are dead for
@@ -288,25 +304,33 @@ B.affixSurvival = {
   { affix = "Overwhelming Force", role = "Damage / pressure", slots = "Neck · Back · Tabard · Trinket" },
 }
 B.affixDamage = {
-  { affix = "Iron Will 6→2", role = "Primary Strength conversion chain" },
-  { affix = "Iron Hide 6/5/4", role = "HP backbone" },
-  { affix = "Thick Hide 6", role = "Mitigation" },
-  { affix = "Keen Strike 6/5", role = "Offense" },
+  { affix = "Keen Strike 6/5/4", role = "Crit toward ~100% (top offense affix)" },
+  { affix = "Relentless Crits 6", role = "Crit scaling (RaSeT)" },
   { affix = "Crits 6", role = "Crit scaling" },
-  { affix = "Pain 6/5/4", role = "Damage scaling" },
+  { affix = "Temporal Flux 6", role = "Haste scaling (RaSeT)" },
   { affix = "Spell Mastery 4", role = "Feeds spell/DoT side" },
-  { affix = "Force 6", role = "Offense" },
+  { affix = "Overwhelming Force 6", role = "Damage / pressure" },
+  { affix = "Fortified by Pain 6/5/4", role = "Damage + defensive scaling" },
+  { affix = "Iron Will 6→2", role = "Strength / effective-HP chain" },
+  { affix = "Ironhide 6/5/4", role = "HP backbone" },
+  { affix = "Thick Hide 6", role = "Mitigation" },
 }
-B.affixNote = "Judgement affix is an ECHO TRIGGER, not a damage source — keep it "
-  .. "on the weapon(s) for the proc, not the tooltip number. Weapon affixes stack; "
-  .. "dual-wield can carry the same affix on both hands."
+B.affixWeapon = "Weapons: Judgement + Vulnerability (Nero uses Flurry + Vulnerability)."
+B.affixNote = "Judgement affix is an ECHO TRIGGER (procs Arcane Cadence), not a "
+  .. "damage number — keep it on the weapon(s). Weapon affixes stack; dual-wield "
+  .. "can carry the same on both hands. Highest rank is best (diminishing returns "
+  .. "down the ranks). Tuned right you're NOT armor-capped; without the Lethal "
+  .. "Precision talent (-50% crit chance) you can crit-OVERCAP — swap low crit "
+  .. "affixes for armor/damage if so."
 
--- Gear targeting (per-slot guidance for the AotC I push).
+-- Gear targeting (per-slot, endgame ICC-HC4 — Ebonhold #paladin, Aug 2026).
+-- Base items are standard WotLK; the affix + crit/haste roll is what matters.
 B.gear = {
-  { slot = "Weapon(s)", target = "Highest-Str one-handers (dual-wield for Ambidex); enchant Flurry + Vulnerability" },
-  { slot = "Head / Shoulder / Chest", target = "Set pieces with Crit + Haste + Strength" },
-  { slot = "Ranged", target = "ToC 25H Crit/Haste gun (the one Agility exception)" },
-  { slot = "Everything else", target = "Epic (ilvl 213+) in every slot with Strength — also completes the Epic +5% multiplier" },
+  { slot = "Weapon(s)", target = "Both from Lich King 25H (SP main + off), or Librarian's Paper Cutter x2 (crit/haste); Judgement + Vulnerability affix" },
+  { slot = "Trinkets", target = "Tiny Abomination in a Jar (ICC) + Algalon trinket (Ulduar)" },
+  { slot = "Ranged / Relic", target = "Crit/Haste gun from ToC 25H, or Corpse-Impaling Spike; Libram of Valiance (ToC emblems)" },
+  { slot = "Feet / Waist", target = "Weak slots: Triumph-emblem belt + Alga/Ulduar craft boots" },
+  { slot = "Head / Shoulder / Chest & rest", target = "Crit + Haste items from ICC 10/25 Heroic (or a well-affixed boosted quest/craft piece)" },
 }
 
 -- Baked talent templates: target rank per (tab, index). Paladin tabs are

@@ -32,8 +32,8 @@ local ENCH = {
   [9]  = { rec = "Greater Assault (+50 AP)", src = "Enchanting / AH" },
   [10] = { rec = "Crusher (+44 AP)", src = "Enchanting / AH" },
   [15] = { rec = "Major Agility (+22 agi)", src = "or Greater Speed (+23 haste)" },
-  [16] = { rec = "Berserking or Massacre (+110 AP)", src = "Enchanting / AH" },
-  [17] = { rec = "Berserking / Massacre (if a weapon)", src = "Enchanting", optional = true },
+  [16] = { rec = "Black Magic (haste proc)", src = "Ebonhold Ret default; or Berserking/Massacre for AP" },
+  [17] = { rec = "Black Magic (if a weapon)", src = "Enchanting", optional = true },
   [11] = { rec = "Assault (+40 AP)", src = "enchanters only", optional = true },
   [12] = { rec = "Assault (+40 AP)", src = "enchanters only", optional = true },
 }
@@ -95,12 +95,14 @@ local function GlyphState()
 end
 
 local GEM_REC = {
-  "Bold Cardinal Ruby (+20 Strength) in every socket you don't need for a meta,",
-  "Chaotic Skyflare Diamond (+21 crit, +3% crit dmg) as the meta,",
-  "and Eternal Belt Buckle on the waist for a free extra socket.",
+  "Haste gems in (almost) every socket \226\128\148 the Ebonhold #paladin default for the",
+  "DoT/haste build (ticks scale with haste via Accelerated Decay).",
+  "Chaotic Skyflare Diamond meta (3% crit): feed it 2 Haste/Stam gems to activate.",
+  "Eternal Belt Buckle on the waist for a free extra socket.",
 }
-local GEM_NOTE = "Ignore socket-color bonuses unless the bonus is Strength/AP/crit "
-  .. "worth more than the ~10 Str you lose from an off-color gem."
+local GEM_NOTE = "Prefer Strength (Bold Cardinal Ruby) only if you're chasing the "
+  .. "Str->Spellpower multiplier over raw haste \226\128\148 the community leans haste. "
+  .. "Ignore off-color socket bonuses unless they're crit/haste/Str worth the loss."
 
 local GLYPH_MAJOR = { "Glyph of Judgement (+10% Judgement dmg)",
   "Glyph of Exorcism (+20% Exorcism dmg)",
@@ -190,17 +192,19 @@ end
 -- it ranks your slots by item level (where a base upgrade helps most) and folds
 -- in the affix + enchant + gem gaps (free power on any slot).
 local UP_SLOTS = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 }
-local BASE_SRC_DEFAULT = "Ulduar (10/25) / heroics + Emblems / boosted quest+craft"
+local BASE_SRC_DEFAULT = "Crit/Haste piece from ICC 10/25 Heroic (or a well-affixed boosted quest/craft)"
 local BASE_SRC = {
-  [16] = "Ulduar / Trial of the Champion (H) / rep + craft",
-  [17] = "Ulduar / Trial of the Champion (H) / rep + craft",
-  [13] = "Ulduar / Trial of the Champion (H) / heroic dungeons",
-  [14] = "Ulduar / Trial of the Champion (H) / heroic dungeons",
-  [18] = "Libram: Emblem / reputation vendor",
-  [2]  = "Ulduar / Emblem vendor / heroics",
-  [11] = "Ulduar / Emblem vendor / heroics",
-  [12] = "Ulduar / Emblem vendor / heroics",
-  [15] = "Ulduar / Emblem vendor / heroics",
+  [16] = "Lich King 25H (SP + off) / Librarian's Paper Cutter x2 / Eashandar's Right Claw (MC)",
+  [17] = "Lich King 25H (off-hand) / 2nd Librarian's Paper Cutter",
+  [13] = "Tiny Abomination in a Jar (ICC) / Algalon trinket (Ulduar)",
+  [14] = "Tiny Abomination in a Jar (ICC) / Algalon trinket (Ulduar)",
+  [18] = "Crit/Haste gun (ToC 25H) or Corpse-Impaling Spike / Libram of Valiance (ToC emblems)",
+  [6]  = "Triumph-emblem belt (weak slot) + Eternal Belt Buckle",
+  [8]  = "Alga / Ulduar craft boots (weak slot)",
+  [2]  = "Crit/Haste from ICC 10/25 Heroic / Emblem vendor",
+  [11] = "Crit/Haste from ICC 10/25 Heroic / Emblem vendor",
+  [12] = "Crit/Haste from ICC 10/25 Heroic / Emblem vendor",
+  [15] = "Crit/Haste from ICC 10/25 Heroic / Emblem vendor",
 }
 
 function GO.Upgrades()
