@@ -3,7 +3,7 @@ PallyPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
   GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
   CombatMeter = {}, AshAdvisor = {}, Waypoints = {}, TomeManager = {},
-  BuildScore = {},
+  BuildScore = {}, GearOpt = {},
 }
 local PP = PallyPilot
 
@@ -542,6 +542,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     else
       PP.print("Usage: /pp locks <n>  (currently " .. (PP.db.options.lockSlots or 5) .. ")")
     end
+  elseif cmd == "gems" or cmd == "enchants" or cmd == "glyphs" or cmd == "gearopt" then
+    if PP.GearOpt.Report then PP.safeCall(PP.GearOpt.Report) end
   elseif cmd == "gear" then
     if PP.GearAudit.Toggle then PP.GearAudit.Toggle() end
   elseif cmd == "reroll" then
@@ -606,6 +608,6 @@ SlashCmdList["PALLYPILOT"] = function(line)
         .. "/pp bench to compare arms, /pp bench off to clear.")
     end
   else
-    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare")
+    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear (affixes) | /pp gems (enchants/gems/glyphs) | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare")
   end
 end
