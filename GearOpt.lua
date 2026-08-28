@@ -207,6 +207,31 @@ local BASE_SRC = {
   [15] = "Crit/Haste from ICC 10/25 Heroic / Emblem vendor",
 }
 
+-- Per-slot enchant/gem gap data for the unified Gear view. Keyed by inventory
+-- slot: { ilvl, encMiss, encRec, encSrc, enchantable, sockets, emptyGems }.
+function GO.SlotReport()
+  local out = {}
+  for slot = 1, 18 do
+    local link = GetInventoryItemLink("player", slot)
+    if link then
+      local _, _, _, ilvl = GetItemInfo(link)
+      local it = ParseLink(link)
+      local rec = ENCH[slot]
+      local encMiss = it and rec and not rec.optional and (it.enchant or 0) == 0 or false
+      local sockets = SocketCount(link)
+      local slotted = 0
+      if it then for _, g in ipairs(it.gems) do if (g or 0) ~= 0 then slotted = slotted + 1 end end end
+      out[slot] = {
+        ilvl = ilvl or 0, encMiss = encMiss,
+        encRec = rec and rec.rec, encSrc = rec and rec.src,
+        enchantable = (rec ~= nil and not rec.optional),
+        sockets = sockets, emptyGems = math.max(0, sockets - slotted),
+      }
+    end
+  end
+  return out
+end
+
 function GO.Upgrades()
   Print(GOLD .. "Gear health" .. R .. DIM
     .. " — where your upgrades are (Ebonhold: Ulduar tier, affix-driven)" .. R)

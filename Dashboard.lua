@@ -134,7 +134,7 @@ local TX = {
 local VIEWS = {
   audit = { label = "Echo Audit", mod = function() return PP.EchoAudit end },
   score = { label = "Build Score", mod = function() return PP.BuildScore end },
-  gear  = { label = "Gear Audit", mod = function() return PP.GearAudit end },
+  gear  = { label = "Gear", mod = function() return PP.GearAudit end },
   farm  = { label = "Farm Queue", mod = function() return PP.FarmQueue end },
   raid  = { label = "Raid Guide", mod = function() return PP.RaidGuide end },
 }
@@ -270,7 +270,7 @@ function D.Init()
   SectionLabel(frame, -46, "VIEWS")
   local views = {
     { "Home", "home" }, { "Build score", "score" }, { "Echo audit", "audit" },
-    { "Farm tomes", "farm" }, { "Gear audit", "gear" }, { "Raid guide", "raid" },
+    { "Farm tomes", "farm" }, { "Gear", "gear" }, { "Raid guide", "raid" },
   }
   local y = -64
   for _, v in ipairs(views) do
