@@ -65,31 +65,67 @@ local PROC_ALIAS = {
   ["unholy shadow"] = "Edict of the Four",
 }
 
-local fight = nil          -- { start, total, echo, spells = {name->amt} }
+local fight = nil          -- { start, total, echo, spells = {name->amt}, ... }
 local lastFight = nil
 local bestDps = 0
+local BUCKET_SEC = 5       -- damage-over-time window size (for the DPS curve)
+
+-- Kit spells whose CASTS we count, to audit rotation execution (WCL-style
+-- active time / ability usage). Keyed spell name -> short bucket key.
+local KIT_CAST = {
+  ["Crusader Strike"] = "cs", ["Divine Storm"] = "ds",
+  ["Judgement of Light"] = "judge", ["Judgement of Wisdom"] = "judge",
+  ["Judgement of Justice"] = "judge", ["Judgement"] = "judge",
+  ["Consecration"] = "cons", ["Exorcism"] = "exo",
+  ["Hammer of Wrath"] = "how", ["Holy Wrath"] = "holyw",
+  ["Hammer of the Righteous"] = "hotr", ["Divine Plea"] = "plea",
+}
 
 local function StartFight()
-  fight = { start = GetTime(), total = 0, echo = 0, spells = {}, targets = {},
-            taken = 0, maxHit = 0 }
+  fight = { start = GetTime(), total = 0, echo = 0,
+            spells = {}, hits = {}, crits = {}, smax = {},
+            targets = {}, taken = 0, maxHit = 0,
+            casts = {}, buckets = {}, blows = {}, active = {}, died = false }
 end
 
-local function AddTaken(amount)
+-- Incoming damage (survival ledger). Tracks the biggest blows with source/spell.
+local function AddTaken(amount, spell, src)
   if not amount or amount <= 0 then return end
   if not fight then StartFight() end
   fight.taken = fight.taken + amount
   if amount > fight.maxHit then fight.maxHit = amount end
+  local b = fight.blows
+  b[#b + 1] = { s = spell or "Melee", src = src, a = amount }
+  if #b > 24 then  -- amortized prune to the biggest 6
+    table.sort(b, function(x, y) return x.a > y.a end)
+    for i = #b, 7, -1 do b[i] = nil end
+  end
 end
 
-local function AddDamage(spell, amount, target)
+-- Outgoing damage. Also tracks hits, crits, max hit, the DPS curve and active
+-- seconds so we can see crit%, proc frequency and ramp per fight.
+local function AddDamage(spell, amount, target, isCrit)
   if not amount or amount <= 0 then return end
   if not fight then StartFight() end
   fight.total = fight.total + amount
   fight.spells[spell] = (fight.spells[spell] or 0) + amount
+  fight.hits[spell] = (fight.hits[spell] or 0) + 1
+  if isCrit then fight.crits[spell] = (fight.crits[spell] or 0) + 1 end
+  if amount > (fight.smax[spell] or 0) then fight.smax[spell] = amount end
   if not BASE_KIT[spell] then fight.echo = fight.echo + amount end
-  if target then
-    fight.targets[target] = (fight.targets[target] or 0) + amount
-  end
+  if target then fight.targets[target] = (fight.targets[target] or 0) + amount end
+  local t = GetTime() - fight.start
+  local bi = math.floor(t / BUCKET_SEC) + 1
+  if bi > 24 then bi = 24 end
+  fight.buckets[bi] = (fight.buckets[bi] or 0) + amount
+  fight.active[math.floor(t)] = true
+end
+
+local function CastTrack(spellName)
+  local key = KIT_CAST[spellName]
+  if not key then return end
+  if not fight then StartFight() end
+  fight.casts[key] = (fight.casts[key] or 0) + 1
 end
 
 -- Persist every recorded fight for post-session analysis (read from
@@ -109,7 +145,25 @@ local function SaveFight(f)
   table.sort(sorted, function(a, b) return a[2] > b[2] end)
   local spells = {}
   for i = 1, math.min(15, #sorted) do
-    spells[i] = { n = sorted[i][1], d = math.floor(sorted[i][2]) }
+    local nm = sorted[i][1]
+    spells[i] = { n = nm, d = math.floor(sorted[i][2]),
+                  h = f.hits and f.hits[nm] or nil,
+                  c = f.crits and f.crits[nm] or nil,
+                  mx = f.smax and math.floor(f.smax[nm] or 0) or nil }
+  end
+  -- Distinct targets damaged (AoE vs single-target normalization).
+  local tCount = 0
+  for _ in pairs(f.targets) do tCount = tCount + 1 end
+  -- Damage-over-time curve (floored per-window totals).
+  local buckets, maxB = {}, 0
+  for i in pairs(f.buckets or {}) do if i > maxB then maxB = i end end
+  for i = 1, maxB do buckets[i] = math.floor(f.buckets[i] or 0) end
+  -- Top-3 incoming blows (survival).
+  local blows = f.blows or {}
+  table.sort(blows, function(x, y) return x.a > y.a end)
+  local topBlows = {}
+  for i = 1, math.min(3, #blows) do
+    topBlows[i] = { s = blows[i].s, src = blows[i].src, a = math.floor(blows[i].a) }
   end
   -- Bench tags only apply in the zone where they were set (an ICC evening
   -- once inherited a stale HoR tag).
@@ -131,6 +185,14 @@ local function SaveFight(f)
     taken = math.floor(f.taken or 0),
     maxHit = math.floor(f.maxHit or 0),
     spells = spells,
+    -- Richer WCL-style fields (all additive; older readers ignore them):
+    active = f.activePct,          -- % of fight seconds you dealt damage
+    tgts = tCount,                 -- distinct targets damaged
+    casts = f.casts,               -- kit cast counts {cs,ds,judge,cons,exo,...}
+    buckets = buckets,             -- damage per BUCKET_SEC window (DPS curve)
+    bsec = BUCKET_SEC,
+    blows = topBlows,              -- top-3 incoming hits {s=spell, src, a=amount}
+    died = f.died or nil,
   }
   while #log > MAX_FIGHTS do table.remove(log, 1) end
 end
@@ -148,6 +210,9 @@ local function EndFight()
     lastFight = fight
     lastFight.dur = dur
     lastFight.dps = fight.total / dur
+    local activeN = 0
+    for _ in pairs(fight.active) do activeN = activeN + 1 end
+    lastFight.activePct = math.floor(100 * activeN / math.max(1, dur) + 0.5)
     local echoPct = math.floor(fight.echo / fight.total * 100 + 0.5)
     local tag = ""
     if lastFight.dps > bestDps then
@@ -173,15 +238,34 @@ function CM.Report()
   PP.print(string.format("Last fight: %s total, %ds, %s DPS — "
     .. EMBER .. "%d%% echo/proc damage" .. R .. DIM .. "  (%d fights logged)" .. R,
     Fmt(f.total), math.floor(f.dur), GOLD .. Fmt(f.dps) .. R, echoPct, logged))
+  -- WCL-style second line: uptime, crit, target count, biggest blow, death.
+  local hitsN, critsN, tN = 0, 0, 0
+  for _, h in pairs(f.hits or {}) do hitsN = hitsN + h end
+  for _, c in pairs(f.crits or {}) do critsN = critsN + c end
+  for _ in pairs(f.targets or {}) do tN = tN + 1 end
+  local blows = {}
+  for _, x in ipairs(f.blows or {}) do blows[#blows + 1] = x end
+  table.sort(blows, function(a, b) return a.a > b.a end)
+  local tb = blows[1]
+  DEFAULT_CHAT_FRAME:AddMessage(string.format("  %sactive %d%%%s · %scrit %d%%%s · %d target%s%s%s",
+    BRIGHT, f.activePct or 0, R,
+    BRIGHT, hitsN > 0 and math.floor(100 * critsN / hitsN + 0.5) or 0, R,
+    tN, tN == 1 and "" or "s",
+    tb and (DIM .. " · worst hit taken " .. R .. EMBER .. Fmt(tb.a) .. R
+      .. (tb.s and (DIM .. " (" .. tb.s .. ")" .. R) or "")) or "",
+    f.died and (EMBER .. " · DIED" .. R) or ""))
   local sorted = {}
   for name, amt in pairs(f.spells) do sorted[#sorted + 1] = { name, amt } end
   table.sort(sorted, function(a, b) return a[2] > b[2] end)
   for i = 1, math.min(12, #sorted) do
     local name, amt = sorted[i][1], sorted[i][2]
     local pct = amt / f.total * 100
-    local tag = BASE_KIT[name] and "" or (EMBER .. "  [echo/proc]" .. R)
-    DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s%2d.%s %s — %s (%.1f%%)%s",
-      DIM, i, R, BRIGHT .. name .. R, Fmt(amt), pct, tag))
+    local tag = BASE_KIT[name] and "" or (EMBER .. " [echo]" .. R)
+    local hh = (f.hits and f.hits[name]) or 0
+    local cc = (f.crits and f.crits[name]) or 0
+    local crit = hh > 0 and (DIM .. "  " .. hh .. " hits, " .. math.floor(100 * cc / hh + 0.5) .. "% crit" .. R) or ""
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s%2d.%s %s — %s (%.1f%%)%s%s",
+      DIM, i, R, BRIGHT .. name .. R, Fmt(amt), pct, tag, crit))
   end
 end
 
@@ -238,25 +322,30 @@ local function OnCLEU(timestamp, event, srcGUID, srcName, srcFlags,
                       dstGUID, dstName, dstFlags, ...)
   if event == "UNIT_DIED" and dstName then
     PP.safeCall(RecordBossKill, dstName)
+    if dstGUID == UnitGUID("player") and fight then fight.died = true end
   end
   -- Damage the PLAYER takes (survivability side of the ledger).
   if dstGUID and dstGUID == UnitGUID("player") then
     if event == "SWING_DAMAGE" then
-      AddTaken((select(1, ...)))
+      AddTaken((select(1, ...)), "Melee", srcName)
     elseif event == "SPELL_DAMAGE" or event == "SPELL_PERIODIC_DAMAGE"
         or event == "RANGE_DAMAGE" or event == "DAMAGE_SHIELD" then
-      AddTaken((select(4, ...)))
+      AddTaken((select(4, ...)), (select(2, ...)), srcName)
     elseif event == "ENVIRONMENTAL_DAMAGE" then
-      AddTaken((select(2, ...)))
+      AddTaken((select(2, ...)), "Environment", nil)
     end
   end
   if not srcFlags or bit.band(srcFlags, AFFIL_MINE) == 0 then return end
+  -- Crit flag is the 7th damage param for swings, 10th for spells (the 3-field
+  -- spell prefix shifts it by 3).
   if event == "SWING_DAMAGE" then
-    AddDamage("Melee", (select(1, ...)), dstName)
+    AddDamage("Melee", (select(1, ...)), dstName, (select(7, ...)))
   elseif event == "SPELL_DAMAGE" or event == "SPELL_PERIODIC_DAMAGE"
       or event == "RANGE_DAMAGE" or event == "DAMAGE_SHIELD" then
     local _, spellName, _, amount = ...
-    if spellName then AddDamage(spellName, amount, dstName) end
+    if spellName then AddDamage(spellName, amount, dstName, (select(10, ...))) end
+  elseif event == "SPELL_CAST_SUCCESS" then
+    CastTrack((select(2, ...)))
   end
 end
 
