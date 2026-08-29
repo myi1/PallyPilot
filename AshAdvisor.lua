@@ -396,23 +396,28 @@ local function RunAsh()
   return rd and tonumber(rd.soulPoints) or nil
 end
 
--- Advisor stance: "loop" = spam-prestige farming (permanent nodes first,
--- temp is wipe-fodder). "push" = committing to a long run for the next
--- AotC (temp survival + offense are kept, so buy them; survival then
--- offense by natural tier order, no perm-first reshuffle).
-local function Stance()
-  return (PP.db and PP.db.options and PP.db.options.ashStance) or "loop"
+-- One clear model now: the priority order lives in AD.NODES (Borrowed Power ->
+-- echo economy -> permanent stats -> QoL). The only option is whether to also
+-- show the optional temp-survival tier (tier 5) -- worth it on a long stay-at-80
+-- push or for hardcore DR, wiped on the prestige loop. Hidden by default.
+local function ShowSurvival()
+  return (PP.db and PP.db.options and PP.db.options.ashShowSurvival) and true or false
 end
 
 function AA.Command(arg)
   arg = arg and string.lower(arg) or ""
-  if arg == "push" or arg == "loop" then
+  if arg == "survival" or arg == "push" or arg == "loop" then
     if not (PP.db.options) then PP.db.options = {} end
-    PP.db.options.ashStance = arg
-    PP.print("Ash stance: " .. GOLD .. string.upper(arg) .. R .. " — "
-      .. (arg == "push"
-        and "survival + offense to clear content (temp nodes worth it on a long run)."
-        or "permanent nodes first for the prestige loop."))
+    -- "survival" toggles; "push"/"loop" kept as aliases (push showed temp,
+    -- loop hid it) so old muscle memory still works.
+    if arg == "survival" then
+      PP.db.options.ashShowSurvival = not ShowSurvival()
+    else
+      PP.db.options.ashShowSurvival = (arg == "push")
+    end
+    PP.print("Ash survival nodes: " .. GOLD
+      .. (ShowSurvival() and "SHOWN" or "HIDDEN") .. R .. DIM
+      .. " — optional temp survival (long stay-at-80 push / hardcore DR)." .. R)
     if AA.RefreshRail then PP.safeCall(AA.RefreshRail) end
     return
   end
@@ -470,12 +475,13 @@ function AA.Render()
 
   Say("  " .. GOLD .. "Next best buys" .. R .. DIM
     .. " (priority order, exact node costs):" .. R)
+  local showSurv = ShowSurvival()
   local i = 0
   local lastTier = nil
   for _, entry in ipairs(AD.NODES) do
     local cur, total, cost = NextBuy(entry, ranks)
     local capped = (cur ~= nil and cur >= total)
-    if not capped then
+    if not capped and not (entry.survival and not showSurv) then
       i = i + 1
       if entry.tier ~= lastTier then
         lastTier = entry.tier
@@ -561,11 +567,12 @@ end
 -- Uncapped entries in priority order with cost/affordability/frontier id.
 local function BuyQueue(ranks, spendable)
   local out = {}
+  local showSurv = ShowSurvival()
   for _, entry in ipairs(AD.NODES) do
     entry._bestId = nil
     local cur, total, cost = NextBuy(entry, ranks)
     local capped = (cur ~= nil and cur >= total)
-    if not capped then
+    if not capped and not (entry.survival and not showSurv) then
       out[#out + 1] = {
         name = entry.name, tier = entry.tier, effect = entry.effect,
         cur = cur, total = total, cost = cost, id = entry._bestId,
@@ -585,69 +592,61 @@ function AA.RefreshRail()
   local spendable = state and state.spendable or nil
   local committed = state and state.committed or nil
 
+  -- AD.NODES is already in priority order (Borrowed Power -> echo economy ->
+  -- permanent stats -> QoL -> optional survival), so the queue is the plan.
   local queue = BuyQueue(ranks, spendable)
-
-  -- Prestige-loop awareness: once you're at/past the gate you'll reset soon,
-  -- so temp (non-perm) nodes are near-worthless — permanent nodes rise to
-  -- the top and temp nodes are flagged. This is why callboard deaths after a
-  -- prestige mean "buy permanent HP", not "rebuy cheat-deaths".
-  local stance = Stance()
   local prestigeReady = committed and committed >= AD.PRESTIGE.gate
-  -- Perm-first reshuffle applies only on the LOOP stance. In PUSH stance you
-  -- keep temp survival + offense (you're not resetting soon), so the natural
-  -- tier order (survival spine -> offense) stands.
-  if prestigeReady and stance == "loop" then
-    local perm, temp = {}, {}
-    for _, q in ipairs(queue) do
-      if q.perm then perm[#perm + 1] = q else temp[#temp + 1] = q end
-    end
-    queue = {}
-    for _, q in ipairs(perm) do queue[#queue + 1] = q end
-    for _, q in ipairs(temp) do queue[#queue + 1] = q end
-  end
   ClearGlows()
 
   -- Split: what you can buy NOW (priority order) vs what you're saving for.
   local affordable, saving = {}, nil
-  local affordTotal = 0
   for _, q in ipairs(queue) do
     if q.afford then
       affordable[#affordable + 1] = q
-      affordTotal = affordTotal + (q.cost or 0)
     elseif not saving and q.cost and not q.locked then
-      saving = q -- highest-priority AFFORDABLE-someday thing (not path-locked)
+      saving = q -- highest-priority buy that's out of reach (not path-locked)
     end
   end
 
+  -- Header: banked ash + how many buys are in reach.
   rail.hero:SetText(spendable and (GOLD .. Fmt(spendable) .. R) or (DIM .. "—" .. R))
   rail.heroSub:SetText(spendable
-    and (DIM .. "banked · " .. R .. VERD .. #affordable .. R .. DIM
-      .. " buys in reach (" .. Fmt(affordTotal) .. ")" .. R)
+    and (DIM .. "ash banked · " .. R .. VERD .. #affordable .. R .. DIM
+      .. " buys in reach" .. R)
     or (DIM .. "waiting for server state..." .. R))
+
+  -- Echo slots (permanent, unlocked by committed ash) -- more slots = stronger
+  -- build, and they persist through a prestige.
+  if committed then
+    local slots, nextAt = 0, nil
+    for _, m in ipairs(AD.MILESTONES) do
+      if committed >= m then slots = slots + 1 elseif not nextAt then nextAt = m end
+    end
+    local s = DIM .. "Echo slots " .. R .. BRIGHT .. slots .. "/" .. #AD.MILESTONES .. R
+    if nextAt then
+      s = s .. DIM .. " · next at " .. Fmt(nextAt) .. R
+    else
+      s = s .. VERD .. " · all earned" .. R
+    end
+    rail.slots:SetText(s)
+  else
+    rail.slots:SetText("")
+  end
 
   -- Focal: the top thing you can actually buy right now.
   local top = affordable[1]
   if top then
-    local banner
-    if stance == "push" then
-      banner = VERD .. "  · PUSH: power up for content" .. R
-    elseif prestigeReady then
-      banner = EMBER .. "  · PRESTIGE READY: permanent only" .. R
-    else
-      banner = ""
-    end
-    rail.nextHead:SetText(GOLD .. "BUY NOW" .. banner .. R)
+    rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R)
     rail.nextName:SetText(BRIGHT .. top.name .. R)
-    local rankStr = top.infinite and ("r" .. (top.cur or "?"))
+    local rankStr = top.infinite and ("rank " .. (top.cur or "?"))
       or ((top.cur or "?") .. "/" .. top.total)
-    rail.nextCost:SetText(VERD .. Fmt(top.cost) .. R .. DIM .. "  ·  " .. rankStr
-      .. (top.perm and ("  ·  " .. VERD .. "prestige-proof" .. R)
-          or (EMBER .. "  ·  TEMP (prestige wipes)" .. R)) .. R)
+    rail.nextCost:SetText(VERD .. Fmt(top.cost) .. R .. DIM .. " ash · " .. rankStr
+      .. (top.perm and (" · keeps thru prestige") or (" · temp")) .. R)
     rail.nextWhy:SetText(DIM .. (top.effect or "") .. R)
     if top.id then GlowNode(top.id, 1, 0.72, 0.20) end
   elseif #queue > 0 then
-    -- Nothing directly reachable: route toward the stance's top target by
-    -- finding the next connector node to buy along the tree's links.
+    -- Nothing directly reachable: route toward the top target by finding the
+    -- next connector node to buy along the tree's links.
     rail.nextHead:SetText(GOLD .. "WORK TOWARD" .. R)
     local target = queue[1]
     local step = target and target.id and PathNextBuy(target.id, ranks)
@@ -657,69 +656,50 @@ function AA.RefreshRail()
       rail.nextName:SetText(BRIGHT .. NodeName(step) .. R)
       rail.nextCost:SetText((c and ((spendable and c <= spendable and VERD or EMBER)
         .. Fmt(c) .. R) or (DIM .. "?" .. R))
-        .. DIM .. "  ·  connector toward " .. (target.name or "?") .. R)
-      rail.nextWhy:SetText(DIM .. "Buy this to extend your path to "
+        .. DIM .. " · on the way to " .. (target.name or "?") .. R)
+      rail.nextWhy:SetText(DIM .. "Buy this to reach "
         .. (target.name or "your next target") .. "." .. R)
       GlowNode(step, 1, 0.72, 0.20)
     else
       rail.nextName:SetText(DIM .. "bank ash, then buy from the center" .. R)
-      rail.nextCost:SetText(DIM .. "the infinites are start nodes" .. R)
+      rail.nextCost:SetText("")
       rail.nextWhy:SetText("")
     end
   else
-    rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
+    rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R)
     rail.nextName:SetText(VERD .. "Everything tracked is maxed" .. R)
-    rail.nextCost:SetText(DIM .. "feed the infinites" .. R)
+    rail.nextCost:SetText(DIM .. "feed the infinite stat nodes" .. R)
     rail.nextWhy:SetText("")
   end
 
   -- Saving target: top priority buy that's out of reach.
   if saving and spendable then
-    rail.saveLine:SetText(GOLD .. "SAVING FOR  " .. R .. BRIGHT .. saving.name
+    rail.saveLine:SetText(GOLD .. "Saving for " .. R .. BRIGHT .. saving.name
       .. R .. DIM .. " — " .. R .. EMBER .. Fmt(saving.cost) .. R .. DIM
-      .. " (" .. Fmt(saving.cost - spendable) .. " short)" .. R)
+      .. " (" .. Fmt(saving.cost - spendable) .. " to go)" .. R)
   else
     rail.saveLine:SetText("")
   end
 
-  -- Rest of the in-reach list + green glows; then the next few dims.
+  -- "Then:" the next few affordable buys, capped short so nothing overflows.
   local t = {}
-  for i = 2, math.min(#affordable, 7) do
+  for i = 2, math.min(#affordable, 4) do
     local q = affordable[i]
-    t[#t+1] = "  " .. BRIGHT .. q.name .. R .. DIM .. " — " .. R
-      .. VERD .. Fmt(q.cost) .. R
+    t[#t+1] = BRIGHT .. q.name .. R .. DIM .. " — " .. Fmt(q.cost) .. R
   end
   for _, q in ipairs(affordable) do
     if q.id and q ~= top then GlowNode(q.id, 0.54, 0.66, 0.42) end
   end
-  local dimmed = 0
-  for _, q in ipairs(queue) do
-    if not q.afford and q ~= saving and q.cost and dimmed < 4 then
-      dimmed = dimmed + 1
-      if dimmed == 1 then t[#t+1] = DIM .. "later:" .. R end
-      t[#t+1] = DIM .. "  " .. q.name .. " — " .. Fmt(q.cost)
-        .. (q.locked and "  [path locked]" or "") .. R
-    end
-  end
-  rail.body:SetText(table.concat(t, "\n"))
+  rail.body:SetText(#t > 0 and (DIM .. "then:" .. R .. "\n" .. table.concat(t, "\n")) or "")
 
-  -- Footer: only what the native UI doesn't say — prestige math + reserve.
-  local bits = {}
-  if committed and committed >= AD.PRESTIGE.gate then
-    local worths = math.min(committed, AD.PRESTIGE.destroyedCap) / AD.PRESTIGE.gate
-    local bonus = AD.PRESTIGE.gainPerGate * (worths ^ AD.PRESTIGE.exponent) * 100
-    bits[#bits+1] = DIM .. "prestige now: " .. R .. VERD
-      .. string.format("+%.1f%%", bonus) .. R .. DIM .. " ash gain" .. R
+  -- Footer: plain prestige note (the native UI covers the rest).
+  if prestigeReady then
+    rail.footer:SetText(DIM .. "Prestige available — only permanent nodes survive a reset." .. R)
+  else
+    rail.footer:SetText("")
   end
-  local run = RunAsh()
-  if run and run > 0 then
-    -- Hardcore runs have NO pay-to-continue: death is final there.
-    bits[#bits+1] = DIM .. "continue price (non-HC only): "
-      .. Fmt(math.ceil(run * 0.1)) .. R
-  end
-  rail.footer:SetText(table.concat(bits, "\n"))
-  if rail.stanceBtn then
-    rail.stanceBtn:SetText(stance == "push" and "Stance: PUSH" or "Stance: LOOP")
+  if rail.survivalBtn then
+    rail.survivalBtn:SetText(ShowSurvival() and "Survival: ON" or "Survival: OFF")
   end
 end
 
@@ -737,45 +717,57 @@ function AA.InitRail()
     insets = { left = 8, right = 8, top = 8, bottom = 8 },
   })
 
+  -- Layout is a TOP-DOWN ANCHORED CHAIN: every line anchors below the previous
+  -- one, so a long wrapped "why" line pushes the rest down instead of colliding.
+  -- Width 186 (rail 210 - 12 each side); word-wrap is on by default once a width
+  -- is set. This replaces the old fixed-offset stack that overflowed the panel.
+  local W = 186
   local title = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOP", rail, "TOP", 0, -14)
-  title:SetText(GOLD .. "PallyPilot" .. R)
+  title:SetPoint("TOPLEFT", rail, "TOPLEFT", 12, -12)
+  title:SetText(GOLD .. "PallyPilot — Ash" .. R)
 
   rail.hero = rail:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-  rail.hero:SetPoint("TOP", rail, "TOP", 0, -32)
+  rail.hero:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+  rail.hero:SetWidth(W); rail.hero:SetJustifyH("LEFT")
   rail.heroSub = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.heroSub:SetPoint("TOP", rail.hero, "BOTTOM", 0, -2)
-  rail.heroSub:SetWidth(180)
+  rail.heroSub:SetPoint("TOPLEFT", rail.hero, "BOTTOMLEFT", 0, -2)
+  rail.heroSub:SetWidth(W); rail.heroSub:SetJustifyH("LEFT")
+  rail.slots = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.slots:SetPoint("TOPLEFT", rail.heroSub, "BOTTOMLEFT", 0, -1)
+  rail.slots:SetWidth(W); rail.slots:SetJustifyH("LEFT")
 
   rail.nextHead = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  rail.nextHead:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -78)
-  rail.nextHead:SetText(GOLD .. "BUY NOW" .. R)
+  rail.nextHead:SetPoint("TOPLEFT", rail.slots, "BOTTOMLEFT", 0, -12)
+  rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R)
   rail.nextName = rail:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   rail.nextName:SetPoint("TOPLEFT", rail.nextHead, "BOTTOMLEFT", 0, -4)
-  rail.nextName:SetWidth(174); rail.nextName:SetJustifyH("LEFT")
+  rail.nextName:SetWidth(W); rail.nextName:SetJustifyH("LEFT")
   rail.nextCost = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   rail.nextCost:SetPoint("TOPLEFT", rail.nextName, "BOTTOMLEFT", 0, -2)
+  rail.nextCost:SetWidth(W); rail.nextCost:SetJustifyH("LEFT")
   rail.nextWhy = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   rail.nextWhy:SetPoint("TOPLEFT", rail.nextCost, "BOTTOMLEFT", 0, -3)
-  rail.nextWhy:SetWidth(174); rail.nextWhy:SetJustifyH("LEFT")
+  rail.nextWhy:SetWidth(W); rail.nextWhy:SetJustifyH("LEFT")
 
   rail.saveLine = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.saveLine:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -156)
-  rail.saveLine:SetWidth(174); rail.saveLine:SetJustifyH("LEFT")
+  rail.saveLine:SetPoint("TOPLEFT", rail.nextWhy, "BOTTOMLEFT", 0, -10)
+  rail.saveLine:SetWidth(W); rail.saveLine:SetJustifyH("LEFT")
 
   rail.body = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.body:SetPoint("TOPLEFT", rail, "TOPLEFT", 18, -186)
-  rail.body:SetWidth(174); rail.body:SetJustifyH("LEFT"); rail.body:SetJustifyV("TOP")
+  rail.body:SetPoint("TOPLEFT", rail.saveLine, "BOTTOMLEFT", 0, -8)
+  rail.body:SetWidth(W); rail.body:SetJustifyH("LEFT"); rail.body:SetJustifyV("TOP")
   rail.body:SetSpacing(2)
 
   rail.footer = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.footer:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 18, 40)
+  rail.footer:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 12, 40)
+  rail.footer:SetWidth(W); rail.footer:SetJustifyH("LEFT")
 
-  rail.stanceBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.stanceBtn:SetWidth(84); rail.stanceBtn:SetHeight(20)
-  rail.stanceBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 14)
-  rail.stanceBtn:SetScript("OnClick", function()
-    AA.Command(Stance() == "loop" and "push" or "loop")
+  -- Toggle the optional temp-survival tier (tier 5) in/out of the list.
+  rail.survivalBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.survivalBtn:SetWidth(96); rail.survivalBtn:SetHeight(20)
+  rail.survivalBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 12, 14)
+  rail.survivalBtn:SetScript("OnClick", function()
+    AA.Command("survival")
   end)
 
   local refresh = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
