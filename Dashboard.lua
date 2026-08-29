@@ -180,6 +180,23 @@ function D.ShowView(id)
   end
 end
 
+-- Re-run whatever view is currently open, so the pane reflects a new build
+-- instead of showing stale echoes. Called when the active build changes (server
+-- "echoes were replaced" message, and the AshAdvisor loadout-switch signal).
+function D.RefreshCurrent()
+  if not (frame and frame:IsShown()) then return end
+  PP.safeCall(D.Refresh)
+  local id = frame.view
+  if id and id ~= "home" then
+    local v = VIEWS[id]
+    local m = v and v.mod and v.mod()
+    if m then
+      if m.OnShow then PP.safeCall(m.OnShow)
+      elseif m.Refresh then PP.safeCall(m.Refresh) end
+    end
+  end
+end
+
 -- The one public entry: open the shell and show a view (default home).
 function D.Open(id)
   if not frame then D.Init() end
@@ -351,6 +368,16 @@ function D.Init()
     if self.elapsed > 3 then
       self.elapsed = 0
       if self.now and self.view == "home" then self.now:SetText(D.NextAction()) end
+    end
+  end)
+
+  -- Auto-refresh the open pane when the server swaps your echoes (build change).
+  local ev = CreateFrame("Frame")
+  ev:RegisterEvent("CHAT_MSG_SYSTEM")
+  ev:SetScript("OnEvent", function(_, _, msg)
+    if msg and (string.find(string.lower(msg), "echoes were replaced", 1, true)
+      or string.find(string.lower(msg), "build applied", 1, true)) then
+      PP.safeCall(D.RefreshCurrent)
     end
   end)
 

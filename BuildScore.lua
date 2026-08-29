@@ -62,8 +62,13 @@ local function QualityStats()
 end
 
 function BS.Compute()
-  local tiles, why = PP.TomeManager and PP.TomeManager.AllTiles
-    and PP.TomeManager.AllTiles()
+  -- Call AllTiles directly: an `and`-chain would truncate its multiple returns,
+  -- dropping the "closed"/"empty" reason and mislabeling a closed window as
+  -- "couldn't read the catalog".
+  local tiles, why
+  if PP.TomeManager and PP.TomeManager.AllTiles then
+    tiles, why = PP.TomeManager.AllTiles()
+  end
   if not tiles then return nil, why end
 
   -- Keeper pool: of every keeper-rated tome in this filter, how many owned.
@@ -294,10 +299,9 @@ function BS.Refresh()
   local r, why = BS.Compute()
   if not r then
     frame.score:SetText(GOLD .. "No data" .. R)
-    frame.note:SetText(DIM .. ((why == "closed" or why == "empty")
-      and "Open the Echoes window (All Echoes tab; filter = All classes for the "
-        .. "full picture), then hit Refresh."
-      or "Couldn't read the catalog.") .. R)
+    frame.note:SetText(DIM .. "Open Character Progression -> Echoes once (All "
+      .. "Echoes tab; filter = All classes for the full picture) so the catalog "
+      .. "loads, then hit Refresh." .. R)
     for _, key in ipairs({ "locks", "keeper", "quality", "hygiene" }) do
       SetBar(frame.rows[key], 0, "-", "")
     end

@@ -293,6 +293,10 @@ local function OnLoadouts(body)
         .. DIM .. "  (fights now tag automatically)" .. R)
     end
     lastBuildId = bId
+    -- Reflect the new build in the dashboard if it's open.
+    if PP.Dashboard and PP.Dashboard.RefreshCurrent then
+      PP.safeCall(PP.Dashboard.RefreshCurrent)
+    end
   end
   if pendingReport then
     pendingReport = false
