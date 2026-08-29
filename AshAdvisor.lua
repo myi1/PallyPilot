@@ -410,6 +410,18 @@ end
 
 function AA.Command(arg)
   arg = arg and string.lower(arg) or ""
+  local cmd, rest = arg:match("^(%S*)%s*(.-)$")
+  if cmd == "import" then
+    if rest ~= "" then AA.ImportPlan(rest)
+    else AA.ShowBuildBox("Paste your build string from the web builder", "", true) end
+    return
+  elseif cmd == "export" then AA.ExportPlan(); return
+  elseif cmd == "next" or cmd == "guide" then AA.GuideNext(); return
+  elseif cmd == "clearbuild" then
+    PP.db.ashPlan = nil; PP.print("Build plan cleared.")
+    if AA.RefreshRail then PP.safeCall(AA.RefreshRail) end
+    return
+  end
   if arg == "survival" or arg == "push" or arg == "loop" then
     if not (PP.db.options) then PP.db.options = {} end
     -- "survival" toggles; "push"/"loop" kept as aliases (push showed temp,
@@ -732,6 +744,180 @@ function AA.RefreshRail()
   if rail.survivalBtn then
     rail.survivalBtn:SetText(ShowSurvival() and "Survival: ON" or "Survival: OFF")
   end
+  if rail.guideBtn then
+    local plan = PP.db and PP.db.ashPlan and PP.db.ashPlan.ids
+    if plan then
+      local left = 0
+      for _, id in ipairs(plan) do
+        local nd = NodeById(id)
+        if nd and ((ranks and ranks[id] or 0) < NodeMaxRank(nd)) then left = left + 1 end
+      end
+      rail.guideBtn:SetText(left > 0 and ("Next node (" .. left .. " left)") or "Build complete")
+      rail.guideBtn:SetScript("OnClick", function() AA.GuideNext() end)
+      -- Auto-advance: glow the plan's next node GREEN so it moves along as you
+      -- buy (each purchase pushes a loadout update that re-runs this refresh).
+      local nid = AA.NextPlanNode(ranks)
+      if nid then GlowNode(nid, 0.42, 0.95, 0.45) end
+    else
+      rail.guideBtn:SetText("Import build")
+      rail.guideBtn:SetScript("OnClick", function()
+        AA.ShowBuildBox("Paste your build string from the web builder", "", true)
+      end)
+    end
+  end
+end
+
+-- ======================= Build import / guided fill =======================
+-- A plan is a list of node ids from the web builder (EBASH1:id.id...). We NEVER
+-- buy nodes for you (that is bannable input automation) -- we center the tree on
+-- the next node and glow it; your click makes the purchase.
+local EBASH_PFX = "EBASH1:"
+local function PlanIds() return PP.db and PP.db.ashPlan and PP.db.ashPlan.ids or nil end
+
+function AA.ImportPlan(str)
+  str = (str or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  local body = str:find(":") and str:sub(str:find(":") + 1) or str
+  local ids, seen = {}, {}
+  for tok in string.gmatch(body, "[^%.,%s]+") do
+    local id = tonumber(tok)
+    if id and NodeById(id) and not seen[id] then seen[id] = true; ids[#ids + 1] = id end
+  end
+  if #ids == 0 then
+    PP.print(EMBER .. "Couldn't read that build string." .. R .. DIM
+      .. " Paste the EBASH1:... string from the web builder." .. R)
+    return
+  end
+  PP.db.ashPlan = PP.db.ashPlan or {}
+  PP.db.ashPlan.ids = ids
+  PP.print("Build imported: " .. GOLD .. #ids .. " nodes" .. R .. DIM
+    .. ". Open the Skill Tree and click " .. R .. BRIGHT .. "Guide" .. R .. DIM
+    .. " (or /pp ash next) to fill it node by node." .. R)
+  if AA.RefreshRail then PP.safeCall(AA.RefreshRail) end
+end
+
+function AA.ExportPlan()
+  local ranks = state and state.nodeRanks
+  if not ranks then
+    PP.print("No tree state yet — open the Skill Tree once, then /pp ash export.")
+    return
+  end
+  local ids = {}
+  for id, r in pairs(ranks) do if r and r > 0 then ids[#ids + 1] = id end end
+  table.sort(ids)
+  AA.ShowBuildBox("Your current tree (copy into the web builder)", EBASH_PFX .. table.concat(ids, "."), false)
+end
+
+-- Next planned node to buy: an under-max planned node purchasable now (cheapest),
+-- else a connector step toward the first unreachable planned node.
+function AA.NextPlanNode(ranks)
+  local ids = PlanIds(); if not ids then return nil, "noplan" end
+  local best, bestCost, remaining = nil, nil, 0
+  for _, id in ipairs(ids) do
+    local nd = NodeById(id)
+    if nd then
+      local cur = (ranks and ranks[id]) or 0
+      if cur < NodeMaxRank(nd) then
+        remaining = remaining + 1
+        if Purchasable(id, ranks) then
+          local c = NodeRankCost(nd, cur + 1)
+          if not best or (c and bestCost and c < bestCost) or (c and not bestCost) then best, bestCost = id, c end
+        end
+      end
+    end
+  end
+  if best then return best, "buy", remaining end
+  for _, id in ipairs(ids) do
+    local nd = NodeById(id); local cur = (ranks and ranks[id]) or 0
+    if nd and cur < NodeMaxRank(nd) then
+      local step = PathNextBuy(id, ranks)
+      if step then return step, "connector", remaining end
+    end
+  end
+  if remaining == 0 then return nil, "done" end
+  return nil, "blocked", remaining
+end
+
+-- Center the Skill Tree scroll on a node (replicates the server layout math).
+function AA.PointAtNode(id)
+  local scroll = _G["skillTreeScroll"]; local canvas = _G["skillTreeCanvas"]
+  local nd = NodeById(id)
+  if not (scroll and canvas and nd and nd.x and nd.y) then return false end
+  local db = _G.TalentDatabase; local nodes = db and db[0] and db[0].nodes
+  if not nodes then return false end
+  local minX, maxY
+  for _, n in ipairs(nodes) do
+    if n.x and (not minX or n.x < minX) then minX = n.x end
+    if n.y and (not maxY or n.y > maxY) then maxY = n.y end
+  end
+  local SPACING, MARGIN = 0.8, 300
+  local ox = MARGIN + (nd.x - minX) * SPACING
+  local oy = MARGIN + (maxY - nd.y) * SPACING
+  local zoom = (canvas.GetScale and canvas:GetScale()) or 0.6
+  local h = math.max(0, math.min(scroll:GetHorizontalScrollRange() or 0, ox * zoom - scroll:GetWidth() / 2))
+  local v = math.max(0, math.min(scroll:GetVerticalScrollRange() or 0, oy * zoom - scroll:GetHeight() / 2))
+  scroll:SetHorizontalScroll(h); scroll:SetVerticalScroll(v)
+  return true
+end
+
+-- Guided step: find the next node, bring it into view, glow it. No purchase.
+function AA.GuideNext()
+  local ranks = state and state.nodeRanks
+  local id, why, remaining = AA.NextPlanNode(ranks)
+  if why == "noplan" then
+    PP.print("No build loaded. Import one first: " .. BRIGHT .. "/pp ash import" .. R
+      .. DIM .. " (paste the string from the web builder)." .. R)
+    return
+  end
+  if why == "done" then PP.print(VERD .. "Build complete — every planned node is bought." .. R) return end
+  if not id then
+    PP.print(EMBER .. "No reachable planned node right now." .. R .. DIM
+      .. " Open the Skill Tree so ranks load, or the build may need a connector it doesn't include." .. R)
+    return
+  end
+  ClearGlows()
+  local moved = AA.PointAtNode(id)
+  GlowNode(id, 1, 0.72, 0.20)
+  local tag = (why == "connector") and (DIM .. " (connector toward your build)" .. R) or ""
+  PP.print(GOLD .. "Next: " .. R .. BRIGHT .. NodeName(id) .. R .. tag
+    .. (remaining and (DIM .. "  — " .. remaining .. " planned left" .. R) or "")
+    .. (moved and "" or (EMBER .. "  (open the Skill Tree to jump to it)" .. R)))
+end
+
+-- Reusable copy/paste box (export shows text selected; import takes a paste).
+function AA.ShowBuildBox(title, text, isImport)
+  local f = AA.buildBox
+  if not f then
+    f = CreateFrame("Frame", "PallyPilotAshBuildBox", UIParent)
+    f:SetSize(460, 190); f:SetPoint("CENTER"); f:SetFrameStrata("DIALOG")
+    f:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+      edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32,
+      edgeSize = 24, insets = { left = 8, right = 8, top = 8, bottom = 8 } })
+    f:EnableMouse(true); f:SetMovable(true); f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMoving)
+    f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal"); f.title:SetPoint("TOP", 0, -14)
+    f.title:SetWidth(420)
+    local sf = CreateFrame("ScrollFrame", "PallyPilotAshBuildScroll", f, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT", 16, -40); sf:SetPoint("BOTTOMRIGHT", -34, 46)
+    local eb = CreateFrame("EditBox", nil, sf)
+    eb:SetMultiLine(true); eb:SetFontObject(ChatFontNormal); eb:SetWidth(400)
+    eb:SetAutoFocus(false); eb:EnableMouse(true)
+    eb:SetScript("OnEscapePressed", function() f:Hide() end)
+    sf:SetScrollChild(eb); f.eb = eb
+    f.ok = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    f.ok:SetSize(120, 22); f.ok:SetPoint("BOTTOM", 0, 14)
+    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton"); close:SetPoint("TOPRIGHT", -4, -4)
+    AA.buildBox = f
+  end
+  f.title:SetText(GOLD .. title .. R)
+  f.eb:SetText(text or "")
+  f.ok:SetText(isImport and "Import" or "Close")
+  f.ok:SetScript("OnClick", function()
+    if isImport then AA.ImportPlan(f.eb:GetText()) end
+    f:Hide()
+  end)
+  f:Show()
+  f.eb:SetFocus()
+  if not isImport then f.eb:HighlightText() end
 end
 
 function AA.InitRail()
@@ -790,8 +976,17 @@ function AA.InitRail()
   rail.body:SetSpacing(2)
 
   rail.footer = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.footer:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 12, 40)
+  rail.footer:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 12, 64)
   rail.footer:SetWidth(W); rail.footer:SetJustifyH("LEFT")
+
+  -- Guided fill / import: full-width button just above the bottom row. When a
+  -- build is loaded it steps you to the next node; otherwise it opens the paste
+  -- box. It never buys a node -- your click on the glowing node does.
+  rail.guideBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.guideBtn:SetHeight(20)
+  rail.guideBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 12, 38)
+  rail.guideBtn:SetPoint("BOTTOMRIGHT", rail, "BOTTOMRIGHT", -12, 38)
+  rail.guideBtn:SetText("Import build")
 
   -- Toggle the optional temp-survival tier (tier 5) in/out of the list.
   rail.survivalBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
