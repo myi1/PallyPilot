@@ -13,7 +13,10 @@ PP.AshData = {}
 local AD = PP.AshData
 
 -- Tree-wide constants (ProjectEbonhold.Constants + skillTree.lua, extract).
-AD.TREE_CAP = 428303860
+-- The bankable soul-ash limit was raised to 2^64-1 in the 2026-08-27 update
+-- (effectively unlimited). Stored as a Lua double so it's approximate; this is
+-- only a documentation ceiling, not used in cost math.
+AD.TREE_CAP = 18446744073709551615
 -- Soul Ashes MILESTONES: each one unlocks ONE permanent Echo (lock) slot —
 -- spells 101259-101263 "Echo Attunement Slot". They trigger on COMMITTED
 -- (lifetime banked) ash, not spendable. So: slot 1 at 1M, slot 2 at 2M,
@@ -21,9 +24,12 @@ AD.TREE_CAP = 428303860
 -- "all 5 slots at 25M" is wrong — 25M is the THIRD slot.)
 AD.MILESTONES = { 1000000, 2000000, 25000000, 100000000, 215000000 }
 -- Infinite nodes (Endless Vitality / Might / Growth): rank cost is
--- ceil(base * growth^(rank-1)), capped per rank, max 255 ranks.
--- Mirrors SkillTreeNode::GetSoulPointsCostForRank server-side.
-AD.INFINITE = { base = 2000, growth = 1.25, maxRank = 255, rankCostCap = 100000000 }
+-- ceil(base * growth^(rank-1)), capped per rank at rankCostCap.
+-- The old 255-rank hard cap was REMOVED in the 2026-08-29 update -- infinite
+-- nodes are now uncapped (limited only by cost). maxRank is a large sentinel so
+-- they never read as "maxed"; it is never looped over, only used as a scalar
+-- total for the capped check / fallback display.
+AD.INFINITE = { base = 2000, growth = 1.25, maxRank = 100000, rankCostCap = 100000000 }
 -- Prestige: unlocks at 10,771,440 committed; resets the tree (only
 -- permanent-flagged nodes survive) and converts the DESTROYED committed pool
 -- into a permanent ash-gain bonus: +20% per "gate worth", sqrt curve,
@@ -121,13 +127,16 @@ AD.NODES = {
   { key = "vitality", name = "Endless Vitality", tier = 3, infinite = true,
     ids = { 2000 }, costs = {},
     effect = "+5 Stamina per rank, permanent -- the survival that compounds across prestiges and never needs rebuying", perm = true },
-  { key = "might", name = "Endless Might", tier = 3, infinite = true,
-    ids = { 2001 }, costs = {},
-    effect = "+10 AP (or +5 SP) per rank, permanent",
-    perm = true },
+  -- Growth before Might for a paladin: Growth feeds your highest stat (Strength
+  -- -> SP, the stat that actually scales our damage), while Might gives Ret AP,
+  -- which does almost nothing for us except via AP->SP conversion.
   { key = "growth", name = "Endless Growth", tier = 3, infinite = true,
     ids = { 2002 }, costs = {},
-    effect = "+highest stat, ramping (+1/rank early, up to +20/rank) -- commit deep, permanent",
+    effect = "+highest stat, ramping (+1/rank early, up to +20/rank) -- for us that's Strength -> SP. Commit deep, permanent.",
+    perm = true },
+  { key = "might", name = "Endless Might", tier = 3, infinite = true,
+    ids = { 2001 }, costs = {},
+    effect = "+10 AP per rank for Ret (+5 SP for casters), permanent. Ret gets AP -- the weak stat for us; prefer Endless Growth (Strength -> SP).",
     perm = true },
 
   -- TIER 4 -- QUALITY OF LIFE.
