@@ -129,8 +129,20 @@ local function CastTrack(spellName)
 end
 
 -- Persist every recorded fight for post-session analysis (read from
--- SavedVariables after /reload). Ring-buffered to the last 150 fights.
-local MAX_FIGHTS = 150
+-- SavedVariables after /reload). Ring-buffered to the last N fights, where N is
+-- PP.db.fightCap (default 1000, ~1.75 KB/fight => ~1.7 MB). Configurable via
+-- /pp bench cap <n>, hard-clamped to a safe range so the SavedVariables file
+-- can't grow into logout-hitch / corruption-loss territory.
+local DEFAULT_FIGHT_CAP = 1000
+local FIGHT_CAP_MIN, FIGHT_CAP_MAX = 50, 20000
+function CM.FightCap()
+  local n = PP.db and PP.db.fightCap
+  if type(n) ~= "number" then return DEFAULT_FIGHT_CAP end
+  if n < FIGHT_CAP_MIN then return FIGHT_CAP_MIN end
+  if n > FIGHT_CAP_MAX then return FIGHT_CAP_MAX end
+  return n
+end
+CM.FIGHT_CAP_MIN, CM.FIGHT_CAP_MAX = FIGHT_CAP_MIN, FIGHT_CAP_MAX
 local function SaveFight(f)
   PP.db.fights = PP.db.fights or {}
   local log = PP.db.fights
@@ -202,7 +214,24 @@ local function SaveFight(f)
     blows = topBlows,              -- top-3 incoming hits {s=spell, src, a=amount}
     died = f.died or nil,
   }
-  while #log > MAX_FIGHTS do table.remove(log, 1) end
+  local cap = CM.FightCap()
+  while #log > cap do table.remove(log, 1) end
+end
+
+-- Set the history cap. Clamps to [MIN, MAX], persists, and trims the log now if
+-- the new cap is smaller. Returns (appliedCap, dropped, clamped).
+function CM.SetFightCap(n)
+  n = tonumber(n)
+  if not n then return nil end
+  n = math.floor(n)
+  local clamped = false
+  if n < FIGHT_CAP_MIN then n = FIGHT_CAP_MIN; clamped = true end
+  if n > FIGHT_CAP_MAX then n = FIGHT_CAP_MAX; clamped = true end
+  PP.db.fightCap = n
+  local log = PP.db.fights or {}
+  local dropped = 0
+  while #log > n do table.remove(log, 1); dropped = dropped + 1 end
+  return n, dropped, clamped
 end
 
 local function Fmt(n)

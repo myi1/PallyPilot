@@ -597,8 +597,28 @@ SlashCmdList["PALLYPILOT"] = function(line)
       .. string.format("%.3f, %.3f", x or 0, y or 0)
       .. ((not x or (x == 0 and y == 0)) and " (no coords here — waypoint arrows can't work in this map)" or " (coords WORK here — arrows possible!)"))
   elseif cmd == "bench" then
+    local capWord, capNum = string.match(arg, "^(%a+)%s+(%d+)$")
     if arg == "" or arg == "compare" or arg == "report" then
       if PP.CombatMeter.BenchReport then PP.safeCall(PP.CombatMeter.BenchReport) end
+    elseif string.lower(arg) == "cap" or (capWord and string.lower(capWord) == "cap") then
+      local CM = PP.CombatMeter
+      if capNum then
+        local applied, dropped, clamped = CM.SetFightCap(capNum)
+        if applied then
+          local mb = applied * 1750 / 1024 / 1024
+          PP.print(string.format("Fight history cap set to %d (~%.2f MB max).%s%s",
+            applied,
+            mb,
+            clamped and string.format(" Clamped to the safe range %d-%d.", CM.FIGHT_CAP_MIN, CM.FIGHT_CAP_MAX) or "",
+            dropped > 0 and (" Trimmed " .. dropped .. " oldest fight(s) now.") or ""))
+        end
+      else
+        local cur = CM.FightCap and CM.FightCap() or 1000
+        local have = (PP.db.fights and #PP.db.fights) or 0
+        PP.print(string.format("Fight history cap: %d  (%d logged now, ~%.2f MB at cap). "
+          .. "Set with /pp bench cap <n> (range %d-%d).",
+          cur, have, cur * 1750 / 1024 / 1024, CM.FIGHT_CAP_MIN, CM.FIGHT_CAP_MAX))
+      end
     elseif arg == "off" then
       PP.db.benchTag = nil
       PP.print("Manual tag cleared — fights auto-tag with your active saved build again.")
@@ -610,6 +630,6 @@ SlashCmdList["PALLYPILOT"] = function(line)
         .. "/pp bench compare to compare, /pp bench off for auto.")
     end
   else
-    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear (affixes) | /pp gems (enchants/gems/glyphs) | /pp upgrades (gear health) | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare")
+    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear (affixes) | /pp gems (enchants/gems/glyphs) | /pp upgrades (gear health) | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare|cap <n>")
   end
 end
