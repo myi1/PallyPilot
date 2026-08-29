@@ -615,6 +615,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     else PP.safeCall(PP.UiScan) end
   elseif cmd == "orbscan" then
     PP.safeCall(PP.OrbScan)
+  elseif cmd == "orbpreview" or cmd == "orb" then
+    if PP.EchoFlow and PP.EchoFlow.OrbPreview then PP.safeCall(PP.EchoFlow.OrbPreview) end
   elseif cmd == "ash" then
     if PP.AshAdvisor and PP.AshAdvisor.Command then PP.safeCall(PP.AshAdvisor.Command, arg)
     elseif PP.AshAdvisor and PP.AshAdvisor.Report then PP.safeCall(PP.AshAdvisor.Report) end

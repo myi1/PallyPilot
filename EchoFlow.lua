@@ -499,6 +499,116 @@ local function FindForgetDialog()
   return nil
 end
 
+-- ---------------------------------------------------------------------------
+-- New (2026-08-29) orb reroll panel: a 3-choice "Select" offer with a
+-- "Use Orbs" button to reroll the whole offer. Found at RUNTIME by button text
+-- (exactly like FindForgetDialog), and each card's echo is read with the same
+-- region-matching TileEcho uses -- so NO frame scan or hardcoded names needed.
+
+-- Read the echo shown on a choice card: scan the card's own font regions, then
+-- one level of children (the name may sit on a child fontstring).
+local function ReadCardEcho(cardFrame)
+  if not cardFrame then return nil end
+  local function scanRegions(f)
+    local ok, regions = pcall(function() return { f:GetRegions() } end)
+    if not ok then return nil end
+    for _, reg in ipairs(regions) do
+      local okt, t = pcall(function()
+        if reg.GetObjectType and reg:GetObjectType() == "FontString" then
+          return reg:GetText()
+        end
+      end)
+      if okt and t and t ~= "" then
+        local display, verdict = PP.EchoAudit.MatchDisplay(t)
+        if display then return display, verdict end
+      end
+    end
+    return nil
+  end
+  local d, v = scanRegions(cardFrame)
+  if d then return d, v end
+  local okk, kids = pcall(function() return { cardFrame:GetChildren() } end)
+  if okk then
+    for _, c in ipairs(kids) do
+      d, v = scanRegions(c)
+      if d then return d, v end
+    end
+  end
+  return nil
+end
+
+-- Returns { useOrbs = <button|nil>, choices = { {btn, name, verdict}, ... } }
+-- or nil when the panel isn't on screen.
+local function FindRerollPanel()
+  local choices, useOrbs = {}, nil
+  local f = EnumerateFrames()
+  while f do
+    pcall(function()
+      if f:IsVisible() and f:GetObjectType() == "Button" then
+        local t = f.GetText and f:GetText()
+        local fs = f.GetFontString and f:GetFontString()
+        t = t or (fs and fs:GetText())
+        if t then
+          local low = string.lower(t)
+          if string.find(low, "use orb", 1, true) then
+            useOrbs = f
+          elseif string.find(low, "^select") then -- "Select", "Select (1)"
+            local card = f:GetParent()
+            local name, verdict = ReadCardEcho(card)
+            if not name and card then
+              name, verdict = ReadCardEcho(card:GetParent())
+            end
+            choices[#choices + 1] = { btn = f, name = name, verdict = verdict }
+          end
+        end
+      end
+    end)
+    f = EnumerateFrames(f)
+  end
+  if #choices == 0 and not useOrbs then return nil end
+  return { useOrbs = useOrbs, choices = choices }
+end
+
+-- Verdict -> pick rank (higher = keep). Junk (X) and unread sort to the bottom.
+local PICK_RANK = { CORE = 6, S = 5, A = 4, B = 3, C = 2, DISABLE = 0, REROLL = 0 }
+local function BestChoice(panel)
+  local best, bestRank = nil, -1
+  for _, ch in ipairs(panel.choices) do
+    local v = ch.verdict
+    if not v and ch.name then v = select(1, PP.EchoAudit.VerdictFor(ch.name)) end
+    ch.verdict = v
+    local r = ch.name and (PICK_RANK[v or "?"] or 1) or -1
+    if r > bestRank then best, bestRank = ch, r end
+  end
+  return best, bestRank
+end
+
+-- Safe dry run: read the live panel and report what it sees + what it WOULD
+-- pick. No clicks. Proves the runtime reader works with no scan needed.
+function EF.OrbPreview()
+  local panel = FindRerollPanel()
+  if not panel then
+    PP.print("No reroll panel visible. Open the Use Orbs / Select panel, then /pp orbpreview.")
+    return
+  end
+  PP.print(GOLD .. "Reroll panel" .. R .. DIM .. " — " .. #panel.choices
+    .. " choice(s)" .. (panel.useOrbs and ", Use Orbs button found" or ", NO Use Orbs button")
+    .. R)
+  local best = BestChoice(panel)
+  for i, ch in ipairs(panel.choices) do
+    DEFAULT_CHAT_FRAME:AddMessage("  " .. GOLD .. i .. "." .. R .. " " .. BRIGHT
+      .. (ch.name or "(name unread)") .. R .. DIM .. " — "
+      .. tostring(ch.verdict or "?") .. R)
+  end
+  if best and best.name then
+    PP.print("Would pick: " .. BRIGHT .. best.name .. R .. DIM
+      .. " (" .. tostring(best.verdict or "?") .. ", best rating)." .. R)
+  else
+    PP.print(EMBER .. "Couldn't read the choices' names off the cards — tell Claude "
+      .. "(the catalog may not cover these, or the card layout differs)." .. R)
+  end
+end
+
 local function EngineTick(elapsed)
   if not engine.phase then return end
   if UnitAffectingCombat("player") then
