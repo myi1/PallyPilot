@@ -476,12 +476,14 @@ function AA.Render()
   Say("  " .. GOLD .. "Next best buys" .. R .. DIM
     .. " (priority order, exact node costs):" .. R)
   local showSurv = ShowSurvival()
+  local vet = AA.PrestigeVeteran(ranks)
   local i = 0
   local lastTier = nil
   for _, entry in ipairs(AD.NODES) do
     local cur, total, cost = NextBuy(entry, ranks)
     local capped = (cur ~= nil and cur >= total)
-    if not capped and not (entry.survival and not showSurv) then
+    local hideSurv = entry.survival and not showSurv and not (entry.farm and vet)
+    if not capped and not hideSurv then
       i = i + 1
       if entry.tier ~= lastTier then
         lastTier = entry.tier
@@ -564,24 +566,47 @@ local function GlowNode(id, r, g, b)
   glowing[#glowing + 1] = t
 end
 
+-- You've prestiged at least once (Borrowed Power owned) => the enablers are
+-- kept, so the useful recommendation is the TEMP rebuild, AoE-farm-survival
+-- first. On the very first climb (no Borrowed Power) the enablers lead instead.
+function AA.PrestigeVeteran(ranks)
+  return ranks and ((ranks[582] or 0) > 0) or false
+end
+
 -- Uncapped entries in priority order with cost/affordability/frontier id.
 local function BuyQueue(ranks, spendable)
   local out = {}
   local showSurv = ShowSurvival()
+  local vet = AA.PrestigeVeteran(ranks)
   for _, entry in ipairs(AD.NODES) do
     entry._bestId = nil
     local cur, total, cost = NextBuy(entry, ranks)
     local capped = (cur ~= nil and cur >= total)
-    if not capped and not (entry.survival and not showSurv) then
+    -- Farm-survival nodes always show for a prestige veteran (that's their
+    -- whole reason to open the tree post-reset); other survival stays behind
+    -- the toggle.
+    local hideSurv = entry.survival and not showSurv and not (entry.farm and vet)
+    if not capped and not hideSurv then
       out[#out + 1] = {
         name = entry.name, tier = entry.tier, effect = entry.effect,
         cur = cur, total = total, cost = cost, id = entry._bestId,
-        infinite = entry.infinite, perm = entry.perm,
+        infinite = entry.infinite, perm = entry.perm, farm = entry.farm,
         locked = entry._locked or false,
         afford = (cost and spendable and cost <= spendable
           and not entry._locked) or false,
       }
     end
+  end
+  -- Prestige veteran: float the AoE-farm-survival rebuild to the top (its enabler
+  -- nodes are already owned), preserving each group's internal order.
+  if vet then
+    local farm, rest = {}, {}
+    for _, q in ipairs(out) do
+      if q.farm then farm[#farm + 1] = q else rest[#rest + 1] = q end
+    end
+    out = {}
+    for _, q in ipairs(farm) do out[#out + 1] = q end
+    for _, q in ipairs(rest) do out[#out + 1] = q end
   end
   return out
 end
@@ -634,9 +659,11 @@ function AA.RefreshRail()
   end
 
   -- Focal: the top thing you can actually buy right now.
+  local vet = AA.PrestigeVeteran(ranks)
   local top = affordable[1]
   if top then
-    rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R)
+    rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R
+      .. ((vet and top.farm) and (VERD .. "  · farm rebuild" .. R) or ""))
     rail.nextName:SetText(BRIGHT .. top.name .. R)
     local rankStr = top.infinite and ("rank " .. (top.cur or "?"))
       or ((top.cur or "?") .. "/" .. top.total)
