@@ -173,6 +173,103 @@ function PP.UiScan()
     .. " visible frames. /reload to save it, then tell Claude — no screenshot needed.")
 end
 
+-- The new orb-reroll panel (Use Orbs / Select cards) is transient: triggering a
+-- reroll can auto-select and close it before you can type a command. So ARM this
+-- first, THEN trigger the reroll -- it polls ~10x/sec for up to 12s and captures
+-- the panel the instant its signature buttons ("Use Orbs" / "Select (") are
+-- visible. Saves a generic snapshot (scans.ui) plus a deep dump of the panel's
+-- top-level frame with data fields (scans.orbUI).
+local orbWatcher
+function PP.OrbScan()
+  PP.db.scans = PP.db.scans or {}
+  orbWatcher = orbWatcher or CreateFrame("Frame")
+  local elapsed, acc = 0, 0
+  local WINDOW = 12
+  PP.print("Orb scan ARMED for 12s — now trigger the reroll (bring up the Use Orbs / Select panel).")
+  orbWatcher:SetScript("OnUpdate", function(self, dt)
+    elapsed = elapsed + dt
+    acc = acc + dt
+    if acc < 0.1 and elapsed < WINDOW then return end
+    acc = 0
+    local hit = nil
+    local f = EnumerateFrames()
+    while f do
+      local found = pcall(function()
+        if f.IsVisible and f:IsVisible()
+           and f.GetObjectType and f:GetObjectType() == "Button" then
+          local fs = f.GetFontString and f:GetFontString()
+          local label = (fs and fs:GetText()) or (f.GetText and f:GetText()) or nil
+          if label then
+            local low = string.lower(label)
+            if string.find(low, "use orb", 1, true)
+               or string.find(low, "select (", 1, true) then
+              hit = f
+            end
+          end
+        end
+      end)
+      if hit then break end
+      f = EnumerateFrames(f)
+    end
+    if hit then
+      self:SetScript("OnUpdate", nil)
+      -- Generic snapshot of everything visible (names + parents).
+      PP.UiScan()
+      -- Climb to the panel's top-level frame, then deep-dump it with data fields.
+      local root, guard = hit, 0
+      while root and root.GetParent and guard < 12 do
+        local p = root:GetParent()
+        if not p or p == UIParent or p == WorldFrame then break end
+        root = p; guard = guard + 1
+      end
+      local out, n = {}, 0
+      local function fieldDump(fr)
+        local bits = {}
+        for k, v in pairs(fr) do
+          local tv = type(v)
+          if tv == "string" or tv == "number" or tv == "boolean" then
+            bits[#bits + 1] = tostring(k) .. "=" .. tostring(v)
+          end
+        end
+        table.sort(bits); return table.concat(bits, ", ")
+      end
+      local function walk(fr, depth)
+        if depth > 7 or n >= 1500 then return end
+        local kids = { fr:GetChildren() }
+        for i, c in ipairs(kids) do
+          if n >= 1500 then return end
+          local okc = pcall(function()
+            local ctype = c.GetObjectType and c:GetObjectType() or "?"
+            local name = c.GetName and c:GetName() or nil
+            local fs = c.GetFontString and c:GetFontString()
+            local label = (fs and fs:GetText()) or (c.GetText and c:GetText()) or nil
+            n = n + 1
+            out[n] = string.rep("  ", depth) .. ctype .. " " .. (name or ("#" .. i))
+              .. (label and (" txt=" .. tostring(label)) or "")
+              .. (c:IsVisible() and "" or " [hidden]")
+            local fd = fieldDump(c)
+            if fd ~= "" and n < 1500 then
+              n = n + 1
+              out[n] = string.rep("  ", depth) .. "   {" .. fd .. "}"
+            end
+          end)
+          if okc then walk(c, depth + 1) end
+        end
+      end
+      out[1] = "PANEL ROOT: " .. ((root.GetName and root:GetName()) or "(anonymous)")
+        .. " type=" .. ((root.GetObjectType and root:GetObjectType()) or "?")
+      n = 1
+      walk(root, 1)
+      PP.db.scans.orbUI = out
+      PP.db.scans.orbUITime = date("%Y-%m-%d %H:%M")
+      PP.print("Captured the ORB panel (" .. n .. " lines). /reload, then tell Claude — no dump needed.")
+    elseif elapsed >= WINDOW then
+      self:SetScript("OnUpdate", nil)
+      PP.print("Orb scan: never saw the panel in 12s. Re-run /pp orbscan, then trigger the reroll during the window.")
+    end
+  end)
+end
+
 -- Deep scan of a server-UI subtree: every child frame with its plain-data
 -- fields (node/echo data lives on buttons the way checkpoint data lived on
 -- map buttons). rootName + saveKey select the target.
@@ -516,6 +613,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     if arg == "echo" then PP.safeCall(PP.UiScanEcho)
     elseif arg == "ash" then PP.safeCall(PP.UiScanAsh)
     else PP.safeCall(PP.UiScan) end
+  elseif cmd == "orbscan" then
+    PP.safeCall(PP.OrbScan)
   elseif cmd == "ash" then
     if PP.AshAdvisor and PP.AshAdvisor.Command then PP.safeCall(PP.AshAdvisor.Command, arg)
     elseif PP.AshAdvisor and PP.AshAdvisor.Report then PP.safeCall(PP.AshAdvisor.Report) end
