@@ -601,13 +601,13 @@ SlashCmdList["PALLYPILOT"] = function(line)
       if PP.CombatMeter.BenchReport then PP.safeCall(PP.CombatMeter.BenchReport) end
     elseif arg == "off" then
       PP.db.benchTag = nil
-      PP.print("Benchmark tag cleared — fights log untagged.")
+      PP.print("Manual tag cleared — fights auto-tag with your active saved build again.")
     else
       PP.db.benchTag = arg
       PP.db.benchZone = GetRealZoneText()
-      PP.print("Benchmark tag set: '" .. arg .. "' for "
-        .. tostring(PP.db.benchZone) .. " — fights tag only in this zone. "
-        .. "/pp bench to compare arms, /pp bench off to clear.")
+      PP.print("Manual tag set: '" .. arg .. "' for "
+        .. tostring(PP.db.benchZone) .. " — overrides auto build-tagging in this zone. "
+        .. "/pp bench compare to compare, /pp bench off for auto.")
     end
   else
     PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear (affixes) | /pp gems (enchants/gems/glyphs) | /pp upgrades (gear health) | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare")

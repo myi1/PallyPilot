@@ -271,14 +271,29 @@ local function ParseLoadouts(body)
     maxEchoes = tonumber(maxEchoes),
     nodeRanks = chosen and chosen.nodeRanks or {},
     name = chosen and chosen.name or "?",
+    buildId = chosen and chosen.id or nil, -- stable saved-build identity
     at = GetTime(),
   }
 end
+
+-- Last saved-build id we announced, so a switch prints exactly once. Starts
+-- false (not nil) so the very first known build after login doesn't spam a
+-- "switch" notice for a build you never left.
+local lastBuildId = false
 
 local function OnLoadouts(body)
   local parsed = ParseLoadouts(body)
   if not parsed then return end
   state = parsed
+  -- Announce a genuine switch between saved builds (not the first read).
+  local bId = parsed.buildId
+  if bId ~= nil and bId ~= lastBuildId then
+    if lastBuildId ~= false then
+      PP.print("build -> " .. BRIGHT .. "\"" .. (parsed.name or "?") .. "\"" .. R
+        .. DIM .. "  (fights now tag automatically)" .. R)
+    end
+    lastBuildId = bId
+  end
   if pendingReport then
     pendingReport = false
     AA.Render()
@@ -333,6 +348,43 @@ local function RequestState()
 end
 
 function AA.GetState() return state end
+
+-- Active saved-build identity for auto fight-tagging. Returns (id, name) or nil
+-- when no loadout reply has landed yet. Read lazily at runtime (CombatMeter
+-- loads before this file), never captured at load.
+function AA.ActiveBuild()
+  if not state then return nil end
+  return state.buildId, state.name
+end
+
+-- Keep the active build fresh so fights stamp the right one. Echo builds can
+-- only be swapped out of combat, so a request on login + on combat-start (with
+-- a throttle) is enough; any server push is caught by the listener regardless.
+local lastReq = 0
+local function RefreshBuild()
+  local now = GetTime()
+  if now - lastReq < 15 then return end
+  lastReq = now
+  RequestState()
+end
+
+local buildWatch = CreateFrame("Frame")     -- one reused frame (never GC'd)
+local settleTimer = CreateFrame("Frame")    -- one reused settle timer
+local settleElapsed = 0
+settleTimer:Hide()
+settleTimer:SetScript("OnUpdate", function(self, dt)
+  settleElapsed = settleElapsed + dt
+  if settleElapsed >= 4 then self:Hide(); RefreshBuild() end
+end)
+buildWatch:RegisterEvent("PLAYER_ENTERING_WORLD")
+buildWatch:RegisterEvent("PLAYER_REGEN_DISABLED")
+buildWatch:SetScript("OnEvent", function(_, evt)
+  if evt == "PLAYER_ENTERING_WORLD" then
+    settleElapsed = 0; settleTimer:Show() -- let ProjectEbonhold load, then ask once
+  else
+    RefreshBuild() -- entering combat: the fight ahead tags with the current build
+  end
+end)
 
 -- ---------------------------------------------------------------------------
 -- Report

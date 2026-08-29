@@ -171,9 +171,17 @@ local function SaveFight(f)
   if tag and PP.db.benchZone and PP.db.benchZone ~= (GetRealZoneText() or "") then
     tag = nil
   end
+  -- Auto build tag: the active saved echo build (read lazily — AshAdvisor loads
+  -- after this file). A manual bench tag overrides it for within-build A/B.
+  local buildId, buildName
+  if PP.AshAdvisor and PP.AshAdvisor.ActiveBuild then
+    buildId, buildName = PP.AshAdvisor.ActiveBuild()
+  end
   log[#log + 1] = {
     t = time(),
     tag = tag,
+    build = tag or buildName,                 -- grouping label used by compare
+    buildId = (not tag) and buildId or nil,   -- stable id when auto-tagged
     when = date("%Y-%m-%d %H:%M"),
     zone = GetRealZoneText() or "?",
     target = topTarget,
@@ -485,20 +493,30 @@ local function Median(t)
   return (s[n / 2] + s[n / 2 + 1]) / 2
 end
 
--- Compare benchmark ARMS: group logged fights by their bench tag (set with
--- /pp bench <name>) and show per-arm median/best dps, echo%, damage taken, level
--- range and the most-fought target, so an A/B echo/talent swap gets a real
--- side-by-side read instead of a single blended number.
+-- Compare BUILDS: group logged fights by the saved echo build that was active
+-- (auto-tagged from the server's loadout), or by a manual bench tag when one was
+-- set. Shows per-build median/best dps, echo%, damage taken, level range and the
+-- most-fought target — a real side-by-side read instead of a blended number.
+-- Grouping key: stable buildId when present, else the build/tag name.
 function CM.BenchReport()
   local log = PP.db.fights or {}
   local arms, order = {}, {}
   for _, f in ipairs(log) do
     if (f.dur or 0) >= 8 and (f.total or 0) > 0 then
-      local tag = f.tag or "(untagged)"
-      local a = arms[tag]
+      local key, label
+      if f.buildId ~= nil then
+        key = "id:" .. tostring(f.buildId)
+        label = f.build or f.tag or ("build " .. tostring(f.buildId))
+      else
+        key = f.build or f.tag or "(untagged)"
+        label = key
+      end
+      local a = arms[key]
       if not a then
-        a = { tag = tag, dps = {}, echo = {}, taken = {}, lo = 999, hi = 0, targets = {} }
-        arms[tag] = a; order[#order + 1] = a
+        a = { tag = label, dps = {}, echo = {}, taken = {}, lo = 999, hi = 0, targets = {} }
+        arms[key] = a; order[#order + 1] = a
+      else
+        a.tag = label -- keep the most recent display name (survives a rename)
       end
       a.dps[#a.dps + 1] = f.dps or 0
       a.echo[#a.echo + 1] = f.echoPct or 0
@@ -526,7 +544,7 @@ function CM.BenchReport()
   end
   table.sort(order, function(x, y) return x.medDps > y.medDps end)
 
-  PP.print(GOLD .. "Bench compare" .. R .. DIM .. " — median dps per arm, best first" .. R)
+  PP.print(GOLD .. "Build compare" .. R .. DIM .. " — median dps per build, best first" .. R)
   for i, a in ipairs(order) do
     local lead = (i == 1 and #order > 1) and (VERD .. "> " .. R) or "  "
     DEFAULT_CHAT_FRAME:AddMessage(string.format(
@@ -538,24 +556,87 @@ function CM.BenchReport()
   end
 
   if #order < 2 then
-    PP.print(DIM .. "Only one arm logged. To A/B: " .. R .. BRIGHT
-      .. "/pp bench armA" .. R .. DIM .. ", play, " .. R .. BRIGHT .. "/pp bench armB"
-      .. R .. DIM .. ", play, then /pp bench to compare." .. R)
-    PP.print(DIM .. "Compare arms on the SAME target + level for a fair read." .. R)
+    PP.print(DIM .. "Only one build logged so far. Fights tag themselves with your "
+      .. "active saved build — just play a second build and they'll compare here." .. R)
+    PP.print(DIM .. "Compare builds on the SAME target + level for a fair read." .. R)
   else
     local a, b = order[1], order[2]
     local gap = (b.medDps > 0) and ((a.medDps - b.medDps) / b.medDps * 100) or 0
     PP.print(string.format("%s%s%s leads %s%s%s by %s%.0f%%%s median dps.",
       BRIGHT, a.tag, R, BRIGHT, b.tag, R, GOLD, gap, R))
     if a.top ~= b.top or math.abs(a.lo - b.lo) >= 4 then
-      PP.print(EMBER .. "Careful:" .. R .. DIM .. " these arms weren't fought on the "
+      PP.print(EMBER .. "Careful:" .. R .. DIM .. " these builds weren't fought on the "
         .. "same target/level — the gap may be conditions, not the build." .. R)
     end
-    if PP.db.benchTag then
-      PP.print(DIM .. "Now tagging: " .. R .. BRIGHT .. PP.db.benchTag .. R
-        .. DIM .. "  (/pp bench <name> to switch, /pp bench off to stop)." .. R)
+  end
+  -- Footer: what's being tagged right now (manual override vs auto build).
+  if PP.db.benchTag then
+    PP.print(DIM .. "Now tagging (manual): " .. R .. BRIGHT .. PP.db.benchTag .. R
+      .. DIM .. "  (/pp bench off to return to auto)." .. R)
+  else
+    local bName
+    if PP.AshAdvisor and PP.AshAdvisor.ActiveBuild then
+      local _; _, bName = PP.AshAdvisor.ActiveBuild()
+    end
+    if bName then
+      PP.print(DIM .. "Auto-tagging active build: " .. R .. BRIGHT .. bName .. R
+        .. DIM .. "  (/pp bench <name> to pin a manual A/B)." .. R)
     end
   end
+end
+
+-- Attribute a measured spell name -> (echo, tier). Procs roll up to the echo
+-- that grants them; kit stays itself with tier "KIT". Shared by the live meter.
+local function AttributeSpell(name)
+  if BASE_KIT[name] then return name, "KIT" end
+  local echo = PROC_ALIAS[string.lower(name)] or name
+  local tier = PP.EchoAudit and PP.EchoAudit.VerdictFor
+    and select(1, PP.EchoAudit.VerdictFor(echo)) or nil
+  return echo, tier
+end
+
+-- Live snapshot for the meter HUD. mode = "damage"|"dps"|"taken";
+-- segment = "current"|"last". Returns nil if there's no data yet.
+function CM.MeterData(mode, segment)
+  local f = (segment == "last") and lastFight or (fight or lastFight)
+  if not f then return nil end
+  local live = (f == fight)
+  local dur = live and math.max(0.1, GetTime() - f.start) or math.max(0.1, f.dur or 1)
+
+  if mode == "taken" then
+    local blows = {}
+    for _, b in ipairs(f.blows or {}) do blows[#blows + 1] = b end
+    table.sort(blows, function(a, b) return a.a > b.a end)
+    local rows = {}
+    for i = 1, math.min(12, #blows) do
+      rows[i] = { name = blows[i].s or "?", sub = blows[i].src, dmg = blows[i].a, kit = false }
+    end
+    return { rows = rows, total = f.taken or 0, dps = (f.taken or 0) / dur, dur = dur,
+             maxHit = f.maxHit or 0, live = live, mode = "taken", died = f.died }
+  end
+
+  local byEcho, tierOf, hitsOf, critsOf, mxOf = {}, {}, {}, {}, {}
+  for name, amt in pairs(f.spells or {}) do
+    local echo, tier = AttributeSpell(name)
+    byEcho[echo] = (byEcho[echo] or 0) + amt
+    tierOf[echo] = tier
+    hitsOf[echo] = (hitsOf[echo] or 0) + ((f.hits and f.hits[name]) or 0)
+    critsOf[echo] = (critsOf[echo] or 0) + ((f.crits and f.crits[name]) or 0)
+    if ((f.smax and f.smax[name]) or 0) > (mxOf[echo] or 0) then mxOf[echo] = f.smax[name] end
+  end
+  local total = f.total or 0
+  local rows, kit, uniq = {}, 0, 0
+  for echo, amt in pairs(byEcho) do
+    local isKit = (tierOf[echo] == "KIT")
+    if isKit then kit = kit + amt else uniq = uniq + 1 end
+    rows[#rows + 1] = { name = echo, tier = tierOf[echo], dmg = amt, kit = isKit,
+                        hits = hitsOf[echo] or 0, crit = critsOf[echo] or 0, mx = mxOf[echo] or 0 }
+  end
+  table.sort(rows, function(a, b) return a.dmg > b.dmg end)
+  return { rows = rows, total = total, dps = total / dur, dur = dur,
+           kitPct = total > 0 and math.floor(100 * kit / total + 0.5) or 0,
+           echoPct = total > 0 and math.floor(100 * (total - kit) / total + 0.5) or 0,
+           uniq = uniq, live = live, mode = (mode == "dps") and "dps" or "damage" }
 end
 
 function CM.Init()
