@@ -141,6 +141,58 @@ local function NearestNamedAncestor(f)
   return nil
 end
 
+-- One-shot CURRENT snapshot for diagnosis: player stats (HP / mitigation /
+-- offense -- the survival data no other scan captures) + gear + ash ranks, in a
+-- single /reload. Read by Claude from PallyPilotDB.scans.{snapshot,gear,ashTree}.
+function PP.Snapshot()
+  PP.db.scans = PP.db.scans or {}
+  local out = {}
+  local function add(s) out[#out + 1] = s end
+  local function num(v) return v and string.format("%.1f", v) or "?" end
+  local function estat(i) -- effective attribute (2nd return of UnitStat)
+    local ok, _, eff = pcall(UnitStat, "player", i)
+    return ok and eff or "?"
+  end
+  add("level=" .. tostring(UnitLevel("player"))
+    .. " class=" .. tostring(select(1, UnitClass("player"))))
+  local okhp, hp = pcall(UnitHealthMax, "player")
+  add("HPmax=" .. tostring(okhp and hp or "?"))
+  add("Strength=" .. tostring(estat(1)) .. " Stamina=" .. tostring(estat(3))
+    .. " Intellect=" .. tostring(estat(4)))
+  pcall(function()
+    local base, pos, neg = UnitAttackPower("player")
+    add("AttackPower=" .. tostring((base or 0) + (pos or 0) + (neg or 0)))
+  end)
+  pcall(function()
+    add("SpellPower(Holy)=" .. tostring(GetSpellBonusDamage and GetSpellBonusDamage(2) or "?"))
+  end)
+  pcall(function() add("MeleeCrit%=" .. num(GetCritChance and GetCritChance())) end)
+  pcall(function() add("SpellCrit(Holy)%=" .. num(GetSpellCritChance and GetSpellCritChance(2))) end)
+  pcall(function() add("MeleeHaste%=" .. num(GetMeleeHaste and GetMeleeHaste())) end)
+  pcall(function() add("SpellHaste%=" .. num(UnitSpellHaste and UnitSpellHaste("player"))) end)
+  pcall(function() add("ExpertiseRating=" .. tostring(GetCombatRating and GetCombatRating(24) or "?")) end)
+  pcall(function() add("MeleeHitBonus%=" .. num(GetCombatRatingBonus and GetCombatRatingBonus(6))) end)
+  pcall(function()
+    local _, eff = UnitArmor("player")
+    add("Armor=" .. tostring(eff or "?"))
+  end)
+  pcall(function() add("Dodge%=" .. num(GetDodgeChance and GetDodgeChance())) end)
+  pcall(function() add("Parry%=" .. num(GetParryChance and GetParryChance())) end)
+  pcall(function() add("Block%=" .. num(GetBlockChance and GetBlockChance())) end)
+  pcall(function() add("BlockValue=" .. tostring(GetShieldBlock and GetShieldBlock() or 0)) end)
+  pcall(function() add("Resilience%=" .. num(GetCombatRatingBonus and GetCombatRatingBonus(15))) end)
+  pcall(function()
+    local rs = {}
+    for i = 1, 6 do local _, r = UnitResistance("player", i); rs[#rs + 1] = tostring(r or 0) end
+    add("Resist(Holy/Fire/Nature/Frost/Shadow/Arcane)=" .. table.concat(rs, "/"))
+  end)
+  PP.db.scans.snapshot = out
+  PP.db.scans.snapshotTime = date("%Y-%m-%d %H:%M")
+  if PP.GearScan then PP.safeCall(PP.GearScan) end
+  if PP.AshTreeScan then PP.safeCall(PP.AshTreeScan) end
+  PP.print("Snapshot captured: stats + gear + ash ranks. /reload, then tell Claude.")
+end
+
 function PP.UiScan()
   local out, count = {}, 0
   local f = EnumerateFrames()
@@ -615,6 +667,8 @@ SlashCmdList["PALLYPILOT"] = function(line)
     else PP.safeCall(PP.UiScan) end
   elseif cmd == "orbscan" then
     PP.safeCall(PP.OrbScan)
+  elseif cmd == "snapshot" then
+    PP.safeCall(PP.Snapshot)
   elseif cmd == "orbpreview" or cmd == "orb" then
     if PP.EchoFlow and PP.EchoFlow.OrbPreview then PP.safeCall(PP.EchoFlow.OrbPreview) end
   elseif cmd == "ash" then
