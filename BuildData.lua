@@ -28,8 +28,11 @@ B.statExpertise = "Expertise hardcap 14% (56) for HC4/5; get it from ash tree + 
 -- Weapon enchant + gems. (Flurry/Vulnerability are AFFIXES — see affixWeapon.)
 -- What to socket, named for the Gear page's one-line "Gem" instruction.
 B.gemRec = "Haste (Quick King's Amber)"
-B.enchants = "Weapon ENCHANT: Black Magic (haste proc) — separate from the "
-  .. "Judgement/Vulnerability affix. Gems: Haste in every socket + 2 Haste/Stam "
+B.enchants = "Weapon ENCHANTS (you dual-wield): Black Magic on ONE weapon, "
+  .. "Mongoose on the OTHER. They do NOT stack -- each is a single buff -- so one "
+  .. "of each gives you TWO independent proc chances instead of one. (Community "
+  .. "finding, #hunter weapons thread; applies to any dual-wielder.) Separate from "
+  .. "the Judgement/Vulnerability AFFIX. Gems: Haste in every socket + 2 Haste/Stam "
   .. "to activate the Chaotic Skyflare Diamond (3% crit) meta."
 
 -- Seal, blessing & rotation (asked a lot; not obvious from the echo list).
@@ -126,13 +129,13 @@ B.catalog = {
   ["Necrotic Plague"] = "S",    -- 36k/s DoT-proc plague; jumps +25% per death
   ["Undead Slayer"] = "S",      -- up to +900 AP vs undead = all of Naxx/ICC
   -- A: strong, verified
-  ["Arcane Bombardment"] = "A", ["Paladin - Arcane Bombardment"] = "A", -- CS/Judgement fire 2 big arcane missiles
-  ["Stonefist Barrage"] = "A", ["Paladin - Stonefist Barrage"] = "A",   -- every Judgement hurls an AoE boulder
+  ["Paladin - Arcane Bombardment"] = "A", -- CS/Judgement fire 2 big arcane missiles
+  ["Paladin - Stonefist Barrage"] = "A",   -- every Judgement hurls an AoE boulder
   ["Blade Tempest"] = "A",      -- phys-on-DoT summons 36k/s whirlwind clone
   ["Broodmother's Fury"] = "A", -- cinder stacks into 121k Deep Breath
   ["Brittle Forging"] = "A",    -- fire-web: Heat -> Brittle (+20% crit) -> Shatter AoE
   ["Call of the Lich King"] = "A",
-  ["Crimson Reprisal"] = "A",   -- JoL/FoL heals deal 15% as damage
+  -- ("Crimson Reprisal" removed: no echo by that name exists in the perk DB.)
   ["Crusader's Surge"] = "A",   -- chance for instant Exorcism/FoL/HL
   ["Crushing Finish"] = "A",    -- execute, scales with Expertise
   ["Crushing Force"] = "A",     -- crit-rating stat echo (stat prio #2)
@@ -174,16 +177,21 @@ B.catalog = {
   ["Battlefield Hazard"] = "B", ["Beast Slayer"] = "B",
   ["Blighted Hazard"] = "B", ["Broodmother's Webbing"] = "B",
   ["Champion's Rally"] = "F", ["Chaotic Convergence"] = "B",  -- pure healer, useless solo Ret
-  ["Chill of the Bone Wyrm"] = "B",
+  -- A: Frost damage -> Rime -> Frost Breath + Brittle (+10% Frost dmg). Pairs
+  -- with Brittle Forging and the Darkburst (Frost) half of the engine. Nero: S.
+  ["Chill of the Bone Wyrm"] = "A",
   -- MEASURED (arm3 HoR-HC2 benchmark): its Fire Cyclone proc was the #1
   -- damage source (10-14% per fight) — the fire/frost echo web feeds it.
   ["Cinders of the Sanctum"] = "S",
   ["Conjured Flame"] = "B", ["Crippling Strikes"] = "B",
   ["Dark Nucleus"] = "B",
   ["Demon Slayer"] = "B", ["Divine Resonance"] = "B", ["Dragon Slayer"] = "B",
-  ["Drillmaster's Rebuke"] = "B", ["Earthen Snap"] = "B",
+  -- S: 350% weapon damage on a melee proc AND leaves the target Unbalanced
+  -- (+10% damage taken) -- a multiplier on the whole kit, and dual-wield rolls
+  -- the proc twice as often. Nero: S.
+  ["Drillmaster's Rebuke"] = "S", ["Earthen Snap"] = "B",
   ["Earthen Spike"] = "B", ["Earthen Stability"] = "B",
-  ["Elemental Slayer"] = "B", ["Ember Spark"] = "B",
+  ["Elemental Slayer"] = "B",  -- (bare "Ember Spark" removed: class-prefixed only)
   ["Paladin - Ember Spark"] = "B",
   ["Ember Ward"] = "B", ["Emberlord's Gift"] = "B",
   ["Emerald Vigor"] = "F",      -- pure healer, ally-targeted; useless solo Ret
@@ -196,37 +204,62 @@ B.catalog = {
   ["Hardened Resolve"] = "B", ["Hardened Skin"] = "B",
   ["Harpoon Barrage"] = "B", ["Holy Hazard"] = "B",
   ["Insulated Soul"] = "B",
-  ["Lightning Charged"] = "B", ["Machine Slayer"] = "B",
+  -- S (2026-08-30 community pass): Nero's canonical build rates it S and the
+  -- tooltip backs it for dual-wield -- 5 stacks = +10% attack speed AND its Nature
+  -- auto-attack damage feeds Twilight Equilibrium's Light Essence side.
+  ["Lightning Charged"] = "S", ["Machine Slayer"] = "B",
   ["Mana Infusion"] = "B",      -- verified: mana returns also heal above 80% mana
   ["Mutagenic Fumes"] = "B", ["Opening Split"] = "B",
   ["Permafrost Aura"] = "A",    -- measured: steady 3-4% + feeds the frost web
   -- Nero Epic build keeper: +10% Frost damage-taken amp + shatter on death.
-  ["Permeating Chill"] = "A", ["Polarity Shift"] = "B",
+  -- S: +10% CRIT (our #1 stat) and +5% damage while Positive, 10% damage taken
+  -- reduction while Negative. A solo melee paladin flips constantly, so it is
+  -- offence AND hardcore survival in one echo. Nero: S.
+  ["Permeating Chill"] = "A", ["Polarity Shift"] = "S",
   ["Prismatic Guard"] = "B", ["Raging Momentum"] = "B",
   ["Ravenous Bellow"] = "B", ["Reactive Retaliation"] = "B",
   ["Reinforced Shielding"] = "B", ["Relentless Energy"] = "B",
-  ["Rocket Strike"] = "B", ["Rootbreaker"] = "B",
+  -- A (CONDITIONAL): 5% melee/ranged proc, and it fires +1 extra Rocket PER
+  -- ACTIVE PET OR GUARDIAN. It is the hunter's whole engine because they field
+  -- snakes; for us it only scales if we are running the guardian echoes we
+  -- already rate S (Sanctum Sentries, Crypt Lord's Swarm). Scales off SP+AP.
+  -- Rate S in your head if that guardian package is up; A otherwise. Nero: S.
+  ["Rocket Strike"] = "A", ["Rootbreaker"] = "B",
   ["Ruthless Exploiter"] = "A", -- measured 6-8% of total on HC2 trash; my
                                 -- CC-only read was too narrow (procs off the
                                 -- echo web's freezes/roots/stuns constantly)
   ["Sanctified Sky"] = "B", ["Scorched Path"] = "B",
-  ["Shadow Crash"] = "B", ["Shadow Hazard"] = "B", ["Shadow Ward"] = "B",
+  -- A: procs off SHADOW DOT damage for a 10yd AoE hit -- we are DoT-centric
+  -- (Pandemic/Contagion) and Twilight Equilibrium keeps Shadow flowing. Nero: S;
+  -- held at A because it only fires off the Shadow half of the rotation.
+  ["Shadow Crash"] = "A", ["Shadow Hazard"] = "B", ["Shadow Ward"] = "B",
   ["Sharpened Edge"] = "B",     -- verified: small flat adder, not % damage
   ["Shielded Steps"] = "B", ["Shock Vortex"] = "B",
-  ["Slimebound Husk"] = "B", ["Spell Harmony"] = "B", ["Spiteful Shard"] = "B",
+  -- A: taking damage builds Molten Blood -> AoE slime + 10% damage taken
+  -- reduction + speed. Solo pack-farm sustain; triggers naturally in HC. Nero: S.
+  ["Slimebound Husk"] = "A", ["Spell Harmony"] = "B", ["Spiteful Shard"] = "B",
   ["Spiteful Thorns"] = "B", ["Steady Grip"] = "B",
   ["Stone Shatter"] = "B", ["Stoneskin Threads"] = "B",
   ["Stored Momentum"] = "B", ["Storm Hazard"] = "B", ["Sundered Will"] = "B",
   ["Swift Step"] = "B",
-  ["The Sporelord's Gift"] = "B", -- buffs "nearby allies"; solo value unclear
+  -- A: +10% CRIT DAMAGE from summoned Spores. Nero rates it S, but he plays
+  -- grouped and the buff reads "nearby allies" -- solo it is a party of one, so
+  -- it is worth strictly less to us than to him. Still good with our crit, hence
+  -- A not S. A clear case where the canonical build's CONTEXT differs from ours.
+  ["The Sporelord's Gift"] = "A",
   ["The Unclean's Fever"] = "A",  -- measured: consistent ~3% while tanking packs
   ["Titan's Grip"] = "B",       -- 2H-in-one-hand at -20% dmg; test vs 1H pair
-  ["Toxic Phials"] = "B", ["Twilight Combustion"] = "B",
+  -- S: near-perfect fit for the locked engine. Fire DoT + Shadow DoT on the same
+  -- target merge into a Twilight Rift (3467/s AoE) -- and Twilight Equilibrium
+  -- exists precisely to keep BOTH schools flowing. Nero rates it S too.
+  ["Toxic Phials"] = "B", ["Twilight Combustion"] = "S",
   ["Undead Bane"] = "B",        -- +600 SP vs undead; SP is secondary but real
   ["Agility Boost"] = "B",      -- weak alone, but a 3rd base-stat TYPE turns
                                 -- Resonant Build's +15% damage ON (with Str+Stam)
   ["Verdant Ward"] = "B", ["Warm-Blooded"] = "B",
-  ["Widow's Venom"] = "B", ["Wild Hazard"] = "B",
+  -- A: Nature damage -> 12 stacks -> Poison Bolt Volley (10yd AoE + DoT). Real
+  -- pack-farm value; Lightning Charged now feeds the Nature stacks. Nero: S.
+  ["Widow's Venom"] = "A", ["Wild Hazard"] = "B",
   -- Promotions from the Wkpal autopsy (2026-08-25): field data over theory.
   ["The Last Wall"] = "A",      -- +50% max HP; Wkpal runs it — losing it = -17k HP
   ["Drained Reserves"] = "A",   -- +15% spell dmg; -30% mana irrelevant with JotW
@@ -260,10 +293,16 @@ B.catalog = {
   -- Reworked in the 2028-08-27 patch (were talent-conflicting):
   -- Echoing Affliction now echoes 20% of your DoT damage to a 2nd enemy (30%
   -- chance) — free AoE cleave for the plague/DoT school. Strong for pack farming.
-  ["Echoing Affliction"] = "A",
+  -- ("Echoing Afflictions" removed. Two separate errors here, both caught by the
+  -- echo validator: we had it as the SINGULAR "Echoing Affliction" (a phantom key
+  -- -- the DB name is plural), and once corrected the classMask says PALADINS
+  -- CANNOT DRAW IT: mask 1533 = every class except bit 2 (Paladin). It is a fine
+  -- echo -- just not one of ours. Hunter/priest keep it.)
   -- Unstable Infusion: crits have 30% chance for an AoE explosion (sp0.44+ap0.22).
   -- Crit-gated, so only as good as your crit — B until your crit is real.
-  ["Unstable Infusion"] = "B",
+  -- ("Unstable Infusion" removed: it exists as 8 per-class variants (Warrior,
+  -- Hunter, Rogue, Priest, DK, Shaman, Warlock, Druid) and there is NO Paladin
+  -- one -- classMask never includes bit 2. A paladin can't draw it.)
 }
 
 -- Cross-class proc variants (Wkpal insight): they never proc for a paladin,
@@ -278,10 +317,10 @@ do
       B.catalog[c .. " - " .. p] = "A"
     end
   end
-  B.catalog["Corrosive Breath"] = "A"
-  B.catalog["Arcane Bombardment"] = "A"
-  B.catalog["Stonefist Barrage"] = "A"
-  B.catalog["Ember Spark"] = "A"
+  -- (No BARE "Arcane Bombardment"/"Corrosive Breath"/"Stonefist Barrage"/
+  -- "Ember Spark" entries: the perk DB only ever carries these CLASS-PREFIXED
+  -- ("Paladin - Ember Spark" etc, one per class), so a bare key is a phantom
+  -- rating that can never match. The loop above already covers every class.)
   -- Nero-endorsed damage echoes (Ebonhold #paladin, Aug 2026 — see
   -- docs/ebonhold-paladin/echoes.md for his full import string + de-prioritized
   -- list: Archmage / Echoing Tides / Emberlord).

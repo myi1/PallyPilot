@@ -33,18 +33,49 @@ H.statNote = "Ranged hit to cap FIRST (~8% / 263; verify on a dummy). Armor Pen 
   .. "NOT the Ebonhold meta.)"
 
 H.reference = {
+  { title = "The one principle", lines = {
+    "Every working hunter build here does the same thing: " .. GOLD
+      .. "maximise PROCS PER SECOND" .. R .. ". Your damage is echoes, not shots -- so "
+      .. "haste + cooldown reduction + attack volume is the whole game. The three builds "
+      .. "below are just different ways to generate procs.",
+  } },
   { title = "Ebonhold builds (echo-driven)", lines = {
-    GOLD .. "Snake Trap / Rocket Strike" .. R .. " (most popular) -- drop Snake Trap and "
-      .. "spam the snake macro to keep MAX snakes out; Rocket Strike then fires per "
-      .. "snake on every one of YOUR attacks. Huge AoE + single-target. The snakes are "
-      .. "just a rocket-count multiplier -- they are NOT scaled by affixes or pet AP, so "
-      .. "only their NUMBER matters.",
-    GOLD .. "Arcane 'Bomba'" .. R .. " -- spam Arcane Shot / Chimera Shot with all the "
-      .. "haste you have (Arcane Cadence has no cooldown), keep Aimed Shot up, weave "
-      .. "Steady/Multi-Shot to extend Arcane Cadence. MM talents for Trueshot Aura, SV "
-      .. "for Expose Weakness + the Stam/AP buff.",
-    DIM .. "Both are proc/haste builds -- forget the retail shot-priority rotation as your "
-      .. "damage engine here (it is the fallback below)." .. R,
+    GOLD .. "1. Snake Trap / Rocket Strike" .. R .. " -- THE top build ('the main echo "
+      .. "doing better above all others'). Spam the snake macro to keep MAX snakes out; "
+      .. "Rocket Strike fires per snake on every one of YOUR attacks. Snakes are only a "
+      .. "rocket-count multiplier -- NOT scaled by affixes or pet AP, so only their "
+      .. "NUMBER matters. Downside: you must lay traps and sit near melee range.",
+    GOLD .. "2. Arcane 'Bomba'" .. R .. " -- spam Arcane Shot / Chimera with all the haste "
+      .. "you have (Arcane Cadence has no cooldown), keep Aimed Shot up, weave Steady/"
+      .. "Multi-Shot to extend Cadence. Stack Arcane Bombardment.",
+    GOLD .. "3. Pure Marksman proc-spam" .. R .. " -- max haste + echo CDR, spam Arcane "
+      .. "Shot and MM skills purely to proc echoes per second. The no-pet, no-trap option "
+      .. "if you dislike the Rocket build.",
+    DIM .. "Forget the retail shot-priority rotation as your damage engine (it is the "
+      .. "fallback at the bottom)." .. R,
+  } },
+  { title = "Talents -- deliberately flexible", lines = {
+    "There is " .. GOLD .. "no canonical Ebonhold hunter talent build" .. R .. ". The "
+      .. "community position is 'lots of room to play with' -- the ECHOES carry your "
+      .. "damage, talents just enable them.",
+    "Take " .. BRIGHT .. "Marksmanship" .. R .. " for Trueshot Aura, " .. BRIGHT
+      .. "Survival" .. R .. " for Expose Weakness + the Stam/AP buff; spend the rest on "
+      .. "whatever your build spams (Chimera Shot, or nothing if you just spam Arcane).",
+    DIM .. "/ep talents recommend loads a standard WotLK scaffold (surv or bm) as a "
+      .. "starting point -- adjust freely, it is not a prescription." .. R,
+  } },
+  { title = "Weapons -- DUAL WIELD, never a 2H", lines = {
+    GOLD .. "Two one-handers, never a staff/polearm." .. R .. " A 2H costs you an affix "
+      .. "slot AND a second weapon enchant -- that is the community's stated reason, and "
+      .. "it beats any ilvl gain.",
+    BRIGHT .. "Main hand: SPELL POWER" .. R .. " (it scales Rocket Strike and the echo "
+      .. "procs). " .. BRIGHT .. "Off hand: agi dagger or sword." .. R .. " 2x Twin Shot "
+      .. "affix across them.",
+    BRIGHT .. "Ranged: a FAST one" .. R .. " -- the Zul'Drak quest crossbow is the easy "
+      .. "get; Frigid Crossbow / Dalaran Rifle also named. Speed > ilvl: more shots = "
+      .. "more procs.",
+    BRIGHT .. "Enchants: Black Magic + Mongoose, one on EACH weapon." .. R .. " They do "
+      .. "not stack (single buff), so running one of each gives two proc chances.",
   } },
   { title = "Snake/Rocket -- echoes + setup", lines = {
     BRIGHT .. "Lock:" .. R .. " Rocket Strike, Adaptive Power, Rapid Recalibration, "
@@ -101,11 +132,12 @@ H.reference = {
 
 -- Coarse gear targets (per-slot named base gear in H.bis, read by GearAudit).
 H.gear = {
-  { slot = "Ranged weapon", target = "FAST > high-ilvl for proc builds: Frigid Crossbow / "
-    .. "Dalaran Rifle (community). Raw-ilvl BiS if not proc-building: Fal'inrush (LK 25H) / "
-    .. "Zod's Repeating Longbow (Lady DW 25H)." },
-  { slot = "Melee", target = "Dual-wield two FAST 1H with 2x Twinshot each; OR a Spell "
-    .. "Power main hand to scale Rocket Strike. (Retail stat-stick = Oathbinder polearm.)" },
+  { slot = "Ranged weapon", target = "FAST beats high-ilvl (more shots = more procs): "
+    .. "Zul'Drak quest crossbow, Frigid Crossbow, or Dalaran Rifle." },
+  { slot = "Weapons", target = "DUAL WIELD, never a 2H (a staff costs an affix slot AND a "
+    .. "weapon enchant). Spell Power main hand (scales Rocket Strike) + agi dagger/sword "
+    .. "off hand; 2x Twin Shot. Enchant Black Magic on one, Mongoose on the other -- they "
+    .. "don't stack, so one each = two proc chances." },
   { slot = "Tier / armor", target = "Borrowed-Power the ICC set as base: 4pc Sanctified "
     .. "Ahn'Kahar Blood Hunter's (T10). The affix + haste/agi roll is what matters." },
   { slot = "Trinkets", target = "Haste trinket Tears of Bitter Anguish (community); retail "
@@ -131,8 +163,9 @@ H.bis = {
   [13] = { item = "Tears of Bitter Anguish", src = "community haste pick", ilvl = 0, why = "haste -- feeds the proc build", alt = "Deathbringer's Will (Saurfang 25H) retail top" },
   [14] = { item = "Sharpened Twilight Scale", src = "Ruby Sanctum 25H", ilvl = 284, why = "agi + AP proc", alt = "Whispering Fanged Skull if you lack it" },
   [15] = { item = "Sylvanas' Cunning", src = "Anub'arak, ToGC 25", ilvl = 258, why = "best agi cloak" },
-  [16] = { item = "Fast 1H x2 (Twinshot affix), or a Spell-Power main hand", src = "Ebonhold meta", ilvl = 0, why = "dual fast 1H for attacks/rockets; SP MH scales Rocket Strike", alt = "retail stat-stick: Oathbinder polearm (LK 25H)" },
-  [18] = { item = "Frigid Crossbow / Dalaran Rifle (FAST)", src = "Ebonhold community", ilvl = 0, why = "attack speed > ilvl for proc density (more rockets)", alt = "raw-ilvl: Fal'inrush (LK 25H) / Zod's Repeating Longbow" },
+  [16] = { item = "SPELL POWER one-hander", src = "Ebonhold #hunter", ilvl = 0, why = "scales Rocket Strike + echo procs; enchant Black Magic", alt = "NEVER a 2H -- costs an affix slot and a weapon enchant" },
+  [17] = { item = "Agility dagger or sword (fast)", src = "Ebonhold #hunter", ilvl = 0, why = "2nd weapon = 2nd affix + 2nd enchant; put Mongoose here", alt = "2x Twin Shot affix across both weapons" },
+  [18] = { item = "Zul'Drak quest crossbow (FAST)", src = "Zul'Drak quest -- easy get", ilvl = 0, why = "attack speed > ilvl: more shots = more procs", alt = "Frigid Crossbow / Dalaran Rifle; raw-ilvl Fal'inrush is NOT the pick here" },
 }
 
 -- Affix targets for the gear audit -- CONFIRMED from the #hunter community set.
@@ -174,13 +207,28 @@ H.affixNote = "Hunter affixes (#hunter Discord, names verified vs the server aff
   .. "Swift Footwork/Feral Grace (agi), Keen Strikes, Relentless Crits, Spell Mastery, "
   .. "Overwhelming Force, Fortified by Pain, Stalwart. Avoid Strength (Iron Will)."
 
--- ECHOES (PROVISIONAL). Seeds the "Best build" sync: EbonholdHub auto-pick
--- assembles these from the tomes you OWN, ranked by these tiers, and locks the
--- best owned. Locked = the Snake Trap / Rocket Strike engine (#hunter Discord).
--- The broader tiers are the cross-class haste/damage universals (melee/Strength
--- echoes deliberately excluded); refine from combat logs once you have them.
+-- ECHOES -- COMMUNITY-SOURCED, not extrapolated. Decoded from a real hunter
+-- EBH1 loadout string posted in #hunter (Tenklos, "Bomba" arcane build,
+-- 2026-07-31): 74 echoes, every spellId resolved against the server's own
+-- PerkDatabase dump (scratchpad decode-hunter-build.js). The S/A/B split below
+-- is that player's own tiering, not my guess.
+--
+-- ONE DELIBERATE DEVIATION: the source build rates "Lethal Precision" A. Its
+-- real tooltip is "Reduces your critical strike chance by 50%, but increases
+-- your critical strike damage by 30%" -- the paladin catalog rates it F after it
+-- field-zeroed keepsy's crit. Halving crit chance is a bad trade at any crit
+-- level we play at, so it is DISABLED here rather than copied. Ratings stay
+-- tooltip-grounded even when a community build disagrees.
+--
+-- Caveats kept honest: this is ONE player's build, self-labelled "test", and its
+-- author reported disconnects under heavy spam. It is a far better starting
+-- point than extrapolation, but re-rate from your own combat logs once you have
+-- fights on the hunter.
 H.locked = {
-  "Rocket Strike",          -- the engine (fires per snake on your attacks)
+  -- The Snake Trap / Rocket Strike engine (GriffithBae's build -- the most
+  -- popular hunter build in #hunter by replies). Locks follow THAT build; the
+  -- tier list below still ranks the Bomba echoes for whatever you draft.
+  "Rocket Strike",          -- fires per snake on each of YOUR attacks
   "Adaptive Power",         -- +1% dmg per unique active echo (universal)
   "Rapid Recalibration",
   "Temporal Flow",
@@ -189,18 +237,41 @@ H.locked = {
 }
 H.tiers = {
   S = {
-    "Rocket Strike", "Adaptive Power", "Rapid Recalibration", "Temporal Flow",
-    "Double Tap", "Rend the Weak", "Arcane Cadence", "Temporal Pressure",
-    "Chronoboost", "Twilight Equilibrium", "Energy Overflow",
+    "Accelerated Decay", "Adaptive Power", "Blade Tempest",
+    "Brittle Forging", "Broodmother's Fury", "Chronoboost",
+    "Cinders of the Sanctum", "Constellations", "Contagion",
+    "Crypt Lord's Swarm", "Dark Nucleus", "Demonic Awakening",
+    "Echoing Afflictions", "Edict of the Four", "Edict of the Iron Council",
+    "Energy Overflow", "Exposed Heart", "Harbringer of Doom",
+    "Inhaled Blight", "Leeching Swarm", "Lightning Charged", "Malleable Goo",
+    "Necrotic Plague", "Nether Lord's Command", "Overtime Conversion",
+    "Perfect Timing", "Polarity Shift", "Precision Strike",
+    "Quickened Tempo", "Quickening Aura", "Rage of the Colossus",
+    "Reaper's Verdict", "Resonant Build", "Rocket Strike",
+    "Sanctum Sentries", "Sanguine Bulwark", "Scent of Blood", "Slime Spray",
+    "Storm Conductor", "Storm of the Spellweaver", "Sundered Formation",
+    "Temporal Flow", "Temporal Pressure", "The Sporelord's Gift",
+    "Twilight Equilibrium", "Twin Casting", "Unstable Infusion",
+    "Widow's Venom",
   },
   A = {
-    "Arcane Bombardment", "Precision Strike", "Quickened Tempo", "Quickening Aura",
-    "Storm Conductor", "Pandemic", "Contagion", "Resonant Build", "First Strike",
-    "Relentless Rhythm", "Battle Rhythm",
+    "Agility Boost", "Arcane Cadence", "Archmage's Mark", "Battle Rhythm",
+    "Brittle Armor", "Chaotic Convergence", "Crushing Finish",
+    "Entropic Fusion", "Ferocious Bond", "Focused Assault",
+    "Hungering Curse", "Hunter - Arcane Bombardment", "Iron Constitution",
+    "Mind Expansion", "Peak Condition", "Quick Hands",
+    "Rapid Recalibration", "Ruthless Exploiter", "Sudden Insight",
+    "The Last Wall", "Tunnel Vision", "Unbroken Focus", "Vital Bond",
   },
-  B = { "Second Edge", "Focused Assault", "Double Strike" },
+  B = { "Arcane Weapon", "Double Tap", "Rend the Weak" },
 }
-H.disable = {}  -- add negative-rider echoes here once identified for a hunter
+-- Negative-rider echoes: rated F so auto-pick banishes rather than drafts them.
+H.disable = {
+  "Lethal Precision",  -- -50% crit CHANCE for +30% crit damage. Net loss. See above.
+}
+-- The source build deliberately STACKED these (the Bomba engine): stack count
+-- from the loadout string, so auto-pick should take repeats of them.
+H.stackTargets = { ["Hunter - Arcane Bombardment"] = 7, ["Quick Hands"] = 6 }
 H.bundles = {
   -- +40 synergy score to members while Rocket Strike is active.
   { id = "eph-rockets", tier = "A",
@@ -221,13 +292,17 @@ H.talentTemplates = {
       -- Marksmanship splash (17)
       ["Lethal Shots"] = 5, ["Careful Aim"] = 3, ["Mortal Shots"] = 5,
       ["Go for the Throat"] = 2, ["Aimed Shot"] = 1, ["Improved Hunter's Mark"] = 1,
-      -- Survival (54)
-      ["Improved Tracking"] = 5, ["Focused Aim"] = 3, ["Survival Instincts"] = 2,
+      -- Survival (54). NAMES VERIFIED against Ebonhold's own Talent.dbc --
+      -- this server RENAMES several retail talents (Hawk Eye -> Agile Fighter,
+      -- Scatter Shot -> Chain Trap, Deflection -> Hit and Trap, Noxious Stings ->
+      -- Deep Wound) and ADDS a custom one (Lacerate). Retail names silently skip.
+      ["Improved Tracking"] = 5, ["Survival Instincts"] = 2,
       ["Survivalist"] = 5, ["T.N.T."] = 3, ["Lock and Load"] = 3,
-      ["Hunter vs. Wild"] = 3, ["Killer Instinct"] = 3, ["Lightning Reflexes"] = 3,
-      ["Expose Weakness"] = 3, ["Master Tactician"] = 5, ["Noxious Stings"] = 3,
-      ["Point of No Escape"] = 2, ["Sniper Training"] = 3, ["Hunting Party"] = 3,
-      ["Trap Mastery"] = 3, ["Wyvern Sting"] = 1, ["Black Arrow"] = 1,
+      ["Hunter vs. Wild"] = 3, ["Killer Instinct"] = 3, ["Lightning Reflexes"] = 5,
+      ["Expose Weakness"] = 3, ["Master Tactician"] = 5, ["Deep Wound"] = 1,
+      ["Point of No Escape"] = 2, ["Sniper Training"] = 3, ["Hunting Party"] = 1,
+      ["Trap Mastery"] = 3, ["Thrill of the Hunt"] = 3, ["Black Arrow"] = 1,
+      ["Lacerate"] = 1,          -- Ebonhold-CUSTOM Survival talent
       ["Explosive Shot"] = 1,
     },
     -- Fill order when points are scarce: the damage engine and the hit talent
@@ -235,10 +310,11 @@ H.talentTemplates = {
     priority = {
       "Explosive Shot", "Lock and Load", "Black Arrow", "T.N.T.", "Focused Aim",
       "Mortal Shots", "Lethal Shots", "Go for the Throat", "Sniper Training",
-      "Master Tactician", "Expose Weakness", "Hunting Party", "Noxious Stings",
-      "Careful Aim", "Killer Instinct", "Lightning Reflexes", "Hunter vs. Wild",
-      "Survivalist", "Point of No Escape", "Aimed Shot", "Improved Tracking",
-      "Trap Mastery", "Survival Instincts", "Wyvern Sting", "Improved Hunter's Mark",
+      "Master Tactician", "Expose Weakness", "Hunting Party", "Lacerate",
+      "Thrill of the Hunt", "Deep Wound", "Careful Aim", "Killer Instinct",
+      "Lightning Reflexes", "Hunter vs. Wild", "Survivalist",
+      "Point of No Escape", "Aimed Shot", "Improved Tracking",
+      "Trap Mastery", "Survival Instincts", "Improved Hunter's Mark",
     },
   },
   ["bm"] = {
@@ -252,6 +328,7 @@ H.talentTemplates = {
       ["Serpent's Swiftness"] = 5, ["Longevity"] = 3, ["The Beast Within"] = 1,
       ["Cobra Strikes"] = 3, ["Kindred Spirits"] = 5, ["Beast Mastery"] = 1,
       ["Lethal Shots"] = 5, ["Mortal Shots"] = 5, ["Go for the Throat"] = 2,
+      ["Wild Thrash"] = 1,       -- Ebonhold-CUSTOM Beast Mastery talent
     },
     priority = {
       "Bestial Wrath", "The Beast Within", "Beast Mastery", "Frenzy",
@@ -260,6 +337,7 @@ H.talentTemplates = {
       "Ferocious Inspiration", "Longevity", "Spirit Bond", "Animal Handler",
       "Improved Aspect of the Hawk", "Endurance Training", "Thick Hide",
       "Bestial Discipline", "Catlike Reflexes", "Focused Fire", "Intimidation",
+      "Wild Thrash",
     },
   },
 }

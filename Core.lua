@@ -686,7 +686,7 @@ SlashCmdList["EBONPILOT"] = function(line)
   elseif cmd == "rotation" or cmd == "rot" then
     if PP.RotationHelper then PP.RotationHelper.Toggle() end
   elseif cmd == "keyscan" then
-    if PP.RotationHelper and PP.RotationHelper.KeyScan then PP.RotationHelper.KeyScan() end
+    if PP.RotationHelper and PP.RotationHelper.KeyScan then PP.RotationHelper.KeyScan(arg) end
   elseif cmd == "gearscan" then
     PP.safeCall(PP.GearScan)
   elseif cmd == "uiscan" then

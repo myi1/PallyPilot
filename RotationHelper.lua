@@ -147,25 +147,59 @@ local function KeybindFor(spell)
   return nil
 end
 
--- Diagnostic: /pp keyscan — dump where the suggested spell sits on the bars.
-function RH.KeyScan()
-  local spell = Suggest() or "Crusader Strike"
-  PP.print("Keyscan for '" .. spell .. "' (tex=" .. tostring(GetSpellTexture(spell)) .. "):")
+-- Diagnostic: /pp keyscan [spell] — dump where a spell sits on the bars and why
+-- the bind lookup does (or doesn't) resolve. Defaults to the HUD's current
+-- suggestion, else this class's top rotation spell. Prints BOTH the SLOT_BIND
+-- path AND the on-screen button's live HotKey text, so a Shadowform / stance /
+-- paged bar (slots outside SLOT_BIND's 1-72 range) is visible.
+function RH.KeyScan(spellArg)
+  local B = PP.Build
+  local spell = (spellArg and spellArg ~= "" and spellArg) or Suggest()
+    or (B and B.rotationPriority and B.rotationPriority[1] and B.rotationPriority[1].spell)
+  if not spell then
+    PP.print("Keyscan: nothing to scan. Usage: |cffe0b352/pp keyscan <exact spell name>|r, "
+      .. "or target a mob so the HUD suggests one.")
+    return
+  end
+  local wantTex = GetSpellTexture(spell)
+  if not wantTex then
+    PP.print("Keyscan: '" .. spell .. "' isn't a known spell (check spelling / spellbook).")
+    return
+  end
+  PP.print("Keyscan for '" .. spell .. "' (tex=" .. tostring(wantTex) .. "):")
   local hits = 0
   for slot = 1, 120 do
-    if HasAction(slot) then
+    if HasAction(slot) and SlotHasSpell(slot, spell, wantTex) then
+      hits = hits + 1
       local atype, id = GetActionInfo(slot)
-      local tex = GetActionTexture(slot)
-      if SlotHasSpell(slot, spell, GetSpellTexture(spell)) then
-        hits = hits + 1
-        DEFAULT_CHAT_FRAME:AddMessage("  slot " .. slot .. " MATCH type=" .. tostring(atype) ..
-          " id=" .. tostring(id) .. " bind=" .. tostring(SLOT_BIND[slot]) ..
-          " key=" .. tostring(SLOT_BIND[slot] and GetBindingKey(SLOT_BIND[slot])))
+      -- On-screen button showing this slot + its live HotKey (the fallback path
+      -- for form / addon bars that SLOT_BIND doesn't map).
+      local hk
+      for _, prefix in ipairs(BARS) do
+        for i = 1, 12 do
+          local btn = _G[prefix .. i]
+          local bslot = btn and (btn.action or (btn.GetAttribute and btn:GetAttribute("action")))
+          if bslot == slot then
+            local fs = _G[prefix .. i .. "HotKey"]
+            local txt = fs and fs:GetText()
+            if txt and txt ~= "" and txt ~= RANGE_INDICATOR then
+              hk = prefix .. i .. "='" .. txt .. "'"; break
+            end
+          end
+        end
+        if hk then break end
       end
+      DEFAULT_CHAT_FRAME:AddMessage("  slot " .. slot .. " type=" .. tostring(atype)
+        .. " id=" .. tostring(id) .. " SLOT_BIND=" .. tostring(SLOT_BIND[slot])
+        .. " GetBindingKey=" .. tostring(SLOT_BIND[slot] and GetBindingKey(SLOT_BIND[slot]))
+        .. " btnHotKey=" .. tostring(hk))
     end
   end
   if hits == 0 then
-    PP.print("Not found on any action slot — is it actually on a bar? (drag it onto one)")
+    PP.print("'" .. spell .. "' not found on action slots 1-120. If it's a MACRO on a "
+      .. "form/stance bar, the icon may not match -- tell me and I'll widen the match.")
+  else
+    PP.print("Paste the slot line(s) above to Claude -- that maps the bind for the HUD.")
   end
 end
 

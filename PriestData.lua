@@ -3,12 +3,23 @@
 -- PP.Classes.PRIEST. Core re-points PP.Build to this table at login for a priest.
 --
 -- Sourcing note (honesty): the WotLK 3.3.5a backbone (spec/stats/talents/
--- rotation/gear) is researched + wowhead-verified. The ECHO ratings are
--- TRANSFERRED from keepsy's MEASURED paladin engine (BuildData.catalog) + WotLK
--- caster theory -- there is NO measured priest data (keepsy mains paladin). Treat
--- every echo tier here as a starting hypothesis; validate live with /pp bench +
--- /pp dps on a real priest. Automation is BANNED on Ebonhold (perma-ban) -- this
--- is an ADVISOR only: it never presses a key, casts, or buys.
+-- rotation/gear) is researched + wowhead-verified. GROUNDED against LIVE Ebonhold
+-- server data (2026-08-30): the talent template matches the real /pp talentscan
+-- priest tree (names + max-ranks exactly; Ebonhold swaps retail Shadow Affinity
+-- for a custom Shadow Eruption + adds Void Bolt/Mind Melt), and every echo name
+-- here is confirmed present in the server PerkDatabase (/pp perkscan) -- incl. the
+-- four Priest-prefixed proc variants (Priest - Arcane Bombardment / Corrosive
+-- Breath / Ember Spark / Stonefist Barrage). Echo EFFECTS are the tooltip-verified
+-- cross-class effects (same DB the paladin catalog was built from). Every curated
+-- (locked/tiers/bundle) echo name was validated against the DB and its DRAFTABILITY
+-- checked via classMask: fixed "Echoing Affliction" -> "Echoing Afflictions" (the
+-- real plural name), and dropped Battle Momentum + Arcane Weapon (server locks them
+-- to other classes -- a priest can't draw them). 325/546 echoes are priest-draftable.
+-- STILL NOT grounded: which echoes MEASURE best on a shadow priest (needs
+-- /pp bench + /pp dps play) and the #priest COMMUNITY consensus -- until then the
+-- ratings are effect-grounded + caster theory, a strong hypothesis not a measured
+-- verdict. Automation is BANNED on Ebonhold (perma-ban) -- this is an ADVISOR
+-- only: it never presses a key, casts, or buys.
 local PP = PallyPilot
 local B = {}
 PP.Classes = PP.Classes or {}
@@ -129,15 +140,17 @@ B.tiers = {
     "Resonant Build",
   },
   A = {
-    "Echoing Affliction", "Hungering Curse", "Permafrost Aura", "Permeating Chill",
+    "Echoing Afflictions", "Hungering Curse", "Permafrost Aura", "Permeating Chill",
     "Frostfire Paradox", "Flame Beacon", "Leeching Swarm", "Peak Condition",
     "Scent of Blood", "Undead Bane", "Drained Reserves", "Static Overflow",
     "Sudden Insight", "The Last Wall", "Ruthless Exploiter", "The Unclean's Fever",
     "Arcane Cadence", "Reaper's Reprieve", "Sanctum Sentries",
   },
   B = {
+    -- classMask-grounded (perkscan 2026-08-30): Battle Momentum + Arcane Weapon
+    -- removed -- the server locks them to other classes (a priest can't draw them).
     "Unstable Infusion", "Mana Infusion", "Bolstered Vitality", "Desperate Escape",
-    "Battle Momentum", "Arcane Weapon", "Holy Brand", "Pain Drive",
+    "Holy Brand", "Pain Drive",
   },
 }
 
@@ -157,19 +170,21 @@ end
 -- rated caster/mana/spirit echoes as dead weight for Ret; for a mana-hungry
 -- Shadow Priest they are LIVE. Pure ALLY-heal echoes stay low: solo = no allies).
 local OVERRIDE = {
-  -- melee / Strength / attack-power / physical / dual-wield / expertise = dead:
+  -- melee / physical echoes a priest CAN draw but can't use -- kept at C for
+  -- Adaptive breadth only (each unique active echo = +1% dmg). The UNDRAFTABLE
+  -- ones (Armor Penetration / Brutal Might / Expertise Drills / Second Edge /
+  -- Strength Training / Sweeping Blows) are removed below, not rated here.
   ["Blade Tempest"] = "C",        -- physical whirlwind clone scales with AP/weapon
-  ["Armor Penetration"] = "C", ["Expertise Drills"] = "C", ["Weapon Mastery"] = "C",
-  ["Strength Training"] = "C", ["Brutal Might"] = "C", ["Rage of the Colossus"] = "C",
-  ["First Strike"] = "C", ["Second Edge"] = "C", ["Crushing Finish"] = "C",
-  ["Sweeping Blows"] = "C", ["Sundered Formation"] = "C", ["Focused Assault"] = "C",
+  ["Weapon Mastery"] = "C", ["Rage of the Colossus"] = "C",
+  ["First Strike"] = "C", ["Crushing Finish"] = "C",
+  ["Sundered Formation"] = "C", ["Focused Assault"] = "C",
   ["Undead Slayer"] = "C",        -- +AP vs undead is dead; use Undead Bane (+SP)
-  -- key off PALADIN holy/heal abilities you don't have = dead:
-  ["Crimson Reprisal"] = "C", ["Crusader's Surge"] = "C", ["Purifying Touch"] = "C",
-  ["Sanctified Hazard"] = "C",
+  -- key off PALADIN holy/heal abilities you don't have = dead (but draftable):
+  ["Crusader's Surge"] = "C", ["Purifying Touch"] = "C", ["Sanctified Hazard"] = "C",
   -- caster promotions (live for a Shadow Priest):
   ["Undead Bane"] = "A",          -- +600 SP vs undead = all of Naxx/ICC
   ["Echoing Tides"] = "S",        -- 30% double-tick on periodics -- the DoT kit loves it
+  ["Echoing Afflictions"] = "A",  -- DoT cleave (server DB name is PLURAL; classMask-verified)
   ["Accelerated Decay"] = "S",    -- promoted: DoT haste-scaling (see statNote)
   ["Curse of the Plaguebringer"] = "S",
   ["Hungering Curse"] = "A",      -- auto Siphon Life = DoT + sustain, great solo
@@ -178,6 +193,15 @@ local OVERRIDE = {
   ["Mana Reservoir"] = "B", ["Meditative Flow"] = "B",
 }
 for name, tier in pairs(OVERRIDE) do B.catalog[name] = tier end
+-- Grounding (validate_echoes.js 2026-08-30): drop echoes a PRIEST can never draw
+-- (classMask excludes the Priest bit) or that don't exist, so the catalog never
+-- rates a phantom. Six are melee/Str the server locks to other classes; "Crimson
+-- Reprisal" is a pure phantom (no such echo). Nil-ed (not rated) so the ones
+-- inherited from the paladin catalog -- e.g. Sweeping Blows -- go too.
+for _, n in ipairs({
+  "Armor Penetration", "Brutal Might", "Expertise Drills", "Second Edge",
+  "Strength Training", "Sweeping Blows", "Crimson Reprisal",
+}) do B.catalog[n] = nil end
 -- Dual-wield enabler: hard-skip for a priest (you wield a staff/1H+offhand, not
 -- two 1H melee). Never draft it; if owned, it's reroll fodder.
 B.catalog["Ambidexterity"] = "F"
@@ -294,20 +318,32 @@ B.bis = {
 -- stuff" list filled in `priority` order, tier-legally.
 B.talentTemplates = {
   ["shadow"] = {
-    name = "Solo Shadow (14/0/57, Dispersion)",
+    name = "Solo Shadow (grounded to live Ebonhold tree, Dispersion)",
     talents = {
       -- Discipline (14) -- mana/utility only
       ["Twin Disciplines"] = 5, ["Improved Inner Fire"] = 3,
       ["Improved Power Word: Fortitude"] = 2, ["Meditation"] = 3, ["Inner Focus"] = 1,
-      -- Shadow (57) -- the damage core, capstone Dispersion
+      -- Shadow -- the damage core, capstone Dispersion. GROUNDED to the live
+      -- Ebonhold priest tree (/pp talentscan 2026-08-30): standard WotLK names +
+      -- max-ranks EXACTLY, EXCEPT retail "Shadow Affinity" is replaced by a
+      -- custom "Shadow Eruption", and "Void Bolt" / "Mind Melt" are Ebonhold
+      -- additions (added as bonus-point sinks below). All 22 core names verified
+      -- present; the guide fills them 1:1 (measured: 58 Shadow placed in-client).
       ["Spirit Tap"] = 3, ["Improved Spirit Tap"] = 2, ["Darkness"] = 5,
-      ["Shadow Affinity"] = 3, ["Improved Shadow Word: Pain"] = 2, ["Shadow Focus"] = 3,
+      ["Improved Shadow Word: Pain"] = 2, ["Shadow Focus"] = 3,
       ["Improved Mind Blast"] = 5, ["Mind Flay"] = 1, ["Veiled Shadows"] = 2,
       ["Shadow Weaving"] = 3, ["Shadow Reach"] = 2, ["Focused Mind"] = 3,
       ["Vampiric Embrace"] = 1, ["Improved Vampiric Embrace"] = 2,
       ["Improved Devouring Plague"] = 3, ["Shadowform"] = 1, ["Shadow Power"] = 5,
       ["Improved Shadowform"] = 2, ["Misery"] = 3, ["Vampiric Touch"] = 1,
       ["Pain and Suffering"] = 3, ["Twisted Faith"] = 5, ["Dispersion"] = 1,
+      -- Bonus-point sinks (Ebonhold grants ~24 points past the 71-pt core) -- the
+      -- remaining Shadow-tree talents so the extra points have a home. Shadow
+      -- Eruption / Void Bolt / Mind Melt are Ebonhold CUSTOM (effects not yet
+      -- tooltip-verified); they live in the Shadow tree so they're shadow-relevant,
+      -- but confirm the tooltips (hover / #priest Discord) and re-order if weak.
+      ["Shadow Eruption"] = 3, ["Mind Melt"] = 2, ["Void Bolt"] = 1,
+      ["Silence"] = 1, ["Improved Psychic Scream"] = 2,
     },
     -- Importance order (most valuable first); the applier fills these first,
     -- always tier-legally, so scarce points buy the best talents.
@@ -317,9 +353,11 @@ B.talentTemplates = {
       "Twisted Faith", "Pain and Suffering", "Dispersion", "Shadow Focus",
       "Twin Disciplines", "Meditation", "Improved Shadow Word: Pain",
       "Improved Mind Blast", "Improved Vampiric Embrace", "Improved Shadowform",
-      "Shadow Affinity", "Focused Mind", "Shadow Reach", "Spirit Tap",
+      "Focused Mind", "Shadow Reach", "Spirit Tap",
       "Improved Spirit Tap", "Veiled Shadows", "Inner Focus", "Improved Inner Fire",
       "Improved Power Word: Fortitude",
+      -- bonus-point sinks last (custom-effect talents, verify tooltips):
+      "Shadow Eruption", "Mind Melt", "Void Bolt", "Silence", "Improved Psychic Scream",
     },
   },
 }
