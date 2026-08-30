@@ -15,11 +15,15 @@
 -- checked via classMask: fixed "Echoing Affliction" -> "Echoing Afflictions" (the
 -- real plural name), and dropped Battle Momentum + Arcane Weapon (server locks them
 -- to other classes -- a priest can't draw them). 325/546 echoes are priest-draftable.
--- STILL NOT grounded: which echoes MEASURE best on a shadow priest (needs
--- /pp bench + /pp dps play) and the #priest COMMUNITY consensus -- until then the
--- ratings are effect-grounded + caster theory, a strong hypothesis not a measured
--- verdict. Automation is BANNED on Ebonhold (perma-ban) -- this is an ADVISOR
--- only: it never presses a key, casts, or buys.
+-- ECHO TIERS + affixes are now COMMUNITY-GROUNDED: from the #priest Discord's THREE
+-- decoded builds (Atrius canonical guide / Nekoa+Deathrage 330m LK / darkpk66 27.5m
+-- dummy), re-judged through the SOLO lens -- the builds are raid ST melee-weave, so
+-- Glass Canon + Lethal Precision are demoted and survival is raised for the hardcore
+-- solo climb (per Nekoa's own tankier HC5-solo variant). The ONLY layer left is
+-- MEASURED on keepsy's own priest (/pp bench + /pp dps): a solo relevel-from-1 climb
+-- may rank things differently than a geared raid parse. Automation is BANNED on
+-- Ebonhold (perma-ban) -- this is an ADVISOR only: it never presses a key, casts,
+-- or buys.
 local PP = PallyPilot
 local B = {}
 PP.Classes = PP.Classes or {}
@@ -31,20 +35,21 @@ PP.Classes.PRIEST = B              -- registered in the multi-class registry
 B.title = "Solo Shadow Priest -- Hardcore climb (DoT caster; VT/DP/SW:P + Mind Flay)"
 B.spec = "Shadow"
 
--- Stat priority. Base WotLK 3.3.5 Shadow is: Spell Hit (to cap) -> Spell Power
--- -> Haste -> Crit -> Spirit (Icy Veins; Almar's ranks SP > Crit > Haste --
--- close, gear-dependent). Ebonhold's affix + echo meta shifts this the SAME way
--- it shifted paladins: it floods Haste/Crit via affixes, so those climb -- but
--- for a CASTER the Spell Hit cap is an immovable FIRST gate (a missed cast/DoT
--- application is zero damage; melee had no such hard wall).
-B.statPriority = { "Spell Hit (to cap)", "Haste", "Crit", "Spell Power" }
+-- Stat priority. Base WotLK 3.3.5 Shadow is Spell Hit (to cap) -> Spell Power ->
+-- Haste/Crit -> Spirit. But the #priest community's affix picks (Atrius/jeppe)
+-- chase CRIT (Keen Strikes/Relentless Crits) + SPELL MASTERY (spell power) and do
+-- NOT prioritize haste -- so the Ebonhold priest order is Hit(cap) -> Crit ->
+-- Spell Power -> Haste. Spell Hit stays the immovable FIRST gate (a missed cast /
+-- DoT application is zero damage; melee had no such hard wall).
+B.statPriority = { "Spell Hit (to cap)", "Crit", "Spell Power", "Haste" }
 B.statNote = "Spell Hit to cap FIRST -- vs a raid boss you need 17% hit; Misery "
   .. "(3/3, -3%) + Shadow Focus (3/3, +3%) cover 6%, so gear/gems supply ~11% = "
   .. "about 289 hit rating (26.23 rating = 1%). Don't overstack past ~295. AFTER "
-  .. "the cap, Ebonhold leans Haste + Crit (affix-fed, like the paladin meta): "
-  .. "Haste speeds the Mind Flay channel + your casts, and with the Accelerated "
-  .. "Decay echo it ALSO scales your DoT ticks -- a reversal of retail WotLK, "
-  .. "where DoT ticks are fixed and haste never speeds them. Crit feeds Shadow "
+  .. "the cap the #priest community chases Crit + Spell Mastery (spell power), NOT "
+  .. "haste. Haste still helps (it speeds the Mind Flay channel + casts, and with "
+  .. "the Accelerated Decay echo it ALSO scales DoT ticks -- a reversal of retail "
+  .. "WotLK where DoT ticks are fixed) -- it's just lower priority than crit/SP "
+  .. "for the priest. Crit feeds Shadow "
   .. "Power, Glyph of Shadow procs, and the crit-gated echoes (Precision Strike, "
   .. "Unstable Infusion). Spell Power is your throughput backbone -- always "
   .. "valuable, mostly off base gear + Runed Cardinal Ruby gems -- so don't pass "
@@ -106,17 +111,20 @@ B.talents = "14/0/57 Shadow (13/0/58 variant). 14 in Discipline only to reach "
   .. "below is a generous 'take all the good stuff' list -- the applier fills what "
   .. "your points allow, lowest tiers first."
 
--- Echoes to lock so they persist across runs. ORDER = lock priority; only the
--- top N fit your unlocked lock slots (5 by default). TRANSFERRED from the paladin
--- engine + adapted for a native DoT caster -- validate live.
+-- Echoes to lock so they persist across runs. ORDER = lock priority. COMMUNITY-
+-- GROUNDED: the #priest Discord's canonical Atrius guide locks Twilight Equilibrium
+-- / Accelerated Decay / Contagion / Armor Mastery / The Last Wall / Chronoboost.
+-- This is his set skewed for the SOLO climb -- The Last Wall (+50% max HP) is the
+-- survival keystone; the rest are S in all three decoded builds (Atrius / Nekoa
+-- 330m LK / darkpk66). Sanguine Bulwark + Cinders drop to S tier (still farmed).
 B.locked = {
-  "Twilight Equilibrium",   -- the engine (school-flip). CAVEAT below.
-  "Pandemic",               -- DoT extend/spread: BETTER on a native DoT caster
-  "Adaptive Power",         -- +1% dmg per unique active echo; class-agnostic
-  "Contagion",              -- DoT spreader; pairs with your multi-DoT kit
-  "Sanguine Bulwark",       -- hardcore survival (class-agnostic)
-  "Accelerated Decay",      -- gives your DoT ticks haste-scaling (see statNote)
-  "Cinders of the Sanctum", -- measured #1 proc source on paladin (Fire Cyclone)
+  "Twilight Equilibrium",   -- the engine (school-flip); S all 3, Atrius-locked
+  "Adaptive Power",         -- +1%/unique, compounds; S all 3
+  "Contagion",              -- DoT spread; S all 3, Atrius-locked
+  "Accelerated Decay",      -- DoT haste-scaling; S all 3, Atrius-locked
+  "Armor Mastery",          -- top stat echo; S all 3, Atrius-locked
+  "The Last Wall",          -- +50% max HP; Atrius-locked; the solo survival key
+  "Pandemic",               -- DoT extend engine; S all 3
 }
 -- CAVEAT on Twilight Equilibrium: it stacks Light Essence on Holy/Fire/Nature and
 -- dumps Darkburst on Shadow/Frost/Arcane. Your kit is ~mono-Shadow, so you only
@@ -125,34 +133,59 @@ B.locked = {
 -- school, or half the engine starves. That web is also your top raw damage.
 
 -- Draw priority tiers. On a level-up selection (and Orb rerolls) take the highest
--- tier offered. These names are also FarmQueue targets. Curated for a caster.
+-- tier offered. These names are also FarmQueue targets. COMMUNITY-GROUNDED to the
+-- #priest consensus: S = 2+ of the 3 decoded builds rate S, A = 2+ rate A-or-up.
+-- Then SOLO-adjusted (the builds are raid ST): Glass Canon stays disabled (-30% HP;
+-- Nekoa's solo variant drops it), Lethal Precision held at B (see catalog). Every
+-- name is priest-draftable (validate_echoes.js). The melee-weave block is the raid
+-- builds' -- keep it only if you weave auto-attacks, else reroll for DoT/proc.
 B.tiers = {
   S = {
-    "Twilight Equilibrium", "Pandemic", "Contagion", "Adaptive Power",
-    "Accelerated Decay", "Sanguine Bulwark",
-    -- the measured fire/frost/plague proc web (cross-class damage procs):
-    "Cinders of the Sanctum", "Malleable Goo", "Slime Spray",
-    "Cyclone of Cold Bones", "Inhaled Blight", "Necrotic Plague",
-    "Curse of the Plaguebringer", "Echoing Tides",
-    -- caster stat/tempo engines:
-    "Precision Strike", "Temporal Pressure", "Twin Casting", "Spellweave",
-    "Energy Overflow", "Storm Conductor", "Temporal Flow", "Chronoboost",
-    "Resonant Build",
+    -- Locked core, duplicated here so DrawHelper/TierOf rate them S (paladin convention):
+    "Twilight Equilibrium", "Adaptive Power", "Contagion", "Accelerated Decay",
+    "Armor Mastery", "The Last Wall", "Pandemic",
+    -- DoT / fire-frost-plague proc web (your core damage, all community S):
+    "Cinders of the Sanctum", "Malleable Goo", "Slime Spray", "Cyclone of Cold Bones",
+    "Inhaled Blight", "Necrotic Plague", "Curse of the Plaguebringer",
+    "Echoing Afflictions", "Brittle Forging", "Flame Beacon", "Frostfire Paradox",
+    "Twilight Combustion", "Broodmother's Fury", "Chill of the Bone Wyrm",
+    -- damage engines / edicts / constructs (community S):
+    "Constellations", "Crypt Lord's Swarm", "Exposed Heart", "Edict of the Four",
+    "Edict of the Iron Council", "Nether Lord's Command", "Sanctum Sentries",
+    "Frostmourne Hungers", "Demonic Awakening", "Dark Nucleus", "Ravenous Bellow",
+    "Slimebound Husk", "The Harvester's Tithe", "Widow's Venom",
+    -- caster tempo / stat / survival (community S):
+    "Precision Strike", "Twin Casting", "Storm Conductor", "Storm of the Spellweaver",
+    "Temporal Flow", "Chronoboost", "Resonant Build", "Blood Mirror", "Polarity Shift",
+    "Overtime Conversion", "Perfect Timing", "Scent of Blood", "Shadow Crash",
+    "The Unclean's Fever", "Unstable Infusion", "Sanguine Bulwark", "The Sporelord's Gift",
+    -- melee-weave (raid builds; keep only if you auto-attack between casts):
+    "First Strike", "Rage of the Colossus", "Reaper's Doom", "Reaper's Verdict",
+    "Harbringer of Doom", "Quickened Tempo", "Quickening Aura",
   },
   A = {
-    "Echoing Afflictions", "Hungering Curse", "Permafrost Aura", "Permeating Chill",
-    "Frostfire Paradox", "Flame Beacon", "Leeching Swarm", "Peak Condition",
-    "Scent of Blood", "Undead Bane", "Drained Reserves", "Static Overflow",
-    "Sudden Insight", "The Last Wall", "Ruthless Exploiter", "The Unclean's Fever",
-    "Arcane Cadence", "Reaper's Reprieve", "Sanctum Sentries",
+    "Priest - Arcane Bombardment", "Priest - Ember Spark", "Priest - Stonefist Barrage",
+    "Hungering Curse", "Echoing Tides", "Permafrost Aura", "Peak Condition",
+    "Drained Reserves", "Static Overflow", "Sudden Insight", "Ruthless Exploiter",
+    "Tunnel Vision", "Arcane Cadence", "Arcane Burn", "Arcane Density", "Archmage's Mark",
+    "Battle Rhythm", "Battle Tempo", "Blighted Sky", "Chaotic Convergence",
+    "Crushing Force", "Emberlord's Gift", "Entropic Fusion", "Focused Assault",
+    "Frostguard Carapace", "Hardened Resolve", "Holy Revelation", "Immolation Aura",
+    "Iron Constitution", "Leadfoot", "Mind Expansion", "Mystic Potency", "Quick Hands",
+    "Reap the Weak", "Rolling Momentum", "Scorched Path", "Scorching Wounds",
+    "Shadow Malice", "Spiritual Fortitude", "Spiteful Shard", "Spiteful Thorns",
+    "Swift Step", "Third Time's the Charm", "Unbroken Focus",
   },
   B = {
-    -- classMask-grounded (perkscan 2026-08-30): Battle Momentum + Arcane Weapon
-    -- removed -- the server locks them to other classes (a priest can't draw them).
-    "Unstable Infusion", "Mana Infusion", "Bolstered Vitality", "Desperate Escape",
-    "Holy Brand", "Pain Drive",
+    "Burning Touch", "Earthen Stability", "Lethal Precision", "Mana Infusion",
+    "Bolstered Vitality", "Desperate Escape",
   },
 }
+-- Community deliberate STACKS (from the decoded builds -- pour extra draws in):
+-- Hungering Curse x10 (Nekoa), Quick Hands x4 (Nekoa) / x2 (Atrius),
+-- Mind Expansion x3 (Atrius), Mystic Potency x3 (Atrius).
+B.stackTargets = { ["Hungering Curse"] = 10, ["Quick Hands"] = 4,
+  ["Mind Expansion"] = 3, ["Mystic Potency"] = 3 }
 
 -- Full catalog: INHERIT the paladin catalog's breadth ratings (Adaptive Power
 -- pays +1% per unique active echo -- that breadth meta is class-agnostic, so the
@@ -213,6 +246,14 @@ B.catalog["Priest - Corrosive Breath"] = "A"
 B.catalog["Priest - Arcane Bombardment"] = "A"
 B.catalog["Priest - Stonefist Barrage"] = "A"
 B.catalog["Priest - Ember Spark"] = "A"
+-- SOLO re-judgements of two community picks (all 3 #priest builds are RAID ST):
+-- Lethal Precision is A in every build, but its "-50% crit CHANCE for +30% crit
+-- damage" only wins once crit is very high (crit-capped raid gear). Solo you
+-- relevel from 1 each run and aren't crit-capped, so it's a net loss -> held at B.
+-- Glass Canon (-30% max HP) is community A for raid ST, but Nekoa DROPS it in his
+-- tankier HC5-solo variant -> stays F for the hardcore solo climb.
+B.catalog["Lethal Precision"] = "B"
+B.catalog["Glass Canon"] = "F"
 
 -- Echoes to disable / banish: ONLY true negative riders (breadth meta -- every
 -- other echo, even a functionally dead one, is worth +1% via Adaptive Power).
@@ -234,21 +275,25 @@ B.affixSurvival = {
   { affix = "Fortified by Pain", role = "Defensive scaling", slots = "Hands - Waist - Ring - Off-hand" },
   { affix = "Overwhelming Force", role = "Damage / pressure", slots = "Neck - Back - Tabard - Trinket" },
 }
+-- COMMUNITY affixes (#priest Discord: Atrius canonical + jeppe). The priest set is
+-- Spell Mastery + crit + survival -- NOT haste-first (that was my paladin-transfer
+-- assumption; corrected here).
 B.affixDamage = {
-  { affix = "Keen Strike 6/5/4", role = "Crit (top offense affix)" },
-  { affix = "Relentless Crits 6", role = "Crit scaling" },
-  { affix = "Temporal Flux 6", role = "Haste scaling (speeds Mind Flay + DoT ticks w/ Accelerated Decay)" },
-  { affix = "Spell Mastery 4", role = "Feeds your whole spell/DoT damage" },
-  { affix = "Accuracy / Hit", role = "Toward the ~289 spell-hit cap -- do this FIRST" },
-  { affix = "Overwhelming Force 6", role = "Damage / pressure" },
-  { affix = "Iron Will 6->2", role = "Effective-HP chain" },
-  { affix = "Ironhide 6/5/4", role = "HP backbone" },
+  { affix = "Spell Mastery IV", role = "Spell/DoT damage -- Atrius's headline affix" },
+  { affix = "Keen Strikes IV-VI", role = "Crit (item name may read 'Keen Strike')" },
+  { affix = "Relentless Crits V-VI", role = "Crit scaling (jeppe)" },
+  { affix = "Arcane Mind VI", role = "Spell power / Int (jeppe)" },
+  { affix = "Overwhelming Force V-VI", role = "Damage / pressure" },
+  { affix = "Fortified by Pain II-VI", role = "Damage + defensive scaling" },
+  { affix = "Spirit Surge VI", role = "Survival proc (item name may read 'Inner Light')" },
 }
-B.affixWeapon = "Weapon/wand: Spell Mastery + Temporal Flux (haste). No physical "
-  .. "affixes (Flurry/Vulnerability were the paladin's melee picks)."
-B.affixNote = "Cap Spell Hit first (miss = zero damage), then stack Crit/Haste on "
-  .. "offense pieces and the Iron Will/Ironhide chain on survival slots. Highest "
-  .. "affix rank is best (diminishing down the ranks)."
+B.affixWeapon = "Weapon/wand: Vulnerability + Venom (Atrius), + Affliction (jeppe) "
+  .. "first, then the spell/crit armor affixes."
+B.affixNote = "Cap Spell Hit first (a miss = zero damage), then Spell Mastery + crit "
+  .. "(Keen Strikes / Relentless Crits) on offense slots and the survival chain "
+  .. "(Thick Hide / Ironhide / Fortified by Pain) on defensive slots -- the #priest "
+  .. "consensus does NOT chase haste. Verify exact item suffixes in-client via "
+  .. "/pp gear; highest rank is best."
 
 -- Gear targeting, per-slot ICC-25-Heroic BiS. Every item wowhead-verified on the
 -- WotLK Classic DB (wowhead.com/wotlk/item=<id>). All cloth = spell power / hit /
@@ -280,11 +325,22 @@ B.gemRec = "Spell Power (Runed Cardinal Ruby)"
 -- HunterData set the community confirmed.)
 B.slotTargets = {}
 do
-  local common = { "Keen Strikes", "Relentless Crits", "Temporal Flux",
-                   "Spell Mastery", "Overwhelming Force", "Fortified by Pain", "Stalwart" }
+  -- COMMUNITY set (#priest Atrius + jeppe): Spell Mastery + crit + survival, no
+  -- haste-first. Both alias spellings where item-name != canonical (ITEM_ALIASES).
+  local common = {
+    "Spell Mastery",                 -- headline (spell damage)
+    "Keen Strikes", "Keen Strike",   -- crit (both spellings)
+    "Relentless Crits", "Arcane Mind",
+    "Overwhelming Force", "Fortified by Pain",
+    "Spirit Surge", "Inner Light",   -- survival proc (both spellings)
+    "Ironhide", "Enduring Flesh", "Thick Hide",
+  }
   for i = 1, 18 do B.slotTargets[i] = common end
-  B.slotTargets[16] = { "Spell Mastery", "Temporal Flux", "Keen Strikes", "Relentless Crits" }
-  B.slotTargets[18] = { "Spell Mastery", "Temporal Flux", "Keen Strikes", "Relentless Crits" }
+  -- Weapon/wand: Vulnerability + Venom + Affliction first (community), then armor.
+  local wep = { "Vulnerability", "Venom", "Affliction", "Spell Mastery",
+    "Keen Strikes", "Keen Strike", "Relentless Crits" }
+  B.slotTargets[16] = wep
+  B.slotTargets[18] = wep
 end
 
 -- Per-slot named BiS (GearAudit reads PP.Build.bis; format {item,src,ilvl,why,alt}
