@@ -63,7 +63,7 @@ local function Annotate(tip, tipName)
   if not verdict then return end
   tip.__ppDone = true
   local c = DOT[verdict] or { 1, 1, 1 }
-  tip:AddLine("PallyPilot: " .. (TIP_LABEL[verdict] or verdict), c[1], c[2], c[3])
+  tip:AddLine("EbonPilot: " .. (TIP_LABEL[verdict] or verdict), c[1], c[2], c[3])
   tip:Show()
 end
 
@@ -931,7 +931,7 @@ local function BuildRail()
 
   local title = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOP", rail, "TOP", 0, -14)
-  title:SetText(GOLD .. "PallyPilot" .. R)
+  title:SetText(GOLD .. "EbonPilot" .. R)
 
   rail.body = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   rail.body:SetPoint("TOPLEFT", rail, "TOPLEFT", 14, -34)

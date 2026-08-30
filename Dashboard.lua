@@ -67,23 +67,41 @@ end
 local function BuildText()
   local B = PP.Build
   local t = {}
+  if not B then
+    t[#t+1] = "\n" .. DIM .. "No EbonPilot guide for this class yet -- the tools "
+      .. "(Ash advisor, Gear audit, Combat meter) still work." .. R
+    return table.concat(t)
+  end
+
   t[#t+1] = H("Stat priority")
-  t[#t+1] = line(GOLD .. table.concat(B.statPriority, "  >  ") .. R)
-  t[#t+1] = line(DIM .. B.statNote .. R)
+  t[#t+1] = line(GOLD .. table.concat(B.statPriority or {}, "  >  ") .. R)
+  if B.statNote then t[#t+1] = line(DIM .. B.statNote .. R) end
 
-  t[#t+1] = H("Seal · blessing · rotation")
-  t[#t+1] = line(GOLD .. "Seal " .. R .. B.seal)
-  t[#t+1] = line(GOLD .. "Blessing " .. R .. B.blessing)
-  t[#t+1] = line(BRIGHT .. "Rotation  " .. R .. B.rotation)
+  if B.reference then
+    -- Class-provided ordered sections (Hunter + future classes).
+    for _, sec in ipairs(B.reference) do
+      t[#t+1] = H(sec.title)
+      for _, ln in ipairs(sec.lines or {}) do t[#t+1] = line("  " .. ln) end
+    end
+  else
+    -- Legacy Paladin layout (Seal / Blessing / Rotation / locked echoes).
+    t[#t+1] = H("Seal · blessing · rotation")
+    t[#t+1] = line(GOLD .. "Seal " .. R .. (B.seal or "?"))
+    t[#t+1] = line(GOLD .. "Blessing " .. R .. (B.blessing or "?"))
+    t[#t+1] = line(BRIGHT .. "Rotation  " .. R .. (B.rotation or "?"))
+    if B.locked then
+      t[#t+1] = H("Lock these six")
+      local locked = {}
+      for _, n in ipairs(B.locked) do locked[#locked + 1] = n end
+      t[#t+1] = line("  " .. BRIGHT .. table.concat(locked, DIM .. " · " .. BRIGHT) .. R)
+    end
+  end
 
-  t[#t+1] = H("Lock these six")
-  local locked = {}
-  for _, n in ipairs(B.locked) do locked[#locked + 1] = n end
-  t[#t+1] = line("  " .. BRIGHT .. table.concat(locked, DIM .. " · " .. BRIGHT) .. R)
-
-  t[#t+1] = H("Gear targets")
-  for _, g in ipairs(B.gear) do
-    t[#t+1] = line("  " .. BRIGHT .. g.slot .. R .. " — " .. g.target)
+  if B.gear then
+    t[#t+1] = H("Gear targets")
+    for _, g in ipairs(B.gear) do
+      t[#t+1] = line("  " .. BRIGHT .. g.slot .. R .. " — " .. g.target)
+    end
   end
 
   t[#t+1] = "\n" .. DIM .. "Echo verdicts show as LETTER badges on the journal "
@@ -268,7 +286,7 @@ function D.Init()
 
   local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("LEFT", frame, "TOPLEFT", 16, -19)
-  title:SetText(GOLD .. "PallyPilot" .. R)
+  title:SetText(GOLD .. "EbonPilot" .. R)
 
   frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   frame.status:SetPoint("LEFT", title, "RIGHT", 12, 0)
@@ -302,6 +320,12 @@ function D.Init()
   SectionLabel(frame, y - 8, "TOOLS")
   y = y - 26
   local tools = {
+    -- Import the optimal build for THIS class from your available tomes: writes
+    -- the class's tier ratings + best-owned locks into EbonholdHub, whose auto-pick
+    -- then drafts it from the echoes you own. Class-aware; prints a note if the
+    -- logged-in class has no echo data yet.
+    { "Best build", function() if PP.HubSync and PP.HubSync.Push then PP.HubSync.Push() end end },
+    { "Copy build code", function() if PP.HubSync and PP.HubSync.ShowExport then PP.HubSync.ShowExport() end end },
     { "Tome on/off", function() if PP.TomeManager then PP.TomeManager.Command("") end end },
     { "Rotation HUD", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end },
     { "Talents", function() if PP.Talents then PP.Talents.Guide() end end },

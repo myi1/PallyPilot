@@ -1,11 +1,17 @@
--- PallyPilot Core: namespace, saved vars, events, slash commands, main window.
-PallyPilot = {
+-- EbonPilot Core: namespace, saved vars, events, slash commands, main window.
+-- (Formerly PallyPilot -- now a multi-class Ebonhold co-pilot. This "local"
+-- rename keeps the folder / SavedVariables / repo named PallyPilot so no data
+-- migrates and nothing breaks; the folder + repo rename come in a later pass.)
+EbonPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
   GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
   CombatMeter = {}, AshAdvisor = {}, Waypoints = {}, TomeManager = {},
   BuildScore = {}, GearOpt = {},
+  Classes = {},  -- per-class guide data, keyed by UnitClass token (PALADIN, HUNTER, ...)
 }
-local PP = PallyPilot
+-- Back-compat alias: every module still does `local PP = PallyPilot`.
+PallyPilot = EbonPilot
+local PP = EbonPilot
 
 local DB_VERSION = 1
 local DEFAULTS = {
@@ -29,7 +35,7 @@ local function CopyDefaults(src, dst)
 end
 
 function PP.print(msg)
-  DEFAULT_CHAT_FRAME:AddMessage("|cffe0b352PallyPilot|r: " .. tostring(msg))
+  DEFAULT_CHAT_FRAME:AddMessage("|cffe0b352EbonPilot|r: " .. tostring(msg))
 end
 
 local seenErr = {}
@@ -79,12 +85,19 @@ local function OnEvent(self, event, ...)
     PP.safeCall(PP.RunLog.Init)
     PP.safeCall(PP.CombatMeter.Init)
     if PP.AshAdvisor.InitRail then PP.safeCall(PP.AshAdvisor.InitRail) end
-    local paladin = select(2, UnitClass("player")) == "PALADIN"
-    if not paladin then
-      PP.print("Heads up: this build is tuned for Paladins. You're playing "
-        .. (UnitClass("player") or "?") .. " — the dashboard still opens, but advice won't fit.")
+    -- Class dispatch: load the guide data for whoever is logged in. Modules read
+    -- PP.Build; we re-point it to this class's data (falling back to whatever a
+    -- data file registered, so nothing nil-errors on an unsupported class).
+    PP.class = select(2, UnitClass("player"))
+    if PP.Classes[PP.class] then PP.Build = PP.Classes[PP.class] end
+    local cname = UnitClass("player") or "?"
+    if PP.Classes[PP.class] then
+      PP.print("loaded — " .. cname .. " guide active. |cffe0b352/ep|r for the dashboard, "
+        .. "|cffe0b352/ep farm|r for missing tomes.")
+    else
+      PP.print("loaded. No EbonPilot guide for " .. cname .. " yet — the tools still open, "
+        .. "but class advice is limited. |cffe0b352/ep|r for the dashboard.")
     end
-    PP.print("loaded. |cffe0b352/pp|r for the dashboard, |cffe0b352/pp farm|r for missing tomes.")
   end
 end
 
@@ -627,9 +640,11 @@ function PP.QualityScan()
     .. "to also capture the orb slider cap.")
 end
 
-SLASH_PALLYPILOT1 = "/pp"
-SLASH_PALLYPILOT2 = "/pallypilot"
-SlashCmdList["PALLYPILOT"] = function(line)
+SLASH_EBONPILOT1 = "/ep"
+SLASH_EBONPILOT2 = "/ebonpilot"
+SLASH_EBONPILOT3 = "/pp"          -- back-compat aliases
+SLASH_EBONPILOT4 = "/pallypilot"
+SlashCmdList["EBONPILOT"] = function(line)
   local _, _, cmd, arg = string.find(line or "", "^%s*(%S*)%s*(.-)%s*$")
   cmd = string.lower(cmd or "")
   if cmd == "" or cmd == "show" then
@@ -702,6 +717,9 @@ SlashCmdList["PALLYPILOT"] = function(line)
     else PP.safeCall(PP.RunLog.Status) end
   elseif cmd == "hubsync" then
     if PP.HubSync.Push then PP.safeCall(PP.HubSync.Push, arg) end
+  elseif cmd == "buildcode" or cmd == "export" then
+    -- Shareable EBH1 loadout string for this class's curated build.
+    if PP.HubSync.ShowExport then PP.safeCall(PP.HubSync.ShowExport) end
   elseif cmd == "locks" then
     local n = tonumber(arg)
     if n and n >= 1 and n <= 12 then
@@ -751,6 +769,13 @@ SlashCmdList["PALLYPILOT"] = function(line)
       PP.print("No kills recorded in " .. tostring(zone)
         .. " (tracking started v0.28 — earlier kills weren't captured).")
     end
+  elseif cmd == "route" or cmd == "prestige" then
+    -- The prestige route runner moved into CallboardHunter, which already owns
+    -- the checkpoint port layer and the arrow it depends on. Muscle memory
+    -- lands here for a while, so point rather than fail silently.
+    PP.print("The route runner lives in CallboardHunter now: use "
+      .. "|cffe0b352/cbh route|r." .. (CallboardHunter and "" or
+      " (CallboardHunter isn't loaded.)"))
   elseif cmd == "mark" then
     PP.safeCall(PP.Waypoints.Mark, arg)
   elseif cmd == "marks" then
@@ -798,6 +823,6 @@ SlashCmdList["PALLYPILOT"] = function(line)
         .. "/pp bench compare to compare, /pp bench off for auto.")
     end
   else
-    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear (affixes) | /pp gems (enchants/gems/glyphs) | /pp upgrades (gear health) | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp bench <name>|off|compare|cap <n>")
+    PP.print("/pp (dashboard) | /pp farm | /pp audit | /pp gear (affixes) | /pp gems (enchants/gems/glyphs) | /pp upgrades (gear health) | /pp guide | /pp boss [name] | /pp rotation | /pp talents recommend|guide|auto | /pp ash | /pp dps | /pp bench <name>|off|compare|cap <n>")
   end
 end

@@ -613,17 +613,25 @@ local function BuyQueue(ranks, spendable)
       }
     end
   end
-  -- Prestige veteran: float the AoE-farm-survival rebuild to the top (its enabler
-  -- nodes are already owned), preserving each group's internal order.
-  if vet then
-    local farm, rest = {}, {}
-    for _, q in ipairs(out) do
-      if q.farm then farm[#farm + 1] = q else rest[#rest + 1] = q end
-    end
-    out = {}
-    for _, q in ipairs(farm) do out[#out + 1] = q end
-    for _, q in ipairs(rest) do out[#out + 1] = q end
+  -- Reorder for the actual farm-this-cycle goal:
+  --  * Endless Might is DROPPED -- it grants attack power, the dead stat for a
+  --    paladin (Endless Growth's Strength -> SP is the power pick).
+  --  * Infinites go LAST. They are the "feed leftover ash" sink, not the lead
+  --    buy: at deep ranks a single rank costs millions for +5 stat, which must
+  --    never outrank a 1k Splashguard. Cheap high-impact buys lead.
+  --  * For a prestige veteran the AoE-farm-survival rebuild floats to the very
+  --    top (enablers already owned); on a first climb the enablers lead instead.
+  local lead, mid, inf = {}, {}, {}
+  for _, q in ipairs(out) do
+    if q.name == "Endless Might" then -- dropped: AP is the dead stat for us
+    elseif q.infinite then inf[#inf + 1] = q
+    elseif vet and q.farm then lead[#lead + 1] = q
+    else mid[#mid + 1] = q end
   end
+  out = {}
+  for _, q in ipairs(lead) do out[#out + 1] = q end
+  for _, q in ipairs(mid) do out[#out + 1] = q end
+  for _, q in ipairs(inf) do out[#out + 1] = q end
   return out
 end
 
@@ -674,70 +682,117 @@ function AA.RefreshRail()
     rail.slots:SetText("")
   end
 
-  -- Focal: the top thing you can actually buy right now.
+  -- Focal: the top thing to buy. If you've imported a build, the PLAN drives the
+  -- panel -- AA.NextPlanNode only ever returns a node that's purchasable now (or
+  -- the connector toward one), so it never recommends an unreachable node the way
+  -- the tier auto-heuristic can on incomplete server state. The auto-heuristic is
+  -- the fallback for when no build is loaded.
   local vet = AA.PrestigeVeteran(ranks)
-  local top = affordable[1]
-  if top then
-    rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R
-      .. ((vet and top.farm) and (VERD .. "  · farm rebuild" .. R) or ""))
-    rail.nextName:SetText(BRIGHT .. top.name .. R)
-    local rankStr = top.infinite and ("rank " .. (top.cur or "?"))
-      or ((top.cur or "?") .. "/" .. top.total)
-    rail.nextCost:SetText(VERD .. Fmt(top.cost) .. R .. DIM .. " ash · " .. rankStr
-      .. (top.perm and (" · keeps thru prestige") or (" · temp")) .. R)
-    rail.nextWhy:SetText(DIM .. (top.effect or "") .. R)
-    if top.id then GlowNode(top.id, 1, 0.72, 0.20) end
-  elseif #queue > 0 then
-    -- Nothing directly reachable: route toward the top target by finding the
-    -- next connector node to buy along the tree's links.
-    rail.nextHead:SetText(GOLD .. "WORK TOWARD" .. R)
-    local target = queue[1]
-    local step = target and target.id and PathNextBuy(target.id, ranks)
-    if step and step ~= target.id then
-      local nd = NodeById(step)
-      local c = nd and NodeRankCost(nd, ((ranks and ranks[step]) or 0) + 1)
-      rail.nextName:SetText(BRIGHT .. NodeName(step) .. R)
-      rail.nextCost:SetText((c and ((spendable and c <= spendable and VERD or EMBER)
-        .. Fmt(c) .. R) or (DIM .. "?" .. R))
-        .. DIM .. " · on the way to " .. (target.name or "?") .. R)
-      rail.nextWhy:SetText(DIM .. "Buy this to reach "
-        .. (target.name or "your next target") .. "." .. R)
-      GlowNode(step, 1, 0.72, 0.20)
+  local planIds = PP.db and PP.db.ashPlan and PP.db.ashPlan.ids
+  local top = nil
+  if planIds then
+    local nId, why, remaining = AA.NextPlanNode(ranks)
+    rail.heroSub:SetText(spendable
+      and (DIM .. "ash banked · " .. R .. VERD .. (remaining or 0) .. R .. DIM
+        .. " nodes left in your build" .. R)
+      or (DIM .. "waiting for server state..." .. R))
+    if nId then
+      local nd = NodeById(nId)
+      local curR = (ranks and ranks[nId]) or 0
+      local cost = nd and NodeRankCost(nd, curR + 1)
+      local afford = cost and spendable and cost <= spendable
+      rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R
+        .. (why == "connector" and (DIM .. "  · connector" .. R) or (VERD .. "  · your build" .. R)))
+      rail.nextName:SetText(BRIGHT .. NodeName(nId) .. R)
+      rail.nextCost:SetText((afford and VERD or EMBER) .. (cost and Fmt(cost) or "?") .. R
+        .. DIM .. " ash" .. (why == "connector" and " · on the way to your build" or "") .. R)
+      rail.nextWhy:SetText(DIM .. (why == "connector"
+        and "Buy this to reach the next node in your build."
+        or "Next node in your imported build.") .. R)
+      GlowNode(nId, 1, 0.72, 0.20)
     else
-      rail.nextName:SetText(DIM .. "bank ash, then buy from the center" .. R)
-      rail.nextCost:SetText("")
+      rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R)
+      rail.nextName:SetText(why == "done" and (VERD .. "Build complete" .. R)
+        or (EMBER .. "Blocked — bank ash, or buy a connector node" .. R))
+      rail.nextCost:SetText(""); rail.nextWhy:SetText("")
+    end
+    rail.saveLine:SetText("")
+    -- "then:" the next few unbought nodes from your build, in order.
+    local t = {}
+    for _, id in ipairs(planIds) do
+      local nd = NodeById(id); local cr = (ranks and ranks[id]) or 0
+      if nd and cr < NodeMaxRank(nd) and id ~= nId then
+        local c = NodeRankCost(nd, cr + 1)
+        t[#t + 1] = BRIGHT .. NodeName(id) .. R .. DIM .. (c and (" — " .. Fmt(c)) or "") .. R
+        GlowNode(id, 0.54, 0.66, 0.42)
+        if #t >= 3 then break end
+      end
+    end
+    rail.body:SetText(#t > 0 and (DIM .. "then:" .. R .. "\n" .. table.concat(t, "\n")) or "")
+  else
+    top = affordable[1]
+    if top then
+      rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R
+        .. ((vet and top.farm) and (VERD .. "  · farm rebuild" .. R) or ""))
+      rail.nextName:SetText(BRIGHT .. top.name .. R)
+      local rankStr = top.infinite and ("rank " .. (top.cur or "?"))
+        or ((top.cur or "?") .. "/" .. top.total)
+      rail.nextCost:SetText(VERD .. Fmt(top.cost) .. R .. DIM .. " ash · " .. rankStr
+        .. (top.perm and (" · keeps thru prestige") or (" · temp")) .. R)
+      rail.nextWhy:SetText(DIM .. (top.effect or "") .. R)
+      if top.id then GlowNode(top.id, 1, 0.72, 0.20) end
+    elseif #queue > 0 then
+      -- Nothing directly reachable: route toward the top target by finding the
+      -- next connector node to buy along the tree's links.
+      rail.nextHead:SetText(GOLD .. "WORK TOWARD" .. R)
+      local target = queue[1]
+      local step = target and target.id and PathNextBuy(target.id, ranks)
+      if step and step ~= target.id then
+        local nd = NodeById(step)
+        local c = nd and NodeRankCost(nd, ((ranks and ranks[step]) or 0) + 1)
+        rail.nextName:SetText(BRIGHT .. NodeName(step) .. R)
+        rail.nextCost:SetText((c and ((spendable and c <= spendable and VERD or EMBER)
+          .. Fmt(c) .. R) or (DIM .. "?" .. R))
+          .. DIM .. " · on the way to " .. (target.name or "?") .. R)
+        rail.nextWhy:SetText(DIM .. "Buy this to reach "
+          .. (target.name or "your next target") .. "." .. R)
+        GlowNode(step, 1, 0.72, 0.20)
+      else
+        rail.nextName:SetText(DIM .. "bank ash, then buy from the center" .. R)
+        rail.nextCost:SetText("")
+        rail.nextWhy:SetText("")
+      end
+    else
+      rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R)
+      rail.nextName:SetText(VERD .. "Everything tracked is maxed" .. R)
+      rail.nextCost:SetText(DIM .. "feed the infinite stat nodes" .. R)
       rail.nextWhy:SetText("")
     end
-  else
-    rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R)
-    rail.nextName:SetText(VERD .. "Everything tracked is maxed" .. R)
-    rail.nextCost:SetText(DIM .. "feed the infinite stat nodes" .. R)
-    rail.nextWhy:SetText("")
-  end
 
-  -- Saving target: top priority buy that's out of reach.
-  if saving and spendable then
-    rail.saveLine:SetText(GOLD .. "Saving for " .. R .. BRIGHT .. saving.name
-      .. R .. DIM .. " — " .. R .. EMBER .. Fmt(saving.cost) .. R .. DIM
-      .. " (" .. Fmt(saving.cost - spendable) .. " to go)" .. R)
-  else
-    rail.saveLine:SetText("")
-  end
+    -- Saving target: top priority buy that's out of reach.
+    if saving and spendable then
+      rail.saveLine:SetText(GOLD .. "Saving for " .. R .. BRIGHT .. saving.name
+        .. R .. DIM .. " — " .. R .. EMBER .. Fmt(saving.cost) .. R .. DIM
+        .. " (" .. Fmt(saving.cost - spendable) .. " to go)" .. R)
+    else
+      rail.saveLine:SetText("")
+    end
 
-  -- "Then:" the next few affordable buys, capped short so nothing overflows.
-  local t = {}
-  for i = 2, math.min(#affordable, 4) do
-    local q = affordable[i]
-    t[#t+1] = BRIGHT .. q.name .. R .. DIM .. " — " .. Fmt(q.cost) .. R
+    -- "Then:" the next few affordable buys, capped short so nothing overflows.
+    local t = {}
+    for i = 2, math.min(#affordable, 4) do
+      local q = affordable[i]
+      t[#t+1] = BRIGHT .. q.name .. R .. DIM .. " — " .. Fmt(q.cost) .. R
+    end
+    for _, q in ipairs(affordable) do
+      if q.id and q ~= top then GlowNode(q.id, 0.54, 0.66, 0.42) end
+    end
+    rail.body:SetText(#t > 0 and (DIM .. "then:" .. R .. "\n" .. table.concat(t, "\n")) or "")
   end
-  for _, q in ipairs(affordable) do
-    if q.id and q ~= top then GlowNode(q.id, 0.54, 0.66, 0.42) end
-  end
-  rail.body:SetText(#t > 0 and (DIM .. "then:" .. R .. "\n" .. table.concat(t, "\n")) or "")
 
   -- Footer: plain prestige note (the native UI covers the rest).
   if prestigeReady then
-    rail.footer:SetText(DIM .. "Prestige available — only permanent nodes survive a reset." .. R)
+    rail.footer:SetText(DIM .. "At the prestige gate. Farming now? Do the survival rebuild above. Prestiging? Feed leftover into the infinites (kept)." .. R)
   else
     rail.footer:SetText("")
   end
@@ -941,7 +996,7 @@ function AA.InitRail()
   local W = 186
   local title = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOPLEFT", rail, "TOPLEFT", 12, -12)
-  title:SetText(GOLD .. "PallyPilot — Ash" .. R)
+  title:SetText(GOLD .. "EbonPilot — Ash" .. R)
 
   rail.hero = rail:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
   rail.hero:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)

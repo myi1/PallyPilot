@@ -3,7 +3,9 @@
 -- + the player guide). All PallyPilot features read from this one table.
 local PP = PallyPilot
 local B = {}
-PP.Build = B
+PP.Build = B                       -- default; Core re-points PP.Build per class at login
+PP.Classes = PP.Classes or {}
+PP.Classes.PALADIN = B             -- registered in the multi-class registry
 
 B.title = "Solo Retribution — Hardcore climb (AotC 1+2 done, HC2 unlocked)"
 B.spec = "Retribution"
@@ -24,6 +26,8 @@ B.statExpertise = "Expertise hardcap 14% (56) for HC4/5; get it from ash tree + 
   .. "Combat Expertise + food, not gear."
 
 -- Weapon enchant + gems. (Flurry/Vulnerability are AFFIXES — see affixWeapon.)
+-- What to socket, named for the Gear page's one-line "Gem" instruction.
+B.gemRec = "Haste (Quick King's Amber)"
 B.enchants = "Weapon ENCHANT: Black Magic (haste proc) — separate from the "
   .. "Judgement/Vulnerability affix. Gems: Haste in every socket + 2 Haste/Stam "
   .. "to activate the Chaotic Skyflare Diamond (3% crit) meta."
@@ -43,7 +47,7 @@ B.rotation = "Keep Seal of Vengeance stacked. Priority: Judgement of Light (on C
   .. "Consecration > Holy Wrath (huge vs undead/demons — all of Naxx) > Exorcism when The Art "
   .. "of War procs (instant, free) > Hammer of Wrath below 20% HP. For packs, lead with Divine "
   .. "Storm + Consecration + Holy Wrath."
-B.talents = "≈ 44 Protection / 49 Retribution hybrid for soloing (survivability "
+B.talents = "~44 Protection / 49 Retribution hybrid for soloing (survivability "
   .. "under full Ret damage). Pure-damage farmers drop the Prot side once the "
   .. "Soul Ash tree carries survival."
 
@@ -315,7 +319,7 @@ B.affixDamage = {
   { affix = "Spell Mastery 4", role = "Feeds spell/DoT side" },
   { affix = "Overwhelming Force 6", role = "Damage / pressure" },
   { affix = "Fortified by Pain 6/5/4", role = "Damage + defensive scaling" },
-  { affix = "Iron Will 6→2", role = "Strength / effective-HP chain" },
+  { affix = "Iron Will 6->2", role = "Strength / effective-HP chain" },
   { affix = "Ironhide 6/5/4", role = "HP backbone" },
   { affix = "Thick Hide 6", role = "Mitigation" },
 }
@@ -327,14 +331,17 @@ B.affixNote = "Judgement affix is an ECHO TRIGGER (procs Arcane Cadence), not a 
   .. "Precision talent (-50% crit chance) you can crit-OVERCAP — swap low crit "
   .. "affixes for armor/damage if so."
 
+-- (B.slotTargets lives further down, next to B.bis -- a duplicate definition
+-- that used to sit here was removed; Lua takes the last assignment, so two
+-- blocks silently meant only one was live.)
+
 -- Gear targeting (per-slot, endgame ICC-HC4 — Ebonhold #paladin, Aug 2026).
 -- Base items are standard WotLK; the affix + crit/haste roll is what matters.
 B.gear = {
-  { slot = "Weapon(s)", target = "Both from Lich King 25H (SP main + off), or Librarian's Paper Cutter x2 (crit/haste); Judgement + Vulnerability affix" },
-  { slot = "Trinkets", target = "Tiny Abomination in a Jar (ICC) + Algalon trinket (Ulduar)" },
-  { slot = "Ranged / Relic", target = "Crit/Haste gun from ToC 25H, or Corpse-Impaling Spike; Libram of Valiance (ToC emblems)" },
-  { slot = "Feet / Waist", target = "Weak slots: Triumph-emblem belt + Alga/Ulduar craft boots" },
-  { slot = "Head / Shoulder / Chest & rest", target = "Crit + Haste items from ICC 10/25 Heroic (or a well-affixed boosted quest/craft piece)" },
+  { slot = "Weapons", target = "Royal Scepter of Terenas II (SP mace, LK 25H) main; fast crit/haste dagger off (Heaven's Fall) or a 2nd Scepter. Judgement + Vulnerability affix. NB Librarian's Paper Cutter is ilvl 200 (Halls of Lightning HC), not ICC." },
+  { slot = "Trinkets", target = "Tiny Abomination in a Jar (Putricide 25H) + Comet's Trail (Algalon, Ulduar) for haste; Deathbringer's Will (Saurfang 25H) is the no-haste alt" },
+  { slot = "Ranged", target = "Corpse-Impaling Spike (caster wand, Rotface 25H) or Zod's Repeating Longbow (ICC 25H); Libram of Valiance if a relic is forced" },
+  { slot = "Armor", target = "Sanctified Lightsworn (T10.5) from ICC 25H for the 4pc; crit + haste rolls. Weak slots: Coldwraith Links belt + Frostbitten Fur Boots (leather). Full per-slot BiS on the Gear page." },
 }
 
 -- Baked talent templates: target rank per (tab, index). Paladin tabs are
@@ -424,6 +431,118 @@ B.talentTrees = {
     ["Shield of the Templar"]=3, ["Judgements of the Just"]=2, ["Hammer of the Righteous"]=1,
   },
 }
+
+-- Per-slot named BiS (GearAudit reads PP.Build.bis). Moved here from GearAudit's
+-- GA.BIS so the paladin ships its own data like every other class. Crit/haste ICC
+-- bases (Ebonhold meta, not retail Ret); 4 tier pieces (1/3/5/7/10) hold T10.5 4pc.
+B.bis = {
+  [1]  = { item = "Sanctified Lightsworn Helmet", src = "ICC 25H tier", ilvl = 277, why = "T10.5 str/crit/haste; anchors 4pc" },
+  [2]  = { item = "Ahn'kahar Onyx Neckguard", src = "Lady Deathwhisper 25H", ilvl = 277, why = "str + crit + haste + socket" },
+  [3]  = { item = "Sanctified Lightsworn Shoulderplates", src = "ICC 25H tier", ilvl = 277, why = "T10.5 str/crit/haste; 4pc" },
+  [5]  = { item = "Sanctified Lightsworn Battleplate", src = "ICC 25H tier", ilvl = 277, why = "T10.5 str/crit/haste; 4pc" },
+  [6]  = { item = "Coldwraith Links", src = "Valithria cache 25H", ilvl = 277, why = "plate belt w/ crit+haste; fixes weak waist" },
+  [7]  = { item = "Sanctified Lightsworn Legplates", src = "ICC 25H tier", ilvl = 277, why = "T10.5 str/crit/haste; keeps 4pc" },
+  [8]  = { item = "Frostbitten Fur Boots", src = "Marrowgar 25H", ilvl = 277, why = "leather, but max crit+haste (no str-plate boot)" },
+  [9]  = { item = "Polar Bear Claw Bracers", src = "Gunship 25H", ilvl = 277, why = "best crit/haste plate wrist + socket" },
+  [10] = { item = "Sanctified Lightsworn Gauntlets", src = "ICC 25H tier", ilvl = 277, why = "T10.5 str/crit/haste; 4pc", alt = "Fleshrending Gauntlets (Festergut 25H) if not running 4pc" },
+  [11] = { item = "Ashen Band of Endless Vengeance", src = "Ashen Verdict - Exalted", ilvl = 277, why = "crit + hit + AP-on-hit proc" },
+  [12] = { item = "Frostbrood Sapphire Ring", src = "Valithria cache 25H", ilvl = 277, why = "top crit+haste ring" },
+  [13] = { item = "Tiny Abomination in a Jar", src = "Putricide 25H", ilvl = 277, why = "hit + Mote of Anger proc; top melee trinket" },
+  [14] = { item = "Comet's Trail", src = "Algalon, Ulduar 25", ilvl = 239, why = "str + on-hit haste proc", alt = "Deathbringer's Will (Saurfang 25H, 277) if you drop the haste" },
+  [15] = { item = "Shadowvault Slayer's Cloak", src = "Gunship 25H", ilvl = 277, why = "most crit+haste for the slot" },
+  [16] = { item = "Royal Scepter of Terenas II", src = "Lich King 25H", ilvl = 284, why = "SP mace: crit+haste; maces always usable" },
+  [17] = { item = "Heaven's Fall, Kryss of a Thousand Lies", src = "Lich King 25H", ilvl = 284, why = "fast dagger, max crit/haste OH", alt = "2nd Royal Scepter -- no weapon unlock needed" },
+  [18] = { item = "Corpse-Impaling Spike", src = "Rotface 25H", ilvl = 277, why = "caster wand: crit+haste+SP", alt = "Zod's Repeating Longbow (277), or Libram of Valiance relic" },
+}
+
+-- Rotation HUD priority (RotationHelper reads PP.Build.rotationPriority). Moved
+-- here from RotationHelper's baked PRIORITY. Upkeep stays MODULE-SIDE (its dynamic
+-- ActiveSealName() handles Alliance/Horde), so there is deliberately no
+-- B.rotationUpkeep here -- a static list would break Horde seal detection.
+B.rotationPriority = {
+  { spell = "Judgement of Light" },
+  { spell = "Crusader Strike" },
+  { spell = "Divine Storm" },
+  { spell = "Hammer of Wrath", cond = function()
+      local rh = PP.RotationHelper
+      return rh and rh.TargetPct and (rh.TargetPct() or 100) <= 20 end },
+  { spell = "Exorcism", cond = function()
+      local rh = PP.RotationHelper
+      return rh and rh.HasBuff and rh.HasBuff("The Art of War") end },
+  { spell = "Holy Wrath" },
+  { spell = "Consecration" },
+}
+
+-- EBH synergy bundles (moved here from HubSync so each class ships its own).
+-- +40 bundle score to members while the main (first) echo is active -- a scoring
+-- lever no community build uses. HubSync reads PP.Build.bundles. These are the
+-- MEASURED paladin packages (blades = the dual-wield melee core; cyclones/plague
+-- = the fire/frost/plague proc webs).
+B.bundles = {
+  { id = "ppb-resonant", tier = "S",
+    echoes = { "Resonant Build", "Strength Training", "Agility Boost",
+               "Iron Constitution" } },
+  { id = "ppb-dots", tier = "S",
+    echoes = { "Contagion", "Echoing Tides", "Scorching Wounds", "Open Wounds",
+               "Hungering Curse", "Necrotic Plague", "Accelerated Decay" } },
+  { id = "ppb-blades", tier = "S",
+    echoes = { "Ambidexterity", "Second Edge", "First Strike",
+               "Expertise Drills", "Armor Penetration", "Weapon Mastery" } },
+  { id = "ppb-cyclones", tier = "S",
+    echoes = { "Cinders of the Sanctum", "Cyclone of Cold Bones",
+               "Permafrost Aura", "Frostfire Paradox", "Scorched Path",
+               "Conjured Flame", "Flame Beacon", "Brittle Forging" } },
+  { id = "ppb-plague", tier = "S",
+    echoes = { "Malleable Goo", "Slime Spray", "Inhaled Blight",
+               "Hungering Curse", "Curse of the Plaguebringer",
+               "Necrotic Plague", "Mutagenic Fumes" } },
+}
+-- EBH build spec tab HubSync tags the synced build with (paladin: 3 = Retribution).
+B.specIndex = 3
+
+-- Per-slot affix targets for the Gear page (GearAudit.Judge reads
+-- PP.Build.slotTargets, preferred first; position 1 is what "re-roll to X" names).
+--
+-- REFRESHED off the stale AotC-I SURVIVAL school (Ironhide / Iron Will) that the
+-- Gear page used to grade against -- that was the right answer when the goal was
+-- AotC I, and wrong for the crit/haste HC climb. Survival affixes stay in the list
+-- as ACCEPTABLE (tail) so existing defensive pieces read "ok, raise the rank"
+-- rather than a wall of "wrong affix" telling you to re-roll good gear.
+--
+-- SLOTS: EbonholdHub's AffixCatalog (live server dump, 66 affixes) carries NO
+-- per-slot restriction on any entry -- the only real rule is armor affixes (legal
+-- on anything, weapons included) vs `weapon = true` affixes (weapons only). The
+-- old one-affix-per-slot map was curated advice, not a game rule; keepsy's own
+-- Main Hand carries Iron Will, which that map disallowed. So: one ordered list
+-- for every slot, weapon-only affixes pushed to the front on the weapon slots.
+--
+-- SPELLINGS: Judge() matches the ITEM NAME text, and per EbonholdHub's
+-- AffixData.ITEM_ALIASES the item text differs from the canonical affix name for
+-- several affixes ("Keen Strike"->Keen Strikes, "Enduring Flesh"->Ironhide,
+-- "Judgment"->Judgement, "Swift Footwork"->Feral Grace, "Precision"->Cold).
+-- Membership is just a lookup, so BOTH spellings are listed -- that kills the
+-- false-"wrong affix" failure mode instead of leaving it for the player to hit.
+B.slotTargets = {}
+do
+  local common = {
+    "Keen Strikes", "Keen Strike",        -- crit: top offence affix (both spellings)
+    "Relentless Crits",                   -- crit scaling
+    "Quick Instincts", "Temporal Flux",   -- haste (stat priority #2)
+    "Overwhelming Force",                 -- damage / pressure
+    "Fortified by Pain",                  -- damage + defensive scaling
+    "Spell Mastery",                      -- feeds the spell/DoT half of the kit
+    "Iron Will",                          -- Strength / effective-HP chain
+    "Ironhide", "Enduring Flesh",         -- HP backbone (both spellings)
+    "Thick Hide", "Stalwart",
+  }
+  for slot = 1, 19 do B.slotTargets[slot] = common end
+  -- Weapons: Judgement is an ECHO TRIGGER (procs Arcane Cadence), not a damage
+  -- number -- keep it on a weapon. Vulnerability/Flurry are the damage pair.
+  local wep = { "Judgement", "Judgment", "Vulnerability", "Flurry" }
+  for _, a in ipairs(common) do wep[#wep + 1] = a end
+  B.slotTargets[16] = wep   -- Main Hand
+  B.slotTargets[17] = wep   -- Off Hand
+end
 
 -- Echoes that FarmQueue should treat as build targets worth farming Tomes for
 -- (locked core + S-tier). Returns a de-duplicated array of names.

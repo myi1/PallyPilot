@@ -12,7 +12,13 @@
 local PP = PallyPilot
 local HS = PP.HubSync
 
-local TITLE = "PallyPilot Solo Ret (synced)"
+-- Per-class synced-build title, derived from the active class's guide data, so a
+-- priest/hunter sync isn't mislabeled "Solo Ret". Cleanup matches TITLE_PREFIX.
+local TITLE_PREFIX = "EbonPilot "
+local function SyncedTitle()
+  local spec = (PP.Build and PP.Build.spec) or "Solo"
+  return TITLE_PREFIX .. spec .. " (synced)"
+end
 
 local QUALITY_WORDS = {
   Common = true, Uncommon = true, Rare = true, Epic = true,
@@ -106,35 +112,14 @@ local function ResolveSpellIds(names)
   return out
 end
 
--- Synergy bundles: +40 score for members while the main (first) is active.
--- A mechanic no community build uses — our edge.
-local BUNDLES = {
-  { id = "ppb-resonant", tier = "S",
-    echoes = { "Resonant Build", "Strength Training", "Agility Boost",
-               "Iron Constitution" } },
-  { id = "ppb-dots", tier = "S",
-    echoes = { "Contagion", "Echoing Tides", "Scorching Wounds", "Open Wounds",
-               "Hungering Curse", "Necrotic Plague", "Accelerated Decay" } },
-  { id = "ppb-blades", tier = "S",
-    echoes = { "Ambidexterity", "Second Edge", "First Strike",
-               "Expertise Drills", "Armor Penetration", "Weapon Mastery" } },
-  -- Measured on the arm3 HoR-HC2 benchmark: the fire/frost proc web (Fire
-  -- Cyclone #1 source) feeds itself — echoes' own fire/frost damage triggers
-  -- the school-stack echoes.
-  { id = "ppb-cyclones", tier = "S",
-    echoes = { "Cinders of the Sanctum", "Cyclone of Cold Bones",
-               "Permafrost Aura", "Frostfire Paradox", "Scorched Path",
-               "Conjured Flame", "Flame Beacon", "Brittle Forging" } },
-  -- Measured top-damage package (150-fight report): the plague/goo web.
-  -- Malleable Goo amplifies Mutated Blight; they feed each other.
-  { id = "ppb-plague", tier = "S",
-    echoes = { "Malleable Goo", "Slime Spray", "Inhaled Blight",
-               "Hungering Curse", "Curse of the Plaguebringer",
-               "Necrotic Plague", "Mutagenic Fumes" } },
-}
+-- Synergy bundles: +40 score to members while the main (first) echo is active --
+-- a scoring lever no community build uses. Each class now ships its own set in
+-- its guide data (PP.Build.bundles); we read the active class's here (empty for a
+-- class that hasn't defined any).
 local function AssembleBundles()
   local out = {}
-  for i, b in ipairs(BUNDLES) do
+  local bundles = (PP.Build and PP.Build.bundles) or {}
+  for i, b in ipairs(bundles) do
     local echoes = {}
     for j, n in ipairs(b.echoes) do echoes[j] = ToCurly(n) end
     out[i] = { id = b.id, tier = b.tier, echoes = echoes }
@@ -143,6 +128,13 @@ local function AssembleBundles()
 end
 
 function HS.Push(mode)
+  local B = PP.Build
+  if not (B and B.tiers and B.locked) then
+    PP.print("No synced echo build for " .. (UnitClass("player") or "this class")
+      .. " yet -- this class's guide has no echo tiers/locks to publish.")
+    return
+  end
+  local TITLE = SyncedTitle()
   if mode == "depth" then
     PP.print("Depth mode is retired — at the active cap the engine ranks the "
       .. "cores automatically (see wkpal-vs-pallypilot.md). Syncing breadth.")
@@ -168,15 +160,20 @@ function HS.Push(mode)
     pcall(EbonholdHub.TierData.ClearPending)
   end
 
+  -- Replace any prior EbonPilot synced build (old "Solo Ret" title included).
   for id, b in pairs(EbonholdHubDB.builds or {}) do
-    if b.title == TITLE and EB.Delete then pcall(EB.Delete, id) end
+    if b.title and string.find(b.title, TITLE_PREFIX, 1, true) == 1
+       and (not b.author or b.author == "EbonPilot") and EB.Delete then
+      pcall(EB.Delete, id)
+    end
   end
 
   local ok, build = pcall(EB.Create, {
     title = TITLE,
-    class = "PALADIN",
-    spec = 3,
-    comments = "PallyPilot " .. (mode == "farm" and "FARM" or "breadth")
+    class = PP.class or select(2, UnitClass("player")) or "PALADIN",
+    spec = (B.specIndex or 3),
+    comments = "EbonPilot " .. (B.spec or "") .. " "
+      .. (mode == "farm" and "FARM" or "breadth")
       .. " build: " .. (mode == "farm"
         and "repeats uncapped for rank-ups with a curated pool. "
         or "uniques first for Adaptive Power. ")
@@ -200,7 +197,7 @@ function HS.Push(mode)
     end)(),
     settings = { aggressionLevel = 4, banishFamilyWhitelist = {} },
     automationEnabled = true,
-    author = "PallyPilot",
+    author = "EbonPilot",
   })
   if not ok or not build then
     PP.print("Sync failed inside EbonholdHub.Build.Create: " .. tostring(build))
@@ -217,4 +214,85 @@ function HS.Push(mode)
     .. string.upper(PP.db.buildMode) .. " mode, "
     .. slots .. " lock slots, lock ids: " .. table.concat(lockedIds, ", "))
   PP.print("Locks: " .. table.concat(lockedNames, ", "))
+end
+
+-- ---------------------------------------------------------------------------
+-- Shareable EBH1 loadout string. Format read from EbonholdHub's own decoder
+-- (modules/weights/EchoLoadoutCodec.lua):
+--   EBH1:<spellId>.<code>.<stack>,...:<CLASS>:<Title>
+-- where code 1=B, 2=A, 3/4=S, spellId must be >= 200000 and resolve in the
+-- server's PerkDatabase. This is the same string people paste in Discord and
+-- that EbonholdHub's Import dialog accepts.
+local CODE_FOR_TIER = { S = 3, A = 2, B = 1 }
+
+-- name -> best (highest-quality) perk spellId, from the live PerkDatabase.
+local function BestIdByName()
+  local db = ProjectEbonhold and ProjectEbonhold.PerkDatabase
+  local best = {}
+  if not db then return best end
+  for id, e in pairs(db) do
+    if type(id) == "number" and id >= 200000 and type(e) == "table" and e.comment then
+      local base, q = string.match(e.comment, "^(.-)%s*%-%s*(%a+)$")
+      if not (base and QUALITY_WORDS[q]) then base = e.comment end
+      local key = Norm(base)
+      local quality = e.quality or 0
+      if not best[key] or quality > best[key].q then best[key] = { id = id, q = quality } end
+    end
+  end
+  return best
+end
+
+-- Build the string for the logged-in class's curated S/A/B echoes.
+function HS.ExportString()
+  local B = PP.Build
+  if not (B and B.tiers) then
+    return nil, "No echo build for " .. (UnitClass("player") or "this class") .. " yet."
+  end
+  local best = BestIdByName()
+  if not next(best) then
+    return nil, "Can't read the server's echo database yet -- log in fully, then retry."
+  end
+  -- Highest tier wins per echo; locks are S.
+  local tierOf = {}
+  for tier, list in pairs(B.tiers) do
+    if CODE_FOR_TIER[tier] then
+      for _, n in ipairs(list) do
+        local k = Norm(n)
+        if not tierOf[k] or CODE_FOR_TIER[tier] > CODE_FOR_TIER[tierOf[k]] then tierOf[k] = tier end
+      end
+    end
+  end
+  for _, n in ipairs(B.locked or {}) do tierOf[Norm(n)] = "S" end
+
+  local parts, missing = {}, 0
+  for key, tier in pairs(tierOf) do
+    local hit = best[key]
+    if hit then
+      parts[#parts + 1] = hit.id .. "." .. CODE_FOR_TIER[tier] .. ".1"
+    else
+      missing = missing + 1
+    end
+  end
+  if #parts == 0 then return nil, "None of this class's echoes resolved to spell ids." end
+  table.sort(parts)
+  local class = PP.class or select(2, UnitClass("player")) or "PALADIN"
+  -- The decoder strips ALL whitespace, so pre-hyphenate or the title runs
+  -- together ("EbonPilotSnakeTrap/RocketStrike").
+  local title = "EbonPilot-" .. string.gsub(B.spec or "build", "%s+", "-")
+  return "EBH1:" .. table.concat(parts, ",") .. ":" .. class .. ":" .. title,
+         nil, #parts, missing
+end
+
+-- Show the string in a copy box (reuses the ash advisor's paste/copy popup).
+function HS.ShowExport()
+  local str, err, n, missing = HS.ExportString()
+  if not str then PP.print(err or "Couldn't build a string.") return end
+  local box = PP.AshAdvisor and PP.AshAdvisor.ShowBuildBox
+  if box then
+    box("Share this build (EBH1 -- paste into EbonholdHub Import)", str, false)
+  else
+    PP.print(str)
+  end
+  PP.print("Build string: " .. n .. " echoes"
+    .. (missing and missing > 0 and (" (" .. missing .. " unresolved)") or "") .. ".")
 end

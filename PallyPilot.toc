@@ -1,12 +1,14 @@
 ## Interface: 30300
-## Title: PallyPilot
-## Notes: Solo Retribution Paladin co-pilot for Project Ebonhold: baked-in build, stat/gear/affix dashboard, missing-tome farm queue with one-click porting.
-## Version: 0.70.0
+## Title: EbonPilot
+## Notes: Multi-class solo co-pilot for Project Ebonhold: per-class build, stat/gear/affix dashboard, Soul Ash advisor, missing-tome farm queue. (Formerly PallyPilot.)
+## Version: 0.76.0
 ## SavedVariables: PallyPilotDB
 ## OptionalDeps: CallboardHunter, EbonholdHub, ProjectEbonhold
 
 Core.lua
 BuildData.lua
+HunterData.lua
+PriestData.lua
 Dashboard.lua
 FarmQueue.lua
 EchoAudit.lua

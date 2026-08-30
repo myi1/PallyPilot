@@ -8,6 +8,17 @@ PP.Talents = T
 local GOLD = "|cffe0b352"
 local R = "|r"
 
+-- Tree name for a tab, read LIVE from the client so it is correct for whatever
+-- class is logged in (Holy/Prot/Ret for a paladin, BM/Marks/Survival for a
+-- hunter, ...). Never hardcode a class's tree names here.
+function T.TabName(tab)
+  if GetTalentTabInfo and tab then
+    local ok, name = pcall(GetTalentTabInfo, tab)
+    if ok and name then return name end
+  end
+  return "Tab " .. tostring(tab)
+end
+
 -- Available talent points (3.3.5 API; fall back gracefully).
 local function UnspentPoints()
   if GetUnspentTalentPoints then
@@ -193,10 +204,18 @@ end
 
 -- Load a baked recommended template into the saved slot (then Apply spends it).
 function T.Recommend(key)
-  key = (key ~= "" and key) or PP.Build.defaultTemplate
-  local tpl = PP.Build.talentTemplates and PP.Build.talentTemplates[key]
+  local B = PP.Build or {}
+  key = (key ~= "" and key) or B.defaultTemplate
+  local tpl = B.talentTemplates and B.talentTemplates[key]
   if not tpl then
-    PP.print("Unknown template '" .. tostring(key) .. "'. Available: prot-ret.")
+    -- List whatever THIS class actually ships (never assume the paladin's).
+    local avail = {}
+    for k in pairs(B.talentTemplates or {}) do avail[#avail + 1] = k end
+    table.sort(avail)
+    PP.print(#avail > 0
+      and ("Unknown template '" .. tostring(key) .. "'. Available: "
+           .. table.concat(avail, ", ") .. ".")
+      or ("No talent templates for " .. (UnitClass("player") or "this class") .. " yet."))
     return
   end
   local talents, total = {}, 0
@@ -214,7 +233,6 @@ function T.Preview()
   if not b then PP.print("No build loaded. Try /pp talents recommend.") return end
   PP.print("Build preview" .. (b.source and (" — " .. b.source) or "") .. ":")
   local live = LiveIndex()
-  local tabName = { "Holy", "Protection", "Retribution" }
   local byTab, missing = { {}, {}, {} }, {}
   for name, want in pairs(b.talents or {}) do
     local loc = live[string.lower(name)]
@@ -228,7 +246,7 @@ function T.Preview()
   for tab = 1, 3 do
     if #byTab[tab] > 0 then
       table.sort(byTab[tab], function(a, b2) return a.name < b2.name end)
-      DEFAULT_CHAT_FRAME:AddMessage(GOLD .. (tabName[tab] or ("Tab " .. tab)) .. R)
+      DEFAULT_CHAT_FRAME:AddMessage(GOLD .. T.TabName(tab) .. R)
       for _, e in ipairs(byTab[tab]) do
         DEFAULT_CHAT_FRAME:AddMessage("   " .. e.name .. "  " .. e.rank .. "/" .. e.want)
       end
@@ -254,7 +272,6 @@ local function Remaining()
   return left
 end
 
-local TAB_NAME = { "Holy", "Protection", "Retribution" }
 
 local function HideGlow()
   if glow then glow:Hide(); glow:ClearAllPoints() end
@@ -289,9 +306,21 @@ local function GuideUpdate()
   if not (PP.db and PP.db.talentBuild) then return end
   local step = NextLearnable()
   if not step then
-    guideText:SetText("|cff8aa96aBuild complete!|r")
     HideGlow()
-    PP.print("Guided talents: build complete.")
+    -- "No more placeable steps" is NOT the same as "done": Ebonhold grants far
+    -- more than 71 points, and any template talent whose name doesn't match the
+    -- live tree is silently skipped -- both leave points unspent. Report honestly.
+    local unspent = UnspentPoints()
+    if unspent and unspent > 0 then
+      guideText:SetText("|cffe0b352Template placed|r\n|cffb4a586" .. unspent
+        .. " point(s) unspent -- spend on filler,\nor /pp talents preview if it stopped early|r")
+      PP.print("Guided talents: template placed, but " .. unspent .. " point(s) still "
+        .. "unspent. If the build stopped short of the spec, run |cffe0b352/pp talents "
+        .. "preview|r -- template talents that don't match your tree get skipped.")
+    else
+      guideText:SetText("|cff8aa96aBuild complete!|r")
+      PP.print("Guided talents: build complete.")
+    end
     if guideFrame then guideFrame:UnregisterEvent("CHARACTER_POINTS_CHANGED") end
     guideFrame.done = true
     return
@@ -299,7 +328,7 @@ local function GuideUpdate()
   local prereqLine = step.prereq
     and ("\n|cffd9694aprereq for " .. step.prereq .. "|r") or ""
   guideText:SetText("Click |cfff6d888" .. tostring(step.name) .. "|r\n" ..
-    "|cffb4a586" .. (TAB_NAME[step.tab] or "?") .. " tab · " ..
+    "|cffb4a586" .. T.TabName(step.tab) .. " tab · " ..
     step.rank .. "/" .. step.target .. "|r" .. prereqLine ..
     "\n|cffb4a586" .. Remaining() .. " points left in build|r")
   GlowButton(step)
@@ -325,7 +354,7 @@ function T.Guide()
     guideFrame:SetBackdropColor(0, 0, 0, 0.85)
     local head = guideFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     head:SetPoint("TOP", guideFrame, "TOP", 0, -8)
-    head:SetText("|cffe0b352PallyPilot — talent guide|r")
+    head:SetText("|cffe0b352EbonPilot — talent guide|r")
     guideText = guideFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     guideText:SetPoint("TOP", head, "BOTTOM", 0, -6)
     guideText:SetWidth(210); guideText:SetJustifyH("CENTER")

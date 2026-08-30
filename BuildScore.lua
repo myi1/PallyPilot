@@ -230,7 +230,7 @@ function BS.Init()
 
   local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
-  title:SetText(GOLD .. "PallyPilot — Build Score" .. R)
+  title:SetText(GOLD .. "EbonPilot — Build Score" .. R)
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)

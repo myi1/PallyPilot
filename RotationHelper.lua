@@ -6,18 +6,9 @@ PP.RotationHelper = RH
 
 local SEAL = "Seal of Vengeance"   -- Alliance; Horde clients use Seal of Corruption
 local SEAL_ALT = "Seal of Corruption"
-local AOW = "The Art of War"
 
--- Single-target priority (highest first). cond() gates situational casts.
-local PRIORITY = {
-  { spell = "Judgement of Light" },
-  { spell = "Crusader Strike" },
-  { spell = "Divine Storm" },
-  { spell = "Hammer of Wrath", cond = function() return RH.TargetPct() <= 20 end },
-  { spell = "Exorcism", cond = function() return RH.HasBuff(AOW) end },
-  { spell = "Holy Wrath" },
-  { spell = "Consecration" },
-}
+-- The paladin single-target priority now lives in BuildData (B.rotationPriority)
+-- and is read via RH.ActivePriority() like every class -- no baked class list here.
 
 local frame, icon, nameFS, keyFS
 
@@ -58,12 +49,37 @@ local function ActiveSealName()
   return SEAL
 end
 
-local function Suggest()
-  local seal = ActiveSealName()
-  if not (RH.HasBuff(seal) or RH.HasBuff(SEAL) or RH.HasBuff(SEAL_ALT)) and Ready(seal) then
-    return seal
+-- Class-aware: a class's guide data can supply its own shot/spell priority
+-- (B.rotationPriority) and its "always keep this up" buff (B.rotationUpkeep --
+-- the paladin's Seal, a hunter's Aspect). The baked Ret list stays the paladin
+-- fallback; a class with neither gets no HUD.
+function RH.ActivePriority()
+  local B = PP.Build
+  return (B and B.rotationPriority) or nil
+end
+
+local function UpkeepNames()
+  local B = PP.Build
+  if B and B.rotationUpkeep then return B.rotationUpkeep end
+  if (PP.class or select(2, UnitClass("player"))) == "PALADIN" then
+    return { ActiveSealName(), SEAL, SEAL_ALT }
   end
-  for _, e in ipairs(PRIORITY) do
+  return nil
+end
+
+local function Suggest()
+  local prio = RH.ActivePriority()
+  if not prio then return nil end
+  local upkeep = UpkeepNames()
+  if upkeep then
+    local have, castable = false, nil
+    for _, n in ipairs(upkeep) do
+      if RH.HasBuff(n) then have = true; break end
+      if not castable and GetSpellInfo(n) and Ready(n) then castable = n end
+    end
+    if not have and castable then return castable end
+  end
+  for _, e in ipairs(prio) do
     if (not e.cond or e.cond()) and Ready(e.spell) then return e.spell end
   end
   return nil
@@ -205,9 +221,8 @@ function RH.Init()
   keyFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 8, 4)
 
   frame:SetScript("OnUpdate", OnUpdate)
-  if select(2, UnitClass("player")) ~= "PALADIN" then
-    PP.db.options.rotationHelper = false
-  end
+  -- No HUD for a class whose guide has no rotation priority yet.
+  if not RH.ActivePriority() then PP.db.options.rotationHelper = false end
   if PP.db.options.rotationHelper then frame:Show() else frame:Hide() end
 end
 

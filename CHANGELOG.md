@@ -4,6 +4,142 @@ Notable changes to PallyPilot. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versions match the GitHub
 releases and the `.toc`. Full commit-level history is in git.
 
+## [0.75.0] - 2026-08-30
+### Removed
+- **The prestige route runner moved to CallboardHunter** (`/cbh route`, CBH
+  1.8.0). It leaned on CBH's checkpoint port layer and guidance arrow, so it
+  belongs there rather than reaching across addons for both. `/pp route` now
+  points at the new command; your route state (harvested checkpoints, learned
+  quest givers) migrates itself on first login. Everything below about
+  `/pp route` in 0.71–0.74 applies to `/cbh route` now.
+
+## [0.74.0] - 2026-08-30
+### Fixed
+- **Steps stopped advancing after a hand-in.** Turn-in detection relied on a
+  `QUEST_COMPLETE` → quest-leaves-the-log handshake that gets missed when the
+  hand-in is automatic or when a catch-up level burst floods the event queue.
+  It now watches three independent signals — the server's own
+  `"<quest> completed."` chat line (primary, and the one the client always
+  emits), a route quest that was complete in your log and then vanished, and the
+  old reward-screen path — all funnelling into one idempotent recorder.
+- **Learned quest givers could be completely wrong.** When no dialog NPC was
+  available the code fell back to `UnitName("target")`, happily recording
+  whatever you were hitting at the time as the quest giver. That name then drove
+  the guide text and the coordinates. Only the actual dialog NPC is trusted now;
+  **`/pp route forget`** throws away a bad one so it re-learns.
+
+### Added
+- **The button targets and marks the step's NPC.** It's now a secure macro
+  button running `/targetexact <npc>` and then placing a raid marker (skull by
+  default, `/pp route mark <1-8>`; markers read by shape, not colour). If raid
+  icons no-op — they need a party on this client — it says so instead of leaving
+  you hunting for a skull that was never placed. Out of range, it says that too.
+- **`/pp route why`** — dumps everything the addon believes about the step
+  you're stuck on: whether the quest is in your log, whether it reads complete,
+  the learned NPC, the auto toggle, and the exact quest titles the client is
+  reporting, so a spelling mismatch is visible rather than mysterious.
+
+### Changed
+- The compact panel is now genuinely **one** button — the separate Self-Execute
+  button is gone, folded into the single secure button via attributes.
+  Attribute changes are queued during combat and replayed on regen, and the
+  button never overrides `OnClick` (doing so silently kills a secure button's
+  action dispatch).
+
+## [0.73.0] - 2026-08-30
+### Added
+- **Auto accept and auto turn-in for the route quests.** Walk to the NPC, open
+  their dialog, and the quest accepts and hands in by itself — including through
+  gossip menus and multi-quest greetings. Deliberately narrow: it fires **only
+  for the three quests in the route**, only inside a window you opened, and never
+  moves or targets anything. `/pp route auto` toggles it; the panel header shows
+  `[auto OFF]` when it's off.
+  - A quest with a genuine **choice of rewards is left alone** — picking wrong
+    isn't undoable, and none of the route quests should have one, so it's a
+    signal that this server's version differs from the route's.
+  - Gossip quest lists are matched by **counting strings** rather than assuming
+    a vararg stride, since that stride has differed between 3.3.5 builds.
+- **Guide line** under the button spelling out what to do next — who to talk to,
+  where they are, and their coordinates once learned.
+- **The arrow points itself.** Entering the zone for a quest step sets
+  CallboardHunter's arrow at the learned giver/turn-in with no click. Only ever
+  clears an arrow it set, so callboard routing isn't stomped.
+
+### Changed
+- **Compact panel is now exactly one button.** The port bar and the
+  Back/Done/Skip/All-steps row are gone; those live on `/pp route back`,
+  `/pp route cp <id>`, and `/pp route full`.
+- **Dropped the ash-tree refill step** and its button. The route starts at the
+  Hardcore swap now, so a fresh run opens straight onto the levelling leg.
+
+### Fixed
+- `Back` couldn't undo a port step while you were standing in that zone — it
+  re-satisfied instantly and the click looked dead. It now suppresses that step
+  until you leave the zone, and says so plainly when a step genuinely can't be
+  stepped back onto.
+
+## [0.72.0] - 2026-08-30
+### Added
+- **One-button compact panel, now the default view for `/pp route`.** A single
+  large button that always does the next thing — ports you, arrows you at the
+  quest, glows the next ash node, or confirms a Hardcore swap — with the step
+  counter, the current step's note, and what's coming next. `All steps` opens
+  the full thirteen-row checklist; `Compact` goes back. `/pp route mini` and
+  `/pp route full` do the same from chat.
+- **Port bar** — Dalaran / Zul'Drak / Unu'pe buttons on the compact panel, so
+  you can jump anywhere on the route regardless of which step you're on. Locked
+  checkpoints are marked `[!]` (letters, not colour).
+- **`Back` / `/pp route back`** — undoes the last step for the mis-click, clearing
+  both the latch and the underlying record so it doesn't instantly re-complete.
+- Compact panel re-renders on a 1s tick, so arriving somewhere updates the button
+  even when no event fires. The tick scans the quest log **read-only** — it never
+  expands or re-collapses headers, which would otherwise make the quest log visibly
+  jump once a second.
+
+### Fixed
+- `/pp route` said nothing at all if `PrestigeRoute.lua` hadn't loaded (`safeCall`
+  swallows a nil function). It now tells you a full client restart is needed —
+  a `/reload` does not pick up a newly added file.
+- `/pp route` and `/pp ash` were missing from the `/pp` help line.
+
+## [0.71.0] - 2026-08-30
+### Added
+- **Prestige route runner (`/pp route`)** — a guided runner for the community
+  fast-prestige route, focused on the levelling leg: Hardcore 5 → Dalaran →
+  the three-quest chain → Zul'Drak, which lands a fresh run around 64. The panel
+  works out which step you are on from live state (quest log, zone, level, run
+  ash) rather than making you keep a cursor, and survives `/reload`, doing steps
+  by hand, or doing them out of order. A new run resets the lap automatically.
+  - One-click checkpoint travel (Dalaran 310, Zul'Drak 304, Borean Tundra 296)
+    via the server's own `REQUEST_USE_CHECKPOINT`, falling back to
+    CallboardHunter's map port, then to printing the macro.
+  - **Checkpoint ids are verified, not trusted.** Opening the world map harvests
+    every checkpoint button's id/name/unlocked state, so the panel can say
+    "310: Dalaran, unlocked" — and flags `NAME MISMATCH` if the server ever
+    renumbers one. `/pp route checkpoints` lists everything harvested.
+  - The Zul'Drak step **blocks itself** when checkpoint 304 reads locked, naming
+    the missing Argent Stand flight path instead of failing at the port.
+  - Quest giver and turn-in locations are **learned** the first time you run the
+    chain, so later laps can point CallboardHunter's arrow at them. Each quest
+    row shows what it was worth last lap (`last lap 41->58`).
+  - `/pp route api` probes what this client actually exposes;
+    `/pp route macro` prints the raw checkpoint macros.
+  - Self-Execution sits on a secure button that is **disarmed by default** —
+    arming is a separate deliberate click, because it ends the run for good.
+  - Quest titles are matched apostrophe-insensitively (straight `'` vs curly `’`)
+    and case-insensitively. Two of the three route quests contain an apostrophe
+    and this server mixes both forms in its own data, so a raw compare would have
+    parked the route on one step with nothing to explain why.
+- **Offline test harness** (`tools/`) — the route state machine now runs head-first
+  against a stubbed WoW API on a Lua VM (fengari), so route changes are testable
+  without logging in. 29 checks, `npm install && node run_lua.js route_test.lua`;
+  see `tools/README.md`.
+
+### Notes
+- Still an advisor: it reads state and draws the next step. Every action is your
+  own click. Hardcore tier swaps have no client API, so those steps are guided
+  and ticked off by hand rather than detected.
+
 ## [0.68.1] - 2026-08-29
 ### Fixed
 - `/pp snapshot` reads haste from the combat rating (CR_HASTE_MELEE/SPELL) since
