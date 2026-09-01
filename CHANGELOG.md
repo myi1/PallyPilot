@@ -4,6 +4,35 @@ Notable changes to PallyPilot. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versions match the GitHub
 releases and the `.toc`. Full commit-level history is in git.
 
+## [0.78.1] - 2026-09-01
+### Fixed
+- **The journal rail overlapped itself into an unreadable mess.** It mixed two
+  layout systems: the body anchored from the TOP and growing with its text,
+  the button cluster anchored from the BOTTOM at fixed offsets. Nothing
+  coordinated them, so as soon as the body ran long -- six lock names plus
+  counts plus fodder -- they collided. Everything is now placed by one
+  top-down pass from MEASURED heights, run last so the heights are real, with
+  empty elements collapsing instead of leaving holes. A new test asserts no
+  two elements share vertical space at any content length.
+- **Farm / Raid silently overwrote the pool plan.** Those buttons also ran
+  `EchoAudit.DisablePlan` -- the pre-BiS planner, which reads the RUN's echo
+  set with no tome gating, so it named echoes that have no toggle -- and wrote
+  `PP.db.poolPlan`, re-badging every tile from the wrong source. Two pool
+  planners, and the older wronger one won. They are now purely an aim toggle
+  plus the EbonholdHub sync, which is the half that was always right.
+
+### Removed
+- `EchoAudit.DisablePlan` (83 lines) and `/ep pool <n>`, which only existed to
+  tune it. There is now exactly ONE pool-planning path: TomeManager, on
+  CHASE/KEEP/CUT via `MergedTiles()`.
+
+### Changed
+- **Build score moved to the Builds page** as "Score this run". It rates
+  composition -- a prediction -- so it belongs beside the measured DPS
+  comparison rather than sitting as an unexplained button on the rail.
+- Rail captions cut to one short line each; "Pool plan" says "(level 1)" on the
+  button itself instead of relying on a caption below it.
+
 ## [0.78.0] - 2026-09-01
 ### Fixed
 - **A reroll queued 70 echoes.** The no-junk fallback queued the ENTIRE fodder

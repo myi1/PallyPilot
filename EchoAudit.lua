@@ -584,89 +584,12 @@ function A.BestOwned(n)
   return out
 end
 
--- Level-1 pool curation: owned echoes feed the run's draw pool, and
--- disabling (right-click, level 1 only) removes them from it. Optimal pool =
--- the best ~(active cap + margin) owned echoes: breadth stays maxed, but
--- every draw offers something worth taking. Returns keep, disable lists
--- (plain display names, priority-ordered).
--- mode "farm" (community doctrine, Sanavesa/Qvintus): disable EVERYTHING
--- except your locks and Epic-quality owned echoes — a near-empty pool means
--- every draw during a 1-80 farm leg is a wanted echo. mode "raid" (default)
--- keeps the best keepN for Adaptive breadth.
-function A.DisablePlan(keepN, mode)
-  keepN = keepN or (PP.db and PP.db.options and PP.db.options.poolSize) or 82
-  local owned = OwnedSet()
-  if not owned then return nil end
-  if mode == "farm" then
-    local names = CachedNames()
-    local keepSet, keep, disable = {}, {}, {}
-    for _, nm in ipairs(A.BestOwned(A.LockSlots())) do keepSet[Norm(nm)] = true end
-    -- Epic-quality ownership shows as "<base> - epic" keys.
-    for norm in pairs(owned) do
-      local base, q = StripQuality(norm)
-      if q == "epic" then keepSet[base] = true end
-    end
-    local seen, disableSet = {}, {}
-    for norm in pairs(owned) do
-      local base = StripQuality(norm)
-      if not seen[base] then
-        seen[base] = true
-        local display = names[base] or TitleCase(base)
-        if keepSet[base] then
-          keep[#keep + 1] = display
-        else
-          disable[#disable + 1] = display
-          disableSet[base] = true
-        end
-      end
-    end
-    table.sort(keep); table.sort(disable)
-    return keep, disable, disableSet
-  end
-  local names, seen = CachedNames(), {}
-  local buckets = { CORE = {}, S = {}, A = {}, B = {}, C = {},
-                    DISABLE = {}, REROLL = {} }
-  for norm in pairs(owned) do
-    local base = StripQuality(norm)
-    if not seen[base] then
-      seen[base] = true
-      local v = Classify(base)
-      local display = names[base] or TitleCase(base)
-      if buckets[v] then
-        table.insert(buckets[v], display)
-      end
-    end
-  end
-  local ordOf = {}
-  for _, l in pairs(buckets) do
-    for _, nm in ipairs(l) do ordOf[nm] = TierOrderIndex(Norm(nm)) end
-    table.sort(l, function(a, b)
-      if ordOf[a] ~= ordOf[b] then return (ordOf[a] or 9999) < (ordOf[b] or 9999) end
-      return a < b
-    end)
-  end
-  local keep, disable, disableSet = {}, {}, {}
-  for _, key in ipairs({ "CORE", "S", "A", "B", "C" }) do
-    for _, nm in ipairs(buckets[key]) do
-      if #keep < keepN then
-        keep[#keep + 1] = nm
-      else
-        disable[#disable + 1] = nm .. " (" .. key .. ")"
-        disableSet[Norm(nm)] = true
-      end
-    end
-  end
-  -- Traps and rated-junk always go on the disable list.
-  for _, nm in ipairs(buckets.DISABLE) do
-    disable[#disable + 1] = nm .. " (trap)"
-    disableSet[Norm(nm)] = true
-  end
-  for _, nm in ipairs(buckets.REROLL) do
-    disable[#disable + 1] = nm .. " (junk)"
-    disableSet[Norm(nm)] = true
-  end
-  return keep, disable, disableSet
-end
+-- (A.DisablePlan removed 2026-09-01.) It was the PRE-BiS pool planner: it read
+-- the RUN's echo set with no tome gating, so it named echoes for disabling
+-- that have no toggle at all, and it wrote PP.db.poolPlan -- meaning the rail's
+-- Farm/Raid buttons silently overwrote the correct plan from TomeManager and
+-- re-badged every tile from the wrong source. There is now exactly one
+-- pool-planning path: TomeManager, on CHASE/KEEP/CUT via MergedTiles().
 
 -- Snapshot copy of the owned set, for precise added/removed diffing.
 function A.OwnedCopy()

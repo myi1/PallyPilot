@@ -747,15 +747,9 @@ SlashCmdList["EBONPILOT"] = function(line)
     -- Old command names -> the new tile-based plan. "farm" -> tight pool.
     local a = (arg == "farm") and "tight" or ""
     PP.safeCall(PP.TomeManager.Command, a)
-  elseif cmd == "pool" then
-    local n = tonumber(arg)
-    if n and n >= 60 and n <= 200 then
-      PP.db.options.poolSize = n
-      PP.print("Enabled-pool target set to " .. n .. ".")
-    else
-      PP.print("Usage: /pp pool <60-200>  (currently "
-        .. (PP.db.options.poolSize or 82) .. ")")
-    end
+  -- (/ep pool removed: it only tuned A.DisablePlan, the pre-BiS pool
+  -- planner, which no longer exists. Pool size is now a consequence of
+  -- CHASE/KEEP/CUT, not a number you dial.)
   elseif cmd == "guide" or cmd == "raid" then
     if PP.RaidGuide.Toggle then PP.RaidGuide.Toggle() end
   elseif cmd == "boss" then

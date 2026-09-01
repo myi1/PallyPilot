@@ -277,33 +277,31 @@ EF.HookJournalRefresh = HookJournalRefresh
 
 -- One-click run-start: compute the pool plan, sync the matching build into
 -- EBH, and X-mark the disable tiles. No chat commands involved.
+-- AIM: which pool this run is building toward. Nothing more.
+--
+-- This used to ALSO compute a disable plan, via EchoAudit.DisablePlan -- the
+-- pre-BiS system, which reads the RUN's echo set with no tome gating and so
+-- names echoes that have no toggle at all. Worse, it wrote PP.db.poolPlan,
+-- meaning a click here silently overwrote the correct plan from TomeManager
+-- and re-badged every tile from the wrong source. Two pool planners, and the
+-- older wronger one won.
+--
+-- There is now exactly one pool-planning path (TomeManager / "Pool plan"), and
+-- this button does the half that was always right: set the aim and sync it
+-- into EbonholdHub so auto-pick targets our build.
 function EF.ApplyPool(mode)
-  if not (PP.EchoAudit and PP.EchoAudit.DisablePlan) then return end
-  -- Direct call: an and-chain would truncate the multiple returns
-  -- (the bug class that also ate the kill tracker).
-  local keep, disable, set = PP.EchoAudit.DisablePlan(nil, mode)
-  if not keep then
-    SetStatus("EbonholdHub data not found", EMBER)
-    return
-  end
-  -- onSet must be present even when empty: RefreshBadges reads it, and leaving
-  -- it nil here let a rail Farm/Raid-pool click silently strip the tick badges
-  -- TomeManager had set for the re-enable half of a plan.
-  PP.db.poolPlan = { mode = mode, set = set, onSet = {}, t = time() }
+  PP.db.buildMode = mode
   if PP.HubSync and PP.HubSync.Push then
     PP.safeCall(PP.HubSync.Push, mode == "farm" and "farm" or nil)
   end
-  RefreshBadges()
-  SetStatus(string.upper(mode) .. " pool: right-click these " .. #disable
-    .. " OFF (level 1)", BRIGHT)
-  PP.print(GOLD .. string.upper(mode) .. " POOL" .. R .. " — keep " .. #keep
-    .. ", RIGHT-CLICK these " .. #disable .. " OFF (they also show a red X on "
-    .. "visible tiles). Build synced to " .. mode .. " mode.")
-  -- Print the full numbered list — reliable even across the scrolling catalog
-  -- where only on-screen tiles can show an X.
-  for i, nm in ipairs(disable) do
-    DEFAULT_CHAT_FRAME:AddMessage("  " .. EMBER .. i .. "." .. R .. " " .. nm)
-  end
+  SetStatus("aim: " .. string.upper(mode) .. " -- synced to EBH", BRIGHT)
+  PP.print(GOLD .. "AIM: " .. string.upper(mode) .. R .. DIM
+    .. (mode == "farm" and " -- repeats uncapped, for rank-ups."
+                       or " -- breadth.")
+    .. " Synced to EbonholdHub, so auto-pick drafts toward this build. "
+    .. "Pool toggles are a separate thing (" .. R .. GOLD .. "Pool plan" .. R
+    .. DIM .. ", level 1 only)." .. R)
+  if rail then PP.safeCall(EF.RefreshRail) end
 end
 
 local FindTile  -- forward declaration; see EF.FindTile below
@@ -1520,6 +1518,77 @@ function EF.RefreshNextAction()
   end
 end
 
+-- Position every rail widget top-down from measured heights. Called at the END
+-- of RefreshRail, once all the text is set -- FontString heights are only
+-- meaningful after SetText, which is exactly the trap that produced the
+-- overlapping mess this replaces.
+function EF.LayoutRail()
+  if not rail then return end
+  local X, W = 14, 182
+  local y = 14
+
+  local function place(fs, gap)
+    if not fs then return end
+    local txt = fs.GetText and fs:GetText()
+    if not txt or txt == "" then fs:Hide(); return end
+    fs:Show()
+    fs:ClearAllPoints()
+    fs:SetPoint("TOPLEFT", rail, "TOPLEFT", X, -y)
+    fs:SetHeight(fs:GetStringHeight() + 1)
+    y = y + fs:GetStringHeight() + 1 + (gap or 6)
+  end
+  local function placeBtn(b, gap, indentX, w)
+    if not b then return end
+    b:Show()
+    b:ClearAllPoints()
+    b:SetPoint("TOPLEFT", rail, "TOPLEFT", indentX or X, -y)
+    if w then b:SetWidth(w) end
+    y = y + b:GetHeight() + (gap or 6)
+  end
+  local function pair(a, b, gap)
+    -- Two buttons side by side count as ONE row of height.
+    if not (a and b) then return end
+    a:Show(); b:Show()
+    a:ClearAllPoints(); a:SetPoint("TOPLEFT", rail, "TOPLEFT", X, -y)
+    b:ClearAllPoints(); b:SetPoint("LEFT", a, "RIGHT", 6, 0)
+    y = y + a:GetHeight() + (gap or 6)
+  end
+  local function rule(gap)
+    y = y + (gap or 8)
+  end
+
+  rail.title:ClearAllPoints()
+  rail.title:SetPoint("TOP", rail, "TOP", 0, -y)
+  y = y + 20
+
+  place(rail.nextFS, 4)
+  placeBtn(rail.nextBtn, 4, X, W)
+  place(rail.chaseFS, 8)
+
+  place(rail.body, 8)
+
+  place(rail.aimFS, 4)
+  pair(rail.poolFarm, rail.poolRaid, 3)
+  place(rail.aimCap, 8)
+
+  -- Orb row: [-] label [+] on one line.
+  rail.orbMinus:Show(); rail.orbPlus:Show(); rail.orbLabel:Show()
+  rail.orbMinus:ClearAllPoints()
+  rail.orbMinus:SetPoint("TOPLEFT", rail, "TOPLEFT", X, -y)
+  rail.orbLabel:ClearAllPoints()
+  rail.orbLabel:SetPoint("LEFT", rail.orbMinus, "RIGHT", 4, 0)
+  rail.orbPlus:ClearAllPoints()
+  rail.orbPlus:SetPoint("LEFT", rail.orbLabel, "RIGHT", 4, 0)
+  y = y + rail.orbMinus:GetHeight() + 10
+
+  placeBtn(rail.tomeBtn, 3, X, W)
+  place(rail.toolCap, 6)
+  place(rail.poolLeft, 8)
+
+  rule(2)
+  placeBtn(rail.rerollBtn, 6, X, W)
+end
+
 function EF.RefreshRail()
   if not rail then return end
   -- Active build mode: highlighted button + labeled line. No guessing.
@@ -1592,6 +1661,9 @@ function EF.RefreshRail()
     t[#t+1] = EMBER .. "EbonholdHub data not found" .. R
   end
   rail.body:SetText(table.concat(t, "\n"))
+  -- Layout LAST: every FontString now holds its final text, so the measured
+  -- heights this pass reads are the real ones.
+  EF.LayoutRail()
 end
 
 local function BuildRail()
@@ -1608,140 +1680,81 @@ local function BuildRail()
     insets = { left = 8, right = 8, top = 8, bottom = 8 },
   })
 
-  local title = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOP", rail, "TOP", 0, -14)
-  title:SetText(GOLD .. "EbonPilot" .. R)
+  -- ONE top-down flow. This panel previously mixed two layout systems: the
+  -- body anchored from the TOP and grew with its text, while the button
+  -- cluster was anchored from the BOTTOM at fixed offsets. Nothing coordinated
+  -- them, so as soon as the body ran long the two collided and the whole rail
+  -- became unreadable. Everything is now positioned by LayoutRail() using
+  -- MEASURED heights, in order, once per refresh.
+  rail.title = rail:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  rail.title:SetWidth(182); rail.title:SetJustifyH("CENTER")
+  rail.title:SetText(GOLD .. "EbonPilot" .. R)
 
-  -- NEXT ACTION sits at the very top, above the build detail: it is the
-  -- question you actually opened this panel to answer.
-  rail.nextFS = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.nextFS:SetPoint("TOPLEFT", rail, "TOPLEFT", 14, -34)
-  rail.nextFS:SetWidth(182)
-  rail.nextFS:SetJustifyH("LEFT"); rail.nextFS:SetJustifyV("TOP")
-  rail.nextFS:SetSpacing(2)
-
-  rail.nextBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.nextBtn:SetWidth(182); rail.nextBtn:SetHeight(24)
-  rail.nextBtn:SetPoint("TOPLEFT", rail.nextFS, "BOTTOMLEFT", 0, -4)
-  rail.nextBtn:SetText("...")
-
-  -- WHAT you are rolling for. "Hunt 1 missing" tells you a count; the useful
-  -- thing is the name, so you know whether to keep spending on it.
-  rail.chaseFS = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.chaseFS:SetPoint("TOPLEFT", rail.nextBtn, "BOTTOMLEFT", 0, -5)
-  rail.chaseFS:SetWidth(182)
-  rail.chaseFS:SetJustifyH("LEFT"); rail.chaseFS:SetJustifyV("TOP")
-  rail.chaseFS:SetSpacing(1)
-
-  rail.body = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.body:SetPoint("TOPLEFT", rail.chaseFS, "BOTTOMLEFT", 0, -10)
-  rail.body:SetWidth(182)
-  rail.body:SetJustifyH("LEFT"); rail.body:SetJustifyV("TOP")
-  rail.body:SetSpacing(2)
-
-  -- ---------------------------------------------------------------------
-  -- The bottom cluster used to be five identical buttons in a block: "Tome
-  -- on/off", "Build score", "Farm pool", "Raid pool", "Quality fish". Same
-  -- size, same weight, no grouping, and nothing saying what any of them did or
-  -- WHEN you would want it. Grouped now, each group headed and captioned with
-  -- the one sentence that decides whether it applies to you right now.
-  local function Header(text, anchorTo, yOff)
-    local fs = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, yOff)
-    fs:SetWidth(182); fs:SetJustifyH("LEFT")
-    fs:SetText(GOLD .. text .. R)
+  local function Text(font)
+    local fs = rail:CreateFontString(nil, "OVERLAY", font or "GameFontHighlightSmall")
+    fs:SetWidth(182); fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP"); fs:SetSpacing(1)
     return fs
   end
-  local function Caption(text, yOff)
-    local fs = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, yOff)
-    fs:SetWidth(182); fs:SetJustifyH("LEFT"); fs:SetSpacing(1)
-    fs:SetText(DIM .. text .. R)
-    return fs
+  local function Btn(w, label)
+    local b = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+    b:SetWidth(w); b:SetHeight(22); b:SetText(label)
+    return b
   end
 
-  -- GROUP 1 (lowest): manual roll. The NEXT button up top is the usual way in;
-  -- this is the escape hatch when you want to drive it yourself.
-  rail.rerollBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.rerollBtn:SetWidth(182); rail.rerollBtn:SetHeight(22)
-  rail.rerollBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 16)
-  rail.rerollBtn:SetText("Reroll junk")
-  rail.rerollBtn:SetScript("OnClick", function() PP.safeCall(EF.StartRerollSmart) end)
-  Caption("Manual roll -- clears junk, else fishes. The NEXT button "
-    .. "above is usually the better move.", 40)
+  rail.nextFS  = Text()
+  rail.nextBtn = Btn(182, "...")
+  rail.nextBtn:SetHeight(24)
+  rail.chaseFS = Text()
 
-  -- GROUP 2: orbs per roll. This is a SPEND dial, so say what spending buys.
-  local minus = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  minus:SetWidth(22); minus:SetHeight(20)
-  minus:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 74)
-  minus:SetText("-")
-  local orbLabel = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  orbLabel:SetPoint("LEFT", minus, "RIGHT", 6, 0)
-  local plus = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  plus:SetWidth(22); plus:SetHeight(20)
-  plus:SetPoint("LEFT", orbLabel, "RIGHT", 6, 0)
-  plus:SetText("+")
-  local function orbText()
-    orbLabel:SetText(DIM .. "orbs/roll: " .. R .. GOLD
-      .. (PP.db.options.rerollOrbs or 1) .. R .. DIM .. "  (shift +/-10)" .. R)
-  end
-  minus:SetScript("OnClick", function()
-    local step = IsShiftKeyDown() and 10 or 1
-    PP.db.options.rerollOrbs = math.max(1, (PP.db.options.rerollOrbs or 1) - step); orbText()
-  end)
-  plus:SetScript("OnClick", function()
-    local step = IsShiftKeyDown() and 10 or 1
-    PP.db.options.rerollOrbs = math.min(100, (PP.db.options.rerollOrbs or 1) + step); orbText()
-  end)
-  orbText()
-  Caption("More orbs = higher-quality draw. Crank to ~100 before fishing.", 98)
+  rail.body = Text()
 
-  -- GROUP 3: which pool this run is building toward. Two buttons that look
-  -- like actions but are really a MODE, so the active one is named in words
-  -- (not just highlighted -- colour alone is not readable here).
-  rail.poolFarm = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.poolFarm:SetWidth(88); rail.poolFarm:SetHeight(22)
-  rail.poolFarm:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 124)
-  rail.poolFarm:SetText("Farm")
+  rail.aimFS   = Text()
+  rail.poolFarm = Btn(88, "Farm")
+  rail.poolRaid = Btn(88, "Raid")
+  rail.aimCap  = Text()
+
+  rail.orbMinus = Btn(22, "-"); rail.orbMinus:SetHeight(20)
+  rail.orbLabel = Text()
+  rail.orbLabel:SetWidth(112); rail.orbLabel:SetJustifyH("CENTER")
+  rail.orbPlus  = Btn(22, "+"); rail.orbPlus:SetHeight(20)
+
+  -- Build score moved to the Builds page, where the measured comparison
+  -- lives; a composition grade means little next to real DPS.
+  rail.tomeBtn  = Btn(182, "Pool plan (level 1)")
+  rail.toolCap  = Text()
+
+  rail.poolLeft = Text()
+  rail.rerollBtn = Btn(182, "Reroll junk")
+
+  -- Behaviour ------------------------------------------------------------
   rail.poolFarm:SetScript("OnClick", function() PP.safeCall(EF.ApplyPool, "farm") end)
-
-  rail.poolRaid = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.poolRaid:SetWidth(88); rail.poolRaid:SetHeight(22)
-  rail.poolRaid:SetPoint("LEFT", rail.poolFarm, "RIGHT", 6, 0)
-  rail.poolRaid:SetText("Raid")
   rail.poolRaid:SetScript("OnClick", function() PP.safeCall(EF.ApplyPool, "raid") end)
-
-  rail.aimFS = Caption("", 148)
-  Header("AIM", rail, 168)
-  Caption("Raid = breadth, the default. Farm = repeats uncapped, for "
-    .. "rank-ups. Sets the plan and syncs it to EBH.", 186)
-
-  -- GROUP 4 (top of the cluster): things that open a report, not things that
-  -- spend anything.
-  rail.tomeBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.tomeBtn:SetWidth(88); rail.tomeBtn:SetHeight(22)
-  rail.tomeBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 224)
-  rail.tomeBtn:SetText("Pool plan")
+  rail.rerollBtn:SetScript("OnClick", function() PP.safeCall(EF.StartRerollSmart) end)
   rail.tomeBtn:SetScript("OnClick", function()
     if PP.TomeManager then PP.safeCall(PP.TomeManager.Command, "bis") end
   end)
 
-  rail.scoreBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.scoreBtn:SetWidth(88); rail.scoreBtn:SetHeight(22)
-  rail.scoreBtn:SetPoint("LEFT", rail.tomeBtn, "RIGHT", 6, 0)
-  rail.scoreBtn:SetText("Build score")
-  rail.scoreBtn:SetScript("OnClick", function()
-    if PP.BuildScore then PP.safeCall(PP.BuildScore.Report) end
+  local function orbText()
+    rail.orbLabel:SetText(DIM .. "orbs/roll " .. R .. GOLD
+      .. (PP.db.options.rerollOrbs or 1) .. R)
+  end
+  EF.__orbText = orbText
+  rail.orbMinus:SetScript("OnClick", function()
+    local step = IsShiftKeyDown() and 10 or 1
+    PP.db.options.rerollOrbs = math.max(1, (PP.db.options.rerollOrbs or 1) - step)
+    orbText()
   end)
+  rail.orbPlus:SetScript("OnClick", function()
+    local step = IsShiftKeyDown() and 10 or 1
+    PP.db.options.rerollOrbs = math.min(100, (PP.db.options.rerollOrbs or 1) + step)
+    orbText()
+  end)
+  orbText()
 
-  -- Live progress from the badge pass sits with the pool plan it belongs to.
-  rail.poolLeft = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.poolLeft:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 248)
-  rail.poolLeft:SetWidth(182); rail.poolLeft:SetJustifyH("LEFT")
-
-  Header("TOOLS", rail, 268)
-  Caption("Pool plan badges the tiles to toggle -- only applies at "
-    .. "LEVEL 1. Build score rates the run you have now.", 286)
+  -- Captions: ONE short line each. The previous three-line explanations were
+  -- most of what made the panel feel crowded.
+  rail.aimCap:SetText(DIM .. "Raid = breadth. Farm = rank-ups." .. R)
+  rail.toolCap:SetText(DIM .. "Badges the tiles to toggle. Nothing to do here at 80." .. R)
 
   -- Live pool progress: counts what is badged on screen right now, so it ticks
   -- down as you click. No command, no chat line.

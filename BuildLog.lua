@@ -611,6 +611,18 @@ function BL.Init2()
     PP.safeCall(BL.Capture, "manual"); PP.safeCall(BL.Refresh)
   end)
 
+  -- Build score belongs HERE, not on the journal rail. It rates COMPOSITION --
+  -- a prediction -- and this is the page that already shows measured damage,
+  -- so the two forms of evidence sit together and their relative weight is
+  -- obvious. On the rail it was a lone button with no context.
+  local score = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  score:SetWidth(110); score:SetHeight(22)
+  score:SetPoint("TOPRIGHT", cap, "BOTTOMRIGHT", 0, -4)
+  score:SetText("Score this run")
+  score:SetScript("OnClick", function()
+    if PP.BuildScore then PP.safeCall(PP.BuildScore.Report) end
+  end)
+
   local scroll = CreateFrame("ScrollFrame", "EbonPilotBuildsScroll", frame,
     "UIPanelScrollFrameTemplate")
   frame.scroll = scroll          -- Refresh re-anchors under the header block
