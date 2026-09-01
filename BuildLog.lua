@@ -416,16 +416,19 @@ local function GetRow(i)
   r.dps:SetPoint("TOPRIGHT", r, "TOPRIGHT", -4, -1)
   r.dps:SetWidth(120); r.dps:SetJustifyH("RIGHT")
 
+  -- META and DETAIL are placed by MEASUREMENT, not at fixed offsets -- see the
+  -- layout pass at the bottom of BL.Refresh. Adding the ST/AoE figures pushed
+  -- the meta line onto a second row, and detail was nailed to -30, so the two
+  -- drew straight through each other. Same failure the journal rail had.
   r.meta = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   r.meta:SetPoint("TOPLEFT", r, "TOPLEFT", 32, -17)
-  r.meta:SetWidth(250); r.meta:SetJustifyH("LEFT")
+  r.meta:SetWidth(268); r.meta:SetJustifyH("LEFT")
 
   r.delta = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   r.delta:SetPoint("TOPRIGHT", r, "TOPRIGHT", -4, -18)
-  r.delta:SetWidth(120); r.delta:SetJustifyH("RIGHT")
+  r.delta:SetWidth(110); r.delta:SetJustifyH("RIGHT")
 
   r.detail = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  r.detail:SetPoint("TOPLEFT", r, "TOPLEFT", 32, -30)
   r.detail:SetWidth(370); r.detail:SetJustifyH("LEFT")
 
   -- Hairline separator: structure without drawing attention to itself.
@@ -488,17 +491,31 @@ function BL.Refresh()
       --
       -- So: name the winner in each bucket, and never quote a gap between two
       -- builds measured on different mixes.
+      -- SAMPLE SIZE DECIDES WHO IS ELIGIBLE, not just who is highest.
+      --
+      -- Loadout 7 at 98k over 8 single-target fights is not evidence that it
+      -- beats arm3-hor-hc2 at 91k over 71 -- that is a 7% gap on a sample far
+      -- too small to carry it, and crowning it is worse advice than saying
+      -- nothing. So: pick the best build that has a REAL sample. Only if none
+      -- does fall back to the best thin one, and say it is provisional.
+      local MIN_SAMPLE = 10
       local function bestIn(field, nField)
-        local win
+        local solid, thin
         for _, b in ipairs(list) do
-          if b._m and b._m[field] and (not win or b._m[field] > win._m[field]) then
-            win = b
+          local m = b._m
+          if m and m[field] then
+            if (m[nField] or 0) >= MIN_SAMPLE then
+              if not solid or m[field] > solid._m[field] then solid = b end
+            elseif not thin or m[field] > thin._m[field] then
+              thin = b
+            end
           end
         end
-        return win, win and win._m[nField] or 0
+        local win = solid or thin
+        return win, win and win._m[nField] or 0, (solid ~= nil)
       end
-      local stWin, stN = bestIn("st", "stN")
-      local aoeWin, aoeN = bestIn("aoe", "aoeN")
+      local stWin, stN, stSolid = bestIn("st", "stN")
+      local aoeWin, aoeN, aoeSolid = bestIn("aoe", "aoeN")
 
       local parts = {}
       if stWin then
@@ -530,8 +547,13 @@ function BL.Refresh()
         else
           note = "Only one kind of fight is measured so far."
         end
-        local thin = ((stWin and stN < 10) or (aoeWin and aoeN < 10))
-          and "  Thin samples -- provisional." or ""
+        -- Name WHICH answer is thin, rather than hedging both at once.
+        local weak = {}
+        if stWin and not stSolid then weak[#weak + 1] = "single target" end
+        if aoeWin and not aoeSolid then weak[#weak + 1] = "AoE" end
+        local thin = (#weak > 0)
+          and ("  No build has " .. MIN_SAMPLE .. "+ " .. table.concat(weak, " or ")
+               .. " fights yet -- provisional.") or ""
         frame.hint:SetText(DIM .. note .. thin .. "  Rows below are ranked on the "
           .. "blended average, which mixes both." .. R)
       end
@@ -540,8 +562,13 @@ function BL.Refresh()
 
   -- Anchor the table under the header, whose height depends on how far the
   -- verdict and caveat wrapped. Fixed offsets here are what caused the overlap.
+  -- Re-anchor the hint under however far the verdict wrapped, THEN measure the
+  -- pair to find where the table starts.
+  local verdictH = frame.verdict:GetStringHeight() or 14
+  frame.hint:ClearAllPoints()
+  frame.hint:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -(16 + verdictH + 6))
   if frame.scroll then
-    local top = 16 + (frame.verdict:GetStringHeight() or 14) + 6
+    local top = 16 + verdictH + 6
                    + (frame.hint:GetStringHeight() or 26) + 14
     frame.scroll:ClearAllPoints()
     frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -top)
@@ -627,7 +654,16 @@ function BL.Refresh()
 
     local det = Detail(b)
     r.detail:SetText(det)
-    local h = (det ~= "" ) and 46 or 34
+
+    -- MEASURE, THEN PLACE. Every FontString now holds its final text, so the
+    -- heights read here are the real wrapped heights. A fixed 46/34 could not
+    -- survive a meta line that wraps, and that is exactly what happened.
+    local metaH = r.meta:GetStringHeight() or 12
+    local detailTop = 17 + metaH + 2
+    r.detail:ClearAllPoints()
+    r.detail:SetPoint("TOPLEFT", r, "TOPLEFT", 32, -detailTop)
+    local h = detailTop + ((det ~= "") and ((r.detail:GetStringHeight() or 12) + 8) or 4)
+    if h < 34 then h = 34 end
     r:SetHeight(h)
     r.line:Show()
     r:Show()
@@ -656,6 +692,9 @@ function BL.Init2()
   frame.verdict:SetWidth(300); frame.verdict:SetJustifyH("LEFT")
 
   frame.hint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  -- Anchored per refresh from the verdict's MEASURED height. It used to be
+  -- nailed to -38, which held only while the verdict fitted on one line; two
+  -- winners named in the header do not.
   frame.hint:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -38)
   -- 300 wide, not 430: the Capture button occupies the right edge and the old
   -- width ran the text underneath it.

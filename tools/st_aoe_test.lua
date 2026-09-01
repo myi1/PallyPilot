@@ -161,5 +161,39 @@ assert(not string.find(page, "RUNNING NOW", 1, true),
   "with no readable run, no row may claim to be live:\n" .. page)
 print("8. unreadable run marks nothing")
 
+-- 9. SAMPLE SIZE DECIDES ELIGIBILITY. Straight from the live page: Loadout 7
+--    at 98k over 8 ST fights was crowned over arm3-hor-hc2 at 91k over 71.
+--    A 7% gap on an eighth of the sample is not a result.
+PP.db.fights = {}
+PP.db.buildLog = { ["lucky"] = { name = "Lucky8", id = "lucky" },
+                   ["proven"] = { name = "Proven71", id = "proven" } }
+for _ = 1, 8 do fight("Lucky8", 98000, 1) end
+for _ = 1, 71 do fight("Proven71", 91000, 1) end
+BL.CurrentKey = function() return nil, nil end
+written = {}
+PP.safeCall(BL.Refresh)
+page = table.concat(written, "\n")
+local iSt2 = string.find(page, "Single target:", 1, true)
+assert(iSt2, "a single-target winner must still be named:\n" .. page)
+local line = string.sub(page, iSt2, iSt2 + 90)
+assert(string.find(line, "Proven71", 1, true),
+  "the 71-fight build must win over the 8-fight one:\n" .. line)
+print("9. a real sample beats a luckier small one")
+
+-- ...but when NOTHING has a real sample, still answer -- and say it is thin.
+PP.db.fights = {}
+PP.db.buildLog = { ["a"] = { name = "TinyA", id = "a" },
+                   ["b"] = { name = "TinyB", id = "b" } }
+for _ = 1, 4 do fight("TinyA", 90000, 1) end
+for _ = 1, 4 do fight("TinyB", 50000, 1) end
+written = {}
+PP.safeCall(BL.Refresh)
+page = table.concat(written, "\n")
+assert(string.find(page, "TinyA", 1, true), "the best thin build is still named")
+assert(string.find(page, "provisional", 1, true),
+  "and it must be flagged as provisional:\n" .. page)
+print("10. all-thin still answers, flagged provisional")
+
 print("\nST/AoE OK -- each bucket answered on its own evidence, no percentage")
-print("claim spans two fight mixes, and the live build is named.")
+print("claim spans two fight mixes, sample size gates the crown, and the live")
+print("build is named.")
