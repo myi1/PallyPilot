@@ -51,8 +51,26 @@ end
 -- NOTE the fight log is tagged by the SKILL-TREE loadout name, which is a
 -- coarser bucket than an echo set -- so this can under-attribute. Shown as
 -- measured only when it matches; never invented.
+-- SINGLE-TARGET vs AoE, because they are different questions.
+--
+-- A blended average is the mean of two populations that do not mix: the build
+-- that wins a stand-still boss is often not the one that wins a trash pull,
+-- and one number cannot tell you which you are reading. Fights already record
+-- `tgts` (distinct targets damaged), so the split costs nothing.
+--
+-- 1 target = ST. 3+ = AoE. Two is deliberately NEITHER -- that is usually a
+-- boss with one add, and forcing it into a bucket only adds noise.
+local function Bucket(f)
+  local t = f.tgts
+  if type(t) ~= "number" then return nil end
+  if t <= 1 then return "st" end
+  if t >= 3 then return "aoe" end
+  return nil
+end
+
 local function Measured(key, name)
   local best, sum, n = 0, 0, 0
+  local stSum, stN, aoeSum, aoeN = 0, 0, 0, 0
   for _, f in ipairs((PP.db and PP.db.fights) or {}) do
     -- ID is authoritative when BOTH sides have one; name matching is ONLY the
     -- legacy fallback for fights logged before ids existed. The old `id-match
@@ -73,10 +91,15 @@ local function Measured(key, name)
     if match and f.dps and (f.dur or 0) >= 10 then
       n = n + 1; sum = sum + f.dps
       if f.dps > best then best = f.dps end
+      local bucket = Bucket(f)
+      if bucket == "st" then stSum, stN = stSum + f.dps, stN + 1
+      elseif bucket == "aoe" then aoeSum, aoeN = aoeSum + f.dps, aoeN + 1 end
     end
   end
   if n == 0 then return nil end
-  return { n = n, avg = sum / n, best = best }
+  return { n = n, avg = sum / n, best = best,
+           st = (stN > 0) and (stSum / stN) or nil, stN = stN,
+           aoe = (aoeN > 0) and (aoeSum / aoeN) or nil, aoeN = aoeN }
 end
 
 -- The run's actual echo list, and a stable key derived from it.
@@ -453,27 +476,65 @@ function BL.Refresh()
         .. (top._m.n == 1 and "" or "s") .. ". Play a second build to get a "
         .. "comparison." .. R)
     else
-      -- The gap matters as much as the winner: a 2% lead over 40 fights is
-      -- noise, and saying so is more useful than crowning it.
-      local second = nil
-      for i = 2, #list do if list[i]._m then second = list[i] break end end
-      local gap = (second and second._m.avg > 0)
-        and ((top._m.avg / second._m.avg - 1) * 100) or nil
-      frame.verdict:SetText(VERD .. "Best: " .. R .. BRIGHT
-        .. tostring(top.name or "?") .. R .. GOLD .. "  " .. K(top._m.avg) .. R)
-      local conf
-      if not gap then
-        conf = ""
-      elseif gap < 3 then
-        conf = "  Too close to call -- keep playing both."
-      elseif top._m.n < 10 then
-        conf = "  Only " .. top._m.n .. " fights though; treat it as provisional."
-      else
-        conf = "  A real gap."
+      -- ANSWER IT PER BUCKET, because the data says they are different answers.
+      --
+      -- Measured on the real log 2026-09-02: single-target fights run a median
+      -- 77k, AoE fights a median 394k, topping out near 15M on an ICC trash
+      -- pull. Ranking on the blended average therefore just ranks WHICH BUILD
+      -- HAPPENED TO FIGHT MORE TRASH -- it crowned a build with seven AoE-only
+      -- fights over one with 249 mixed fights and called it a 761% lead. That
+      -- comparison was meaningless, and the page stated it with total
+      -- confidence.
+      --
+      -- So: name the winner in each bucket, and never quote a gap between two
+      -- builds measured on different mixes.
+      local function bestIn(field, nField)
+        local win
+        for _, b in ipairs(list) do
+          if b._m and b._m[field] and (not win or b._m[field] > win._m[field]) then
+            win = b
+          end
+        end
+        return win, win and win._m[nField] or 0
       end
-      frame.hint:SetText(DIM .. "Ahead of " .. tostring(second and second.name or "?")
-        .. " by " .. string.format("%.0f%%", gap or 0) .. " over " .. top._m.n
-        .. " fights." .. conf .. R)
+      local stWin, stN = bestIn("st", "stN")
+      local aoeWin, aoeN = bestIn("aoe", "aoeN")
+
+      local parts = {}
+      if stWin then
+        parts[#parts + 1] = DIM .. "Single target: " .. R .. BRIGHT
+          .. tostring(stWin.name or "?") .. R .. GOLD .. " " .. K(stWin._m.st) .. R
+          .. DIM .. " (" .. stN .. ")" .. R
+      end
+      if aoeWin then
+        parts[#parts + 1] = DIM .. "AoE: " .. R .. BRIGHT
+          .. tostring(aoeWin.name or "?") .. R .. GOLD .. " " .. K(aoeWin._m.aoe) .. R
+          .. DIM .. " (" .. aoeN .. ")" .. R
+      end
+      if #parts == 0 then
+        -- No fight in the log records its target count (all pre-`tgts`
+        -- records), so the split cannot be computed. Fall back honestly.
+        frame.verdict:SetText(VERD .. "Best: " .. R .. BRIGHT
+          .. tostring(top.name or "?") .. R .. GOLD .. "  " .. K(top._m.avg) .. R)
+        frame.hint:SetText(DIM .. "Blended across every fight -- these records "
+          .. "predate target counts, so single-target and AoE cannot be "
+          .. "separated." .. R)
+      else
+        frame.verdict:SetText(table.concat(parts, DIM .. "     " .. R))
+        local note
+        if stWin and aoeWin and stWin ~= aoeWin then
+          note = "Different builds win the two, so pick by the fight you are "
+            .. "about to take."
+        elseif stWin and aoeWin then
+          note = "Same build wins both."
+        else
+          note = "Only one kind of fight is measured so far."
+        end
+        local thin = ((stWin and stN < 10) or (aoeWin and aoeN < 10))
+          and "  Thin samples -- provisional." or ""
+        frame.hint:SetText(DIM .. note .. thin .. "  Rows below are ranked on the "
+          .. "blended average, which mixes both." .. R)
+      end
     end
   end
 
@@ -509,25 +570,48 @@ function BL.Refresh()
     if pw.hp then bits[#bits + 1] = K(pw.hp) .. " hp" end
     if pw.crit then bits[#bits + 1] = num(pw.crit) .. "% crit" end
     if #bits == 0 then return "" end
-    return DIM .. table.concat(bits, "  9483  ") .. R
+    return DIM .. table.concat(bits, "  ·  ") .. R
+  end
+
+  -- The build you are actually running. CurrentKey fingerprints the live run
+  -- by its echo CONTENT, which is the same identity the rows are keyed on.
+  local liveKey, liveName
+  if BL.CurrentKey then
+    local ok, k, nm = pcall(BL.CurrentKey)
+    if ok then liveKey, liveName = k, nm end
   end
 
   local y, n = 0, 0
   for i, b in ipairs(list) do
     n = n + 1
+    local isLive = (liveKey and b._key == liveKey)
+      or (liveName and b.name == liveName) or false
     local r = GetRow(n)
     r:ClearAllPoints(); r:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
 
     -- Rank numeral for measured builds; a dash for ones with no evidence, so
     -- an unmeasured build never looks like it placed in a contest it sat out.
     r.rank:SetText(b._m and (GOLD .. i .. R) or (DIM .. "-" .. R))
-    r.name:SetText(BRIGHT .. tostring(b.name or "?") .. R)
+    r.name:SetText(BRIGHT .. tostring(b.name or "?") .. R
+      .. (isLive and (VERD .. "   [RUNNING NOW]" .. R) or ""))
 
     if b._m then
       r.dps:SetText(((i == 1) and GOLD or BRIGHT) .. K(b._m.avg) .. R)
       local thin = (b._m.n < 10) and (EMBER .. "  thin sample" .. R) or ""
-      r.meta:SetText(VERD .. "MEASURED" .. R .. DIM .. "  9483  "
-        .. b._m.n .. " fight" .. (b._m.n == 1 and "" or "s") .. R .. thin)
+      -- ST / AoE beside the blend. A build with fights in only one bucket
+      -- shows only that bucket -- an absent number is information too.
+      local split = {}
+      if b._m.st then
+        split[#split + 1] = DIM .. "ST " .. R .. BRIGHT .. K(b._m.st) .. R
+          .. DIM .. "(" .. b._m.stN .. ")" .. R
+      end
+      if b._m.aoe then
+        split[#split + 1] = DIM .. "AoE " .. R .. BRIGHT .. K(b._m.aoe) .. R
+          .. DIM .. "(" .. b._m.aoeN .. ")" .. R
+      end
+      r.meta:SetText(VERD .. "MEASURED" .. R .. DIM .. "  ·  "
+        .. b._m.n .. " fight" .. (b._m.n == 1 and "" or "s") .. R .. thin
+        .. (#split > 0 and (DIM .. "  ·  " .. R .. table.concat(split, DIM .. " / " .. R)) or ""))
       if i == 1 then
         r.delta:SetText(VERD .. "best" .. R)
       elseif best and best > 0 then
@@ -537,7 +621,7 @@ function BL.Refresh()
       end
     else
       r.dps:SetText(DIM .. "--" .. R)
-      r.meta:SetText(EMBER .. "PREDICTED" .. R .. DIM .. "  9483  no fights yet" .. R)
+      r.meta:SetText(EMBER .. "PREDICTED" .. R .. DIM .. "  ·  no fights yet" .. R)
       r.delta:SetText("")
     end
 

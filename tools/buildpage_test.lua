@@ -30,8 +30,10 @@ PP.BuildLog = {}
 PP.EchoAudit = { LockSlots = function() return 6 end }
 
 PP.db = { buildLog = {}, fights = {} }
-local function fight(build, dps)
-  PP.db.fights[#PP.db.fights + 1] = { build = build, dps = dps, dur = 30 }
+-- tgts defaults to 1 (single target) so the existing cases keep their meaning.
+local function fight(build, dps, tgts)
+  PP.db.fights[#PP.db.fights + 1] =
+    { build = build, dps = dps, dur = 30, tgts = tgts or 1 }
 end
 
 assert(loadfile("BuildLog.lua"))()
