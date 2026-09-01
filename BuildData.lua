@@ -55,9 +55,11 @@ B.talents = "~44 Protection / 49 Retribution hybrid for soloing (survivability "
   .. "Soul Ash tree carries survival."
 
 -- Echoes to lock so they persist across runs. ORDER = lock priority: only the
--- top N fit your unlocked lock slots (5 as of the 2026-08-28 rebuild), so the
--- proven engine + scaling enablers + survival come first; Edict/Exposed Heart
--- lock as more slots open.
+-- top N fit your unlocked permanent slots -- SIX as of 2026-09-01 (counted
+-- in-game), so the top 6 lock and Exposed Heart is the odd one out until a
+-- seventh slot opens. The proven engine + scaling enablers + survival come
+-- first. This list is deliberately one longer than the slot count so there is
+-- always a ranked fallback; it is NOT a claim that you have 7 slots.
 --
 -- Grounded in the 150-fight combat log (2026-08-28): Twilight Equilibrium is
 -- the damage ENGINE (~33% of all damage). It is a school-flip machine — Light
@@ -581,6 +583,134 @@ do
   for _, a in ipairs(common) do wep[#wep + 1] = a end
   B.slotTargets[16] = wep   -- Main Hand
   B.slotTargets[17] = wep   -- Off Hand
+end
+
+-- ---------------------------------------------------------------------------
+-- CHASE / KEEP / CUT.
+--
+-- A flat "target list" was the wrong shape. It conflated two different jobs:
+-- what you spend ORBS rerolling toward, and what you are happy to have in the
+-- draw pool. Treating those as one list over-narrowed the pool, and pool size
+-- is a damage stat here -- Adaptive Power pays +1% per UNIQUE active echo.
+--
+--   CHASE -- spend orbs and banishes on these. Small on purpose.
+--   KEEP  -- leave enabled, draft happily, never reroll for. Breadth.
+--   CUT   -- everything else: disable at level 1.
+--
+-- CHASE is ranked by evidence quality, best first:
+--   1. keepsy's own combat log (150 fights, 2026-08-28)
+--   2. cross-build consensus -- an echo that three independent published
+--      builds all commit a LOCK slot to is not a coincidence
+--   3. our tier ratings, which are research, not measurement
+B.chase = {
+  -- Measured 33% of all damage in keepsy's own log, AND locked by both
+  -- published warrior builds, AND in Nero's paladin build. Nothing else in
+  -- the game has this much agreement behind it.
+  { "Twilight Equilibrium", "measured 33% of damage; locked by TNT + Deathrage + in Nero's build" },
+  -- Locked by TNT and by keepsy; the breadth scaler, so it compounds with the
+  -- KEEP tier below rather than competing with it.
+  { "Adaptive Power", "+1% damage per unique echo; TNT lock; compounds with breadth" },
+  -- Locked by BOTH warrior builds and present in Nero's paladin list. keepsy
+  -- had this tome DISABLED, which was the clearest mistake the audit found.
+  { "Demonic Awakening", "locked by TNT + Deathrage; in Nero's build" },
+  -- Gear-conditional but decisive: with dual 1H the off-hand is dead weight
+  -- until this drafts. Drop it if you ever move to a 2H.
+  { "Ambidexterity", "enabler for dual-wield; dead off-hand without it" },
+  { "Edict of the Iron Council", "measured S carry in keepsy's best fights; in Nero's build" },
+  -- Nero's talent advice is literally built around stacking this.
+  { "Arcane Cadence", "Nero specs Rep + Divine Storm purely to proc it" },
+  { "Chronoboost", "Nero takes every CD available to feed it" },
+  { "Contagion", "Deathrage lock; in Nero's build" },
+  { "Crypt Lord's Swarm", "TNT lock; in Nero's build" },
+  { "Temporal Flow", "TNT lock; in Nero's build; base pool so it costs no tome" },
+  { "Exposed Heart", "keepsy core (7th lock priority); in Nero's build" },
+  -- Survival, not damage. Nero omits it because he is pure DPS; keep it while
+  -- climbing hardcore tiers.
+  { "Sanguine Bulwark", "hardcore survival; deliberately not in Nero's pure-damage list" },
+}
+
+-- Published community build, kept verbatim as a REFERENCE, not gospel.
+-- Source: Nero-pewpew-ombrame, "Pala (+Dk) - Nero" thread in #paladin, linking
+-- https://docs.google.com/document/d/1UzWIeVSqtdm6dVuzK5oG3gLyIANXjqkHjwmd7kMhyNE
+-- Decoded from his EBH1 loadout string on 2026-09-01 (85 echoes). His stated
+-- principle is "take everything that does damage" -- i.e. breadth on purpose.
+-- NOTE: an earlier reading of his chat summary treated "- Archmage - Echoing
+-- Tides - Emberlord" as exclusions. The loadout string proves otherwise: all
+-- three ARE in his build. Trust the string, not the prose.
+B.community = {
+  source = "Nero (docs, read 2026-09-01)",
+  names = {
+  "Accelerated Decay", "Adaptive Power", "Ambidexterity", "Arcane Burn",
+  "Arcane Cadence", "Arcane Density", "Arcane Weapon", "Archmage's Mark",
+  "Battle Momentum", "Battle Rhythm", "Blade Tempest", "Brittle Forging",
+  "Broodmother's Fury", "Brutal Might", "Chaotic Convergence",
+  "Chill of the Bone Wyrm", "Chronoboost", "Cinders of the Sanctum",
+  "Constellations", "Contagion", "Crypt Lord's Swarm",
+  "Curse of the Plaguebringer", "Cyclone of Cold Bones",
+  "Demonic Awakening", "Double Strike", "Drained Reserves",
+  "Drillmaster's Rebuke", "Echoing Tides", "Edict of the Four",
+  "Edict of the Iron Council", "Emberlord's Gift", "Entropic Fusion",
+  "Exposed Heart", "Flame Beacon", "Focused Assault", "Frostfire Paradox",
+  "Frostmourne Hungers", "Harbringer of Doom", "Holy Revelation",
+  "Hungering Curse", "Inhaled Blight", "Iron Constitution",
+  "Lightning Charged", "Malleable Goo", "Mind Expansion", "Mystic Potency",
+  "Necrotic Plague", "Nether Lord's Command", "Open Wounds",
+  "Paladin - Arcane Bombardment", "Peak Condition", "Perfect Timing",
+  "Permeating Chill", "Polarity Shift", "Quick Hands", "Quickened Tempo",
+  "Quickening Aura", "Rage of the Colossus", "Reaper's Verdict",
+  "Relentless Rhythm", "Rend the Weak", "Resonant Build", "Rocket Strike",
+  "Ruthless Exploiter", "Scent of Blood", "Scorching Wounds",
+  "Shadow Crash", "Slime Spray", "Slimebound Husk", "Spellweave",
+  "Storm Conductor", "Strength Training", "Sudden Insight",
+  "Sundered Formation", "Swift Step", "Temporal Flow", "The Last Wall",
+  "The Sporelord's Gift", "The Unclean's Fever", "Tunnel Vision",
+  "Twilight Combustion", "Twilight Equilibrium", "Unbroken Focus",
+  "Weapon Mastery", "Widow's Venom",
+  },
+}
+
+local function NormName(s)
+  return string.lower((string.gsub(s or "", "\226\128\153", "'")))
+end
+
+-- Ordered CHASE names only (drop the reasons).
+function B.ChaseList()
+  local out = {}
+  for _, e in ipairs(B.chase) do out[#out + 1] = e[1] end
+  return out
+end
+
+function B.ChaseReason(name)
+  local k = NormName(name)
+  for _, e in ipairs(B.chase) do
+    if NormName(e[1]) == k then return e[2] end
+  end
+  return nil
+end
+
+-- KEEP: everything worth leaving ENABLED. Deliberately generous -- breadth is
+-- a stat, and a tome sitting enabled costs nothing but a slightly wider draw.
+-- Anything outside this set is CUT.
+local keepCache
+function B.KeepSet()
+  if keepCache then return keepCache end
+  local set = {}
+  local function add(n) if n then set[NormName(n)] = true end end
+  for _, n in ipairs(B.locked or {}) do add(n) end
+  for _, n in ipairs(B.ChaseList()) do add(n) end
+  for _, tier in ipairs({ "S", "A" }) do
+    for _, n in ipairs((B.tiers or {})[tier] or {}) do add(n) end
+  end
+  for n, t in pairs(B.catalog or {}) do
+    if t == "S" or t == "A" then add(n) end
+  end
+  for _, n in ipairs((B.community or {}).names or {}) do add(n) end
+  keepCache = set
+  return set
+end
+
+function B.IsKeep(name)
+  return B.KeepSet()[NormName(name)] or false
 end
 
 -- Echoes that FarmQueue should treat as build targets worth farming Tomes for

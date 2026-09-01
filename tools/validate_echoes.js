@@ -45,21 +45,32 @@ function curated(file, prefix) {
     if (!out.has(k)) out.set(k, { shown: raw, where: new Set() });
     out.get(k).where.add(where);
   };
-  const block = (re, where) => {
-    const m = src.match(re); if (!m) return;
+  // A regex that matches NOTHING looks exactly like "there was nothing to
+  // check" -- that is how the \B bug hid: paladin/priest silently had only
+  // their catalog validated while reporting OK. So if the source clearly
+  // DECLARES a block but our pattern misses it, say so loudly.
+  const missed = [];
+  const block = (re, where, decl) => {
+    const m = src.match(re);
+    if (!m) { if (src.includes(decl)) missed.push(where); return; }
     for (const n of m[1].matchAll(/"([^"]+)"/g)) add(n[1], where);
   };
-  block(new RegExp(`\\${prefix}\\.locked = \\{([\\s\\S]*?)\\n\\}`), "locked");
-  block(new RegExp(`\\${prefix}\\.disable = \\{([\\s\\S]*?)\\n\\}`), "disable");
-  const tiers = src.match(new RegExp(`\\${prefix}\\.tiers = \\{([\\s\\S]*?)\\n\\}`));
+  // NB: `\\${prefix}` was a BUG -- for prefix "B" that builds the regex token
+  // \B (non-word-boundary), so these matched NOTHING for B-prefixed classes and
+  // paladin/priest were silently only catalog-checked. Use \b + the literal.
+  block(new RegExp(`\\b${prefix}\\.locked = \\{([\\s\\S]*?)\\n\\}`), "locked", prefix + ".locked");
+  block(new RegExp(`\\b${prefix}\\.disable = \\{([\\s\\S]*?)\\n\\}`), "disable", prefix + ".disable");
+  const tiers = src.match(new RegExp(`\\b${prefix}\\.tiers = \\{([\\s\\S]*?)\\n\\}`));
+  if (!tiers && src.includes(prefix + ".tiers")) missed.push("tiers");
   if (tiers) for (const t of tiers[1].matchAll(/\b([SAB]) = \{([\s\S]*?)\}/g))
     for (const n of t[2].matchAll(/"([^"]+)"/g)) add(n[1], "tiers." + t[1]);
-  const bundles = src.match(new RegExp(`\\${prefix}\\.bundles = \\{([\\s\\S]*?)\\n\\}`));
+  const bundles = src.match(new RegExp(`\\b${prefix}\\.bundles = \\{([\\s\\S]*?)\\n\\}`));
+  if (!bundles && src.includes(prefix + ".bundles")) missed.push("bundles");
   if (bundles) for (const n of bundles[1].matchAll(/"([^"]+)"/g))
     if (!/^(eph|ppb)-/.test(n[1]) && !/^[SAB]$/.test(n[1])) add(n[1], "bundles");
   // catalog: ["Name"] = "S"
   for (const c of src.matchAll(/\["([^"]+)"\]\s*=\s*"([SABCF])"/g)) add(c[1], "catalog");
-  return out;
+  return { names: out, missed };
 }
 const FILES = { PALADIN: ["BuildData.lua", "B"], HUNTER: ["HunterData.lua", "H"],
                 PRIEST: ["PriestData.lua", "B"] };
@@ -69,7 +80,7 @@ console.log(`perk DB: ${dbCount} distinct echo names\n`);
 for (const [cls, [file, prefix]] of Object.entries(FILES)) {
   if (!fs.existsSync(path.join(ADDON, file))) continue;
   const bit = CLASS_BIT[cls];
-  const names = curated(file, prefix);
+  const { names, missed } = curated(file, prefix);
   const phantom = [], undraftable = [];
   for (const [k, v] of names) {
     const mask = maskByName[k];
@@ -78,6 +89,9 @@ for (const [cls, [file, prefix]] of Object.entries(FILES)) {
   }
   const draftable = Object.entries(maskByName).filter(([, m]) => !m || (m & bit)).length;
   console.log(`=== ${cls} === curated ${names.size} | ${draftable}/${dbCount} echoes draftable by this class`);
+  if (missed.length) { problems += missed.length;
+    console.log(`  PARSER GAP -- ${file} declares these but the pattern matched nothing,`);
+    console.log(`  so they were NOT validated: ${missed.join(", ")}`); }
   if (phantom.length) { problems += phantom.length;
     console.log(`  PHANTOM NAMES -- not in the perk DB, can never match (${phantom.length}):`);
     phantom.sort().forEach(p => console.log("    " + p)); }

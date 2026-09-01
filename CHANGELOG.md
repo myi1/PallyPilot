@@ -4,6 +4,56 @@ Notable changes to PallyPilot. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versions match the GitHub
 releases and the `.toc`. Full commit-level history is in git.
 
+## [0.77.0] - 2026-09-01
+### Added
+- **`/ep now` and a NEXT button on the journal rail.** One answer, two lines:
+  what to do and what to press. The rail button *performs* the action, so the
+  advice and the doing are one click. It resolves per state (curate at level 1,
+  sync while levelling, roll, fish, lock and save) and hides rather than
+  offering a click that cannot work.
+- **CHASE / KEEP / CUT build model.** The old flat "43 S-tier targets" list
+  conflated what you spend orbs on with what you keep in the pool. CHASE is now
+  ~12 echoes ranked by evidence (measured combat log first, then cross-build
+  consensus, then our tier letters); KEEP is deliberately broad because pool
+  breadth is a damage stat via Adaptive Power; CUT is the rest.
+- **Nero's published paladin build decoded and baked in** as a reference tier,
+  from the EBH1 loadout string in his Google doc (85 echoes).
+- **Fodder ranking** (`EchoAudit.FodderRank`): the run's echoes weakest-first,
+  excluding chase targets and locks, so the panel can name the echo to feed.
+- **Full-catalog tome scan** (`/ep tomes scan`) that walks the virtualized
+  journal scroll and writes the complete picture, drop sources and run
+  diagnostics to SavedVariables.
+
+### Fixed
+- **Every crit counter read zero, always.** The combat-log payload was
+  round-tripped through `{...}` and `unpack()`, which truncates at the first
+  nil, and a CLEU line is full of nil holes -- the crit flag never arrived.
+- **Five lock slots recommended instead of six**, since the shipped default
+  persisted into saved variables. Corrected with a targeted migration rather
+  than a DB wipe, so fight history survives.
+- **The Echo Journal scroll is virtualized** and five modules were reading only
+  the rendered slice to answer "do I own this". All now go through
+  `TomeManager.MergedTiles()`. This is what made the Target build panel report
+  owned echoes as `[FARM]`.
+- **Shadowform keybinds.** A form swaps buttons 1-12 to a bonus bar; the lookup
+  took the first matching slot instead of the key the on-screen button shows.
+- `/pp bench compare` errored out (12 format specifiers, 13 arguments).
+- The new-echo watcher had never fired: `PP.db.audit` was never created.
+- Gear optimizer served Retribution-paladin enchants to every class.
+- Ash build-import frame stuck to the cursor (`StopMoving` is not an API).
+- Boss card sized itself one boss behind (`GetHeight` after `SetText`).
+
+### Changed
+- **Mechanics corrections throughout.** An orb reroll consumes an echo *you
+  select* -- there is no junk requirement and no "out of fodder" state. Banish
+  is offered only on level-up draws and EbonholdHub's automation spends it for
+  you, so the addon never tells you to banish. `tomeKnown == false` no longer
+  means "must farm": base-pool echoes need no tome.
+- **No chat walls.** Tome plans badge the tiles instead of dumping lists;
+  diagnostics go to SavedVariables.
+- Badges are state-aware and clear the moment a tile is toggled, refreshed off
+  the journal's own change signal instead of a 2-second tick.
+
 ## [0.75.0] - 2026-08-30
 ### Removed
 - **The prestige route runner moved to CallboardHunter** (`/cbh route`, CBH

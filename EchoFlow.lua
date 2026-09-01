@@ -37,7 +37,7 @@ local TIP_LABEL = {
   A = "Staple — strong, always keep",
   B = "Filler — keep until something better",
   C = "Breadth — kept for +1% Adaptive Power",
-  DISABLE = "Banish — bad for this build",
+  DISABLE = "Turn off — bad for this build",
   REROLL = "Fodder — feed to an Orb",
 }
 
@@ -138,14 +138,25 @@ local function NormEF(name)
   return string.lower(name)
 end
 
-local function RefreshBadges()
-  -- Active pool plan: X-mark the tiles to right-click OFF (level-1 ritual).
-  -- Expires automatically once you're past the disable window.
+-- Forward-declared so it stays a local (no global pollution) while still being
+-- reachable from EF.RefreshBadges below.
+local RefreshBadges
+
+-- Exposed so TomeManager can re-mark the catalog after it builds a plan. The
+-- badges ARE the instruction list, which is why no module should print a
+-- hundred-line "right-click these" dump to chat.
+function EF.RefreshBadges() return PP.safeCall(RefreshBadges) end
+
+RefreshBadges = function()
+  -- Active pool plan: X-mark the tiles to right-click OFF, tick-mark the ones
+  -- to switch back ON.
+  --
+  -- This used to DELETE the plan above level 5 ("it's a level-1 ritual"), which
+  -- threw away the one piece of state you want to survive until the next reset
+  -- -- and made the badges vanish exactly when you wanted to see the remaining
+  -- gap. Keep it; the level gate lives in the advice text, not in the data.
   local plan = PP.db.poolPlan
-  if plan and (UnitLevel("player") or 1) > 5 then
-    PP.db.poolPlan = nil
-    plan = nil
-  end
+  local pendingOff, pendingOn = 0, 0
   EachTile(Journal(), function(btn, display, verdict)
     -- Dark backing chip so the letter reads on any icon art.
     if not btn.__ppDot then
@@ -171,10 +182,44 @@ local function RefreshBadges()
       x:Hide()
       btn.__ppX = x
     end
-    if plan and plan.set and plan.set[NormEF(display)] then
-      btn.__ppX:Show()
+    -- Re-enable marker: a separate texture so "turn this back ON" is not the
+    -- same glyph as "turn this OFF".
+    if not btn.__ppOn then
+      local c = btn:CreateTexture(nil, "OVERLAY")
+      c:SetWidth(18); c:SetHeight(18)
+      c:SetPoint("CENTER", btn, "CENTER", 0, 0)
+      c:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+      c:Hide()
+      btn.__ppOn = c
+    end
+    -- The X and tick are shapes, but pair them with a WORD: colour and glyph
+    -- alone are not enough to read at a glance across a wall of icons.
+    if not btn.__ppOff then
+      local o = btn:CreateFontString(nil, "OVERLAY")
+      o:SetFont("Fonts\\ARIALN.TTF", 11, "OUTLINE")
+      o:SetPoint("BOTTOM", btn, "BOTTOM", 0, 1)
+      o:SetTextColor(1, 1, 1, 1)
+      o:Hide()
+      btn.__ppOff = o
+    end
+    -- STATE-AWARE, not just set membership. The plan is a static list of names;
+    -- the tile knows whether the work is already done. Comparing them means a
+    -- badge clears the instant its tile redraws after you toggle it, instead of
+    -- lingering until the next plan run and making you doubt the click landed.
+    local k = NormEF(display)
+    local isOff = (btn.tomeDisabled == true)
+    local wantOff = plan and plan.set and plan.set[k] and not isOff
+    local wantOn  = plan and plan.onSet and plan.onSet[k] and isOff
+    if wantOff then
+      btn.__ppX:Show(); btn.__ppOn:Hide()
+      btn.__ppOff:SetText("OFF"); btn.__ppOff:Show()
+      pendingOff = pendingOff + 1
+    elseif wantOn then
+      btn.__ppX:Hide(); btn.__ppOn:Show()
+      btn.__ppOff:SetText("ON"); btn.__ppOff:Show()
+      pendingOn = pendingOn + 1
     else
-      btn.__ppX:Hide()
+      btn.__ppX:Hide(); btn.__ppOn:Hide(); btn.__ppOff:Hide()
     end
     local letter = LETTER[verdict]
     if letter then
@@ -186,7 +231,49 @@ local function RefreshBadges()
       btn.__ppDot:Hide()
     end
   end)
+  -- Only counts what is currently RENDERED, so it is a floor, not a total --
+  -- the scroll is virtualized. Still the fastest honest progress signal there
+  -- is: it ticks down as you click, with no command to run.
+  EF.pendingOff, EF.pendingOn = pendingOff, pendingOn
+  if rail and rail.poolLeft then
+    if not plan then
+      rail.poolLeft:SetText("")
+    elseif pendingOff == 0 and pendingOn == 0 then
+      rail.poolLeft:SetText(VERD .. "pool: done on screen" .. R)
+    else
+      rail.poolLeft:SetText(GOLD .. "pool: " .. pendingOff .. " OFF, "
+        .. pendingOn .. " ON left here" .. R)
+    end
+  end
 end
+
+-- Re-badge NOW rather than on the next tick. Toggling a tome changes the
+-- journal's data, and the server UI exposes OnDataChanged for exactly this;
+-- scrolling recycles frames, so their badges are stale until redrawn.
+local function HookJournalRefresh()
+  if EF.__journalHooked then return end
+  local ej = _G.ProjectEbonhold and _G.ProjectEbonhold.EchoJournal
+  if type(ej) == "table" and type(ej.OnDataChanged) == "function" then
+    local orig = ej.OnDataChanged
+    local unpackFn = unpack or table.unpack
+    ej.OnDataChanged = function(...)
+      local r = { orig(...) }
+      PP.safeCall(RefreshBadges)
+      return unpackFn(r)
+    end
+    EF.__journalHooked = true
+  end
+  local scroll = _G.ProjectEbonholdEchoJournalScroll
+  if scroll and scroll.HookScript and not EF.__scrollHooked then
+    -- HookScript, never SetScript: the journal's own scroll handler is what
+    -- draws the tiles, and replacing it would break the catalog outright.
+    local ok = pcall(scroll.HookScript, scroll, "OnVerticalScroll", function()
+      PP.safeCall(RefreshBadges)
+    end)
+    if ok then EF.__scrollHooked = true end
+  end
+end
+EF.HookJournalRefresh = HookJournalRefresh
 
 -- One-click run-start: compute the pool plan, sync the matching build into
 -- EBH, and X-mark the disable tiles. No chat commands involved.
@@ -199,7 +286,10 @@ function EF.ApplyPool(mode)
     SetStatus("EbonholdHub data not found", EMBER)
     return
   end
-  PP.db.poolPlan = { mode = mode, set = set, t = time() }
+  -- onSet must be present even when empty: RefreshBadges reads it, and leaving
+  -- it nil here let a rail Farm/Raid-pool click silently strip the tick badges
+  -- TomeManager had set for the re-enable half of a plan.
+  PP.db.poolPlan = { mode = mode, set = set, onSet = {}, t = time() }
   if PP.HubSync and PP.HubSync.Push then
     PP.safeCall(PP.HubSync.Push, mode == "farm" and "farm" or nil)
   end
@@ -814,13 +904,29 @@ function EF.StartReroll()
   end
   -- The Orb only trades echoes in the CURRENT RUN — queue those, not the
   -- whole owned collection.
+  -- Junk first, but do NOT stop there. You choose what the orb consumes, so an
+  -- absence of rated junk just means your weakest echo is a better one -- it
+  -- never means rerolling is unavailable. Falling back to the weakest-first
+  -- fodder ranking is what keeps the endgame loop moving.
   local list = RunJunk()
   if #list == 0 then
-    SetStatus("no junk in this run", VERD)
+    local rank = PP.EchoAudit and PP.EchoAudit.FodderRank and PP.EchoAudit.FodderRank()
+    if rank then
+      for _, f in ipairs(rank) do list[#list + 1] = f.name end
+    end
+  end
+  if #list == 0 then
+    SetStatus("nothing in the run can be fed to the orb", VERD)
     return
   end
   StartQueue(list, "Reroll queue")
 end
+
+-- Public accessors so the Chase panel can show what WOULD be fed to the orb and
+-- can halt the queue the instant the chased echo lands.
+function EF.RunJunkList() return RunJunk() end
+function EF.IsRunning() return engine.phase ~= nil end
+function EF.Stop(msg) if engine.phase then StopEngine(msg or "Stopped.") end end
 
 -- Context-aware: clear junk if any, else quality-fish sub-Epic keepers.
 function EF.StartRerollSmart()
@@ -832,8 +938,12 @@ end
 -- LOWEST-quality stack and opens a RANDOM 3-echo draw from the enabled pool
 -- at boosted quality (~100 orbs = ~100% higher). So it can't target one
 -- echo's quality — it churns sub-Epic keeper stacks into higher-quality
--- random pool draws. Banish/shrink the pool FIRST so the randoms stay in
--- your build. Targets CORE/S/A keepers below Epic, best first, orbs at cap.
+-- random pool draws. Targets CORE/S/A keepers below Epic, best first.
+--
+-- The pool it draws from is fixed by now: banishes only happen on level-up
+-- draws (and EbonholdHub spends those automatically), so "shrink the pool
+-- first" is not something you can act on at 80. Pool curation is the level-1
+-- tome pass; by the time you are fishing, the hat is what it is.
 function EF.StartQualityFish()
   if engine.phase then
     StopEngine("Queue stopped by you.")
@@ -853,8 +963,9 @@ function EF.StartQualityFish()
   local orbs = PP.db.options.rerollOrbs or 1
   PP.print("Quality fish: " .. #names .. " sub-Epic keepers at " .. orbs
     .. " orb(s) each" .. (orbs < 50 and " — crank orbs/reroll up (to ~100) for a "
-      .. "bigger quality jump" or "") .. ". NOTE: rerolls draw RANDOM from your "
-    .. "pool — banish unwanted echoes FIRST so replacements stay in-build. STOP anytime.")
+      .. "bigger quality jump" or "") .. ". Each roll forgets your lowest stack "
+    .. "and draws 3 RANDOM from the pool, so it can land missing echoes too. "
+    .. "STOP anytime.")
   StartQueue(names, "Quality fish")
   -- Fishing mode: the pick toast switches to the breadth-vs-quality readout,
   -- baselined to your unique count right now so you can see Adaptive drift.
@@ -866,6 +977,93 @@ end
 
 -- ---------------------------------------------------------------------------
 -- The rail: PallyPilot advice docked to the journal's right edge.
+-- ---------------------------------------------------------------------------
+-- THE NEXT ACTION, rendered in the rail with a button that performs it.
+--
+-- Typing a slash command to be told what to do, then typing a second one to do
+-- it, is two steps too many when the Echoes window is already open in front of
+-- you. This resolves the same decision BisPlan.Now() makes and binds it to one
+-- button, so the answer and the action are the same click.
+--
+-- Returns label, tooltip, handler (handler nil = nothing to do right now).
+-- Exposed (not file-local) so the decision can be tested without standing
+-- up the whole journal rail.
+function EF.ResolveNextAction()
+  local lvl = UnitLevel("player") or 80
+
+  if lvl == 1 then
+    return "Curate pool (level 1)",
+      "The ONLY moment tome toggles apply. Badges every tile to switch.",
+      function() if PP.TomeManager then PP.safeCall(PP.TomeManager.Scan, "bis") end end
+  end
+  if lvl < 80 then
+    return "Sync auto-pick",
+      "EBH drafts and banishes for you while levelling -- this aims it at your build.",
+      function() if PP.HubSync then PP.safeCall(PP.HubSync.Push) end end
+  end
+
+  local st = PP.BisPlan and PP.BisPlan.Status and PP.BisPlan.Status()
+  local missing = st and ((st.counts.ROLL or 0) + (st.counts.FARM or 0)) or 0
+  local rank = PP.EchoAudit.FodderRank and PP.EchoAudit.FodderRank()
+  local weakest = rank and rank[1]
+  local qt = PP.EchoAudit.RunQualityTargets and PP.EchoAudit.RunQualityTargets()
+  local subEpic = (qt and #qt) or 0
+
+  if missing > 0 and weakest then
+    return "Roll for " .. missing .. " missing",
+      "Feeds " .. weakest.name .. " [" .. weakest.tier .. "] -- your weakest echo.",
+      function() PP.safeCall(EF.StartReroll) end
+  end
+  if subEpic > 0 then
+    return "Quality fish (" .. subEpic .. ")",
+      "Churn sub-Epic keepers toward Epic. Crank orbs/reroll up first.",
+      function() PP.safeCall(EF.StartQualityFish) end
+  end
+  if missing > 0 then
+    return nil, "Nothing left in the run can be fed to the orb.", nil
+  end
+  return "Build complete -- lock & save",
+    "Lock your best " .. (PP.EchoAudit.LockSlots and PP.EchoAudit.LockSlots() or 6)
+      .. ", then save the loadout. The snapshot keeps Epic quality.",
+    nil
+end
+
+function EF.RefreshNextAction()
+  if not (rail and rail.nextFS and rail.nextBtn) then return end
+  -- While the engine is running, the only useful action is stopping it.
+  if engine and engine.phase then
+    rail.nextFS:SetText(GOLD .. "RUNNING" .. R .. DIM
+      .. " -- each roll is still your click." .. R)
+    rail.nextBtn:SetText("Stop")
+    rail.nextBtn:Enable()
+    rail.nextBtn:SetScript("OnClick", function() PP.safeCall(EF.Stop) end)
+    return
+  end
+  local ok, label, tip, handler = pcall(EF.ResolveNextAction)
+  if not ok then return end
+  rail.nextFS:SetText(GOLD .. "NEXT" .. R .. DIM .. "  " .. (tip or "") .. R)
+  -- Pin the height from GetStringHeight so the button below lands under the
+  -- wrapped text. GetHeight() is stale right after SetText -- the recurring
+  -- overlap bug in this project -- and everything else in the rail stacks off
+  -- this anchor.
+  rail.nextFS:SetHeight(rail.nextFS:GetStringHeight() + 2)
+  if label then
+    rail.nextBtn:SetText(label)
+    rail.nextBtn:Show()
+    if handler then
+      rail.nextBtn:Enable()
+      rail.nextBtn:SetScript("OnClick", function() PP.safeCall(handler) end)
+    else
+      -- Advice with no automatable step (lock and save is done in the game's
+      -- own UI). Show it, but do not pretend the button does it.
+      rail.nextBtn:Disable()
+      rail.nextBtn:SetScript("OnClick", nil)
+    end
+  else
+    rail.nextBtn:Hide()
+  end
+end
+
 function EF.RefreshRail()
   if not rail then return end
   -- Active build mode: highlighted button + labeled line. No guessing.
@@ -879,6 +1077,11 @@ function EF.RefreshRail()
       rail.poolFarm:UnlockHighlight(); rail.poolRaid:UnlockHighlight()
     end
   end
+  -- THE NEXT ACTION, first and in-line. This is the thing you came to the
+  -- panel for; everything below it is supporting detail. It also drives the
+  -- big button, so the answer and the way to act on it are the same widget.
+  EF.RefreshNextAction()
+
   local buckets = PP.EchoAudit.Compute and select(1, PP.EchoAudit.Compute())
   local t = {}
   if mode then
@@ -896,15 +1099,26 @@ function EF.RefreshRail()
     for _, p in ipairs(PP.EchoAudit.LockNow(buckets)) do
       t[#t+1] = "  " .. p.name
     end
-    local junk = #buckets.REROLL
     local inRun = #RunJunk()
     local qt = PP.EchoAudit.RunQualityTargets and PP.EchoAudit.RunQualityTargets()
     local subEpic = qt and #qt or 0
     t[#t+1] = " "
     t[#t+1] = DIM .. #buckets.CORE .. " core · " .. #buckets.S .. " S · "
       .. #buckets.A .. " A · " .. #buckets.B .. " B" .. R
-    t[#t+1] = EMBER .. inRun .. " junk in run" .. R .. DIM .. " · " .. R
-      .. BRIGHT .. subEpic .. " keepers sub-Epic" .. R
+
+    -- "0 junk in run" was the headline here, which reads as a dead end -- and
+    -- since you choose what the orb eats, it never was one. Lead with the echo
+    -- you would actually feed.
+    local rank = PP.EchoAudit.FodderRank and PP.EchoAudit.FodderRank()
+    local weakest = rank and rank[1]
+    if weakest then
+      t[#t+1] = DIM .. "next fodder: " .. R .. BRIGHT .. weakest.name .. R
+        .. DIM .. " [" .. weakest.tier .. "]" .. R
+    else
+      t[#t+1] = DIM .. "no echo can be fed to the orb" .. R
+    end
+    t[#t+1] = DIM .. inRun .. " junk · " .. subEpic .. " sub-Epic keepers" .. R
+
     if rail.rerollBtn and not engine.phase then
       rail.rerollBtn:SetText(inRun > 0 and ("Reroll junk (" .. inRun .. ")")
         or ("Quality fish (" .. subEpic .. ")"))
@@ -933,8 +1147,21 @@ local function BuildRail()
   title:SetPoint("TOP", rail, "TOP", 0, -14)
   title:SetText(GOLD .. "EbonPilot" .. R)
 
+  -- NEXT ACTION sits at the very top, above the build detail: it is the
+  -- question you actually opened this panel to answer.
+  rail.nextFS = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.nextFS:SetPoint("TOPLEFT", rail, "TOPLEFT", 14, -34)
+  rail.nextFS:SetWidth(182)
+  rail.nextFS:SetJustifyH("LEFT"); rail.nextFS:SetJustifyV("TOP")
+  rail.nextFS:SetSpacing(2)
+
+  rail.nextBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.nextBtn:SetWidth(182); rail.nextBtn:SetHeight(24)
+  rail.nextBtn:SetPoint("TOPLEFT", rail.nextFS, "BOTTOMLEFT", 0, -4)
+  rail.nextBtn:SetText("...")
+
   rail.body = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.body:SetPoint("TOPLEFT", rail, "TOPLEFT", 14, -34)
+  rail.body:SetPoint("TOPLEFT", rail.nextBtn, "BOTTOMLEFT", 0, -10)
   rail.body:SetWidth(182)
   rail.body:SetJustifyH("LEFT"); rail.body:SetJustifyV("TOP")
   rail.body:SetSpacing(2)
@@ -1003,24 +1230,65 @@ local function BuildRail()
     if PP.BuildScore then PP.safeCall(PP.BuildScore.Report) end
   end)
 
+  -- Live pool progress: counts what is badged on screen right now, so it ticks
+  -- down as you click. No command, no chat line.
+  rail.poolLeft = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.poolLeft:SetPoint("TOPLEFT", rail.tomeBtn, "BOTTOMLEFT", 0, -6)
+  rail.poolLeft:SetWidth(182)
+  rail.poolLeft:SetJustifyH("LEFT")
+
   status = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   status:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 116)
   status:SetWidth(182)
   status:SetJustifyH("LEFT")
 
-  -- Refresh badges + rail while the journal is open; run the engine always.
+  -- Refresh badges AND the rail while the journal is open. The rail used to
+  -- refresh only on OnShow, so with the window left open (which is exactly what
+  -- you do while swapping saved builds) its summary was computed once and then
+  -- never again -- the tiles updated but "LOCK NOW / core-S-A-B / junk in run"
+  -- stayed frozen from whenever you opened it.
+  -- Two clocks, not one. Badges are cheap and need to feel instant while you
+  -- are clicking through the catalog; the rail summary is heavy and 2s is
+  -- fine. Sharing a 2s tick made every toggle look like it had not registered.
   rail.elapsed = 0
+  rail.badgeElapsed = 0
   rail:SetScript("OnUpdate", function(self, elapsed)
+    self.badgeElapsed = self.badgeElapsed + elapsed
+    if self.badgeElapsed > 0.2 then
+      self.badgeElapsed = 0
+      PP.safeCall(RefreshBadges)
+    end
     self.elapsed = self.elapsed + elapsed
     if self.elapsed > 2 then
       self.elapsed = 0
-      PP.safeCall(RefreshBadges)
+      PP.safeCall(EF.RefreshRail)
     end
   end)
   rail:SetScript("OnShow", function()
     PP.safeCall(EF.RefreshRail)
     PP.safeCall(RefreshBadges)
   end)
+
+  -- Instant refresh when the server swaps your echoes, rather than waiting out
+  -- the tick. Same messages the dashboard listens for.
+  if not EF.__swapListener then
+    EF.__swapListener = CreateFrame("Frame")
+    EF.__swapListener:RegisterEvent("CHAT_MSG_SYSTEM")
+    EF.__swapListener:SetScript("OnEvent", function(_, _, msg)
+      if not msg then return end
+      local m = string.lower(msg)
+      if string.find(m, "echoes were replaced", 1, true)
+         or string.find(m, "build applied", 1, true) then
+        PP.safeCall(EF.RefreshRail)
+        PP.safeCall(RefreshBadges)
+      end
+    end)
+  end
+
+  -- Hook the journal's own change signal so a toggle repaints immediately
+  -- rather than waiting out a timer.
+  PP.safeCall(HookJournalRefresh)
+
   EF.RefreshRail()
 end
 
@@ -1043,6 +1311,10 @@ function EF.Init()
     if self.elapsed > 1.5 then
       self.elapsed = 0
       if not rail and Journal() then PP.safeCall(BuildRail) end
+      -- Keep retrying: EchoJournal and the scroll frame are created by the
+      -- server UI and may not exist when we first load. Both hooks are
+      -- idempotent, so a repeat call is free.
+      PP.safeCall(HookJournalRefresh)
       PP.safeCall(HookTooltip, "GameTooltip")
       PP.safeCall(HookTooltip, "UtilsSpellTooltip")
       PP.safeCall(EF.RefreshBaseline)

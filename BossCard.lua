@@ -56,7 +56,10 @@ function BC.Show(boss, raid)
   end
   t[#t+1] = DIM .. "(/pp boss reprints this · card fades in " .. HIDE_AFTER .. "s)" .. R
   fs:SetText(table.concat(t, "\n"))
-  frame:SetHeight(fs:GetHeight() + 34)
+  -- GetStringHeight, not GetHeight: GetHeight is stale immediately after
+  -- SetText, so the card was sized to the PREVIOUS boss (and to zero on the
+  -- first one of a session).
+  frame:SetHeight(fs:GetStringHeight() + 34)
   frame.elapsed = 0
   frame:Show()
 end

@@ -51,6 +51,24 @@ local function AssembleTiers()
     for _, n in ipairs(list) do BothQuotes(tiers, n, tier) end
   end
   for _, n in ipairs(B.locked) do BothQuotes(tiers, n, "S") end
+  -- CHASE outranks everything. EbonholdHub's automation is what actually picks
+  -- and banishes during 1-80 -- the player does none of it -- and it scores
+  -- against these tiers. If CHASE is not S here, the auto-picker is not aiming
+  -- at the build we defined, and the whole CHASE/KEEP model stops at the
+  -- addon's own UI instead of reaching the thing making the decisions.
+  if B.ChaseList then
+    for _, n in ipairs(B.ChaseList()) do BothQuotes(tiers, n, "S") end
+  end
+  -- Nero's published build as a floor: an echo a proven player runs should
+  -- never sit at EBH's unrated default (C), where automation levels 4-5 will
+  -- banish it. Only promotes; never downgrades something already S.
+  if B.community and B.community.names then
+    for _, n in ipairs(B.community.names) do
+      local cur = tiers[n] or tiers[ToCurly(n)]
+      if cur ~= "S" then BothQuotes(tiers, n, "A") end
+    end
+  end
+  -- F LAST: an explicit "this is bad" must survive the promotions above.
   for _, n in ipairs(B.disable) do BothQuotes(tiers, n, "F") end
   return tiers
 end
@@ -68,7 +86,12 @@ local function AssembleTierOrder()
       table.insert(order[tier], c)
     end
   end
+  -- Order is a position bonus in EBH, so CHASE goes first -- after the locks,
+  -- which are already committed and cannot be drafted away.
   for _, n in ipairs(B.locked) do add("S", n) end
+  if B.ChaseList then
+    for _, n in ipairs(B.ChaseList()) do add("S", n) end
+  end
   for _, n in ipairs(B.tiers.S) do add("S", n) end
   for _, n in ipairs(B.tiers.A) do add("A", n) end
   local cs, ca = {}, {}

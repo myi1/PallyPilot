@@ -67,7 +67,9 @@ function BS.Compute()
   -- "couldn't read the catalog".
   local tiles, why
   if PP.TomeManager and PP.TomeManager.AllTiles then
-    tiles, why = PP.TomeManager.AllTiles()
+    -- MergedTiles: AllTiles is the rendered slice of a virtualized scroll,
+    -- so scoring off it counted only the tomes that happened to be drawn.
+    tiles, why = PP.TomeManager.MergedTiles()
   end
   if not tiles then return nil, why end
 
@@ -328,7 +330,8 @@ function BS.Refresh()
 
   frame.improve:SetText(ImprovementText(r))
   if frame.improveContent then
-    frame.improveContent:SetHeight((frame.improve:GetHeight() or 200) + 20)
+    -- GetStringHeight, not GetHeight -- GetHeight is stale right after SetText.
+    frame.improveContent:SetHeight((frame.improve:GetStringHeight() or 200) + 20)
   end
 end
 

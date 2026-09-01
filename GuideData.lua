@@ -220,11 +220,15 @@ G.raids = {
           "Frozen Blows: heavy frost phase — JoL through it or bubble one.",
           "Don't bother freeing NPCs at your power — pure solo burn is simpler.",
         } },
-      { n = "Thorim", t = "Clear the arena start, run the gauntlet solo, he descends.",
+      { n = "Thorim", t = "A RACE. The empty arena one-shots you — sprint the gauntlet.",
         tips = {
-          "The fight is a split (arena team + gauntlet team). Solo: kill the starting arena pack, then run the gauntlet corridor yourself — arena adds keep spawning but nobody's there to die to them.",
-          "Gauntlet: iron dwarves + a mini-boss; burn through, hit the end, Thorim jumps down.",
-          "Descended: Unbalancing Strike again (Razuvious rules) + Chain Lightning. Kill him before Sif's blizzard stacks make the arena unlivable.",
+          "SOLO KILLER — Summon Orb of Lightning: when NOBODY is left in the arena, Thorim fires an orb down the hallway that is a TRUE INSTANT KILL. It ignores armour, level and every cooldown, so no amount of gear or DR saves you. Solo the arena is always empty, so it WILL come — the gauntlet is a race, not a fight.",
+          "Because it bypasses damage, a death log shows only trivial hits before you drop (388, 215, 121...). If you died with no visible cause, this was it.",
+          "So: clear the starting arena pack, hit the lever, then RUN. Do not stop to kill gauntlet trash you can run past. Pop every movement boost you own (ash-tree Featherfoot / Restless Stride / Relentless Pursuit, Nitro Boosts, speed potion) BEFORE you enter the corridor.",
+          "Runic Colossus (end of the first hall) charges a slam — watch which hand glows and move to the OPPOSITE side of the hallway.",
+          "The floor runes just before Thorim stun/paralyse. Hug the side walls to walk around them; a stun in the corridor is what lets the orb catch you.",
+          "There is also a ~5 minute hard timer to reach him before he wipes you.",
+          "Descended: Unbalancing Strike (Razuvious rules) + Chain Lightning. Kill him before Sif's blizzard stacks make the arena unlivable.",
         } },
       { n = "Freya", t = "Six minutes of add waves, then a naked boss.",
         tips = {
@@ -249,13 +253,14 @@ G.raids = {
         tips = {
           "BEFORE the pull: talk to all four Keepers so their sanity auras are active.",
           "P1: kill the green clouds' spawned Guardians ON Sara — their death explosions damage her (don't walk through clouds: more spawns).",
-          "P2: melee the tentacles; when Brain Link ties you to no one (solo) it should self-clear — confirm pull 1. Enter the portal when it opens: inside, burst the tentacles/brain, LEAVE before the 60s insanity timer.",
-          "Sanity low? Stand in a green Sanity Well and DON'T look at Yogg (face away during Lunatic Gaze).",
-          "P3: kill Immortal Guardians to 1hp (they can't die — Thorim's aura finishes them if he's up), burn the exposed brain.",
+          "SANITY DRAINS, exact values from the client's spell data: Psychosis 9% per cast (Corruptor Tentacle - the biggest single hit, kill those FIRST) - Lunatic Gaze 4% per tick but ONLY while you are FACING him - Dominate Mind 4% - Malady of the Mind 3% + fear - Brain Link 2% per tick and only when linked players are far apart (solo: costs you nothing) - Induce Madness 100% (the brain-room timer). Sanity Well restores 10% per tick.",
+          "P2 BEFORE the portal is where sanity vanishes, and it is almost always these two: you are FACING Yogg while meleeing (Lunatic Gaze ticks 4% for free - turn your character away, strafe and backpedal instead of turning in), and you are letting Corruptor Tentacles live (9% a cast). Fix those two and P2 stops being a sanity race.",
+          "P2: melee the tentacles; Brain Link ties two players, so solo it should cost nothing - confirm on pull 1. Enter the portal when it opens: inside, burst the tentacles/brain, LEAVE before Induce Madness (100% sanity) fires.",
+          "P3: kill Immortal Guardians to 1hp (they can't die -- Thorim's aura finishes them if he's up), burn the exposed brain.",
         } },
       { n = "Algalon the Observer", t = "Optional. One-hour weekly window, hard enrage feel.",
         tips = {
-          "Cosmic Smash craters: move. Black Holes spawn from Collapsing Stars — kill stars AWAY from you (the explosion hurts).",
+          "Cosmic Smash craters: move. Black Holes spawn from Collapsing Stars -- kill stars AWAY from you (the explosion hurts).",
           "During Big Bang: JUMP INTO a Black Hole to survive it, kill the void adds inside, come out.",
           "Solo he's a sustained check of everything Ulduar taught — bring him your best affix set.",
         } },
@@ -396,6 +401,143 @@ G.raids = {
         } },
     },
   },
+  {
+    key = "bt", name = "Black Temple", zone = "Black Temple",
+    note = "TBC raid, run for TOMES (Demonic Awakening is why you are here). "
+      .. "The rule that explains this whole instance: most BT bosses pick their "
+      .. "special-mechanic victim from the threat list EXCLUDING the top-threat "
+      .. "target. Solo you are the only entry, so those mechanics find nobody "
+      .. "and simply never fire - Gurtogg never phases, Teron never casts Shadow "
+      .. "of Death, Supremus never fixates. That makes BT the softest raid on "
+      .. "this list EXCEPT Naj'entus, where the mechanic that no-ops is the one "
+      .. "you NEED. WARNING: a pet/guardian/summon adds a second threat entry "
+      .. "and can switch all of those mechanics back ON, aimed at you, with "
+      .. "nobody to save you. Bring no guardians into Black Temple.",
+    route = "NOTHING is skippable - every gate is keyed to a boss kill, so all "
+      .. "8 bosses die before Illidan. Karabor Sewers (NAJ'ENTUS; his gate opens "
+      .. "only on his death) -> Illidari Training Grounds (SUPREMUS; same, his "
+      .. "gate is kill-keyed) -> up into the Sanctuary of Shadows hub, which "
+      .. "branches four ways in ANY order: The Refectory (SHADE OF AKAMA) - "
+      .. "Gorefiend's Vigil (TERON GOREFIEND) - Halls of Anguish (GURTOGG "
+      .. "BLOODBOIL) - Shrine of Lost Souls (RELIQUARY OF SOULS). All four dead "
+      .. "opens the Den of Mortal Delights (MOTHER SHAHRAZ) -> her death opens "
+      .. "the Grand Promenade -> Chamber of Command (ILLIDARI COUNCIL) -> the "
+      .. "Council dead lets Akama open the Temple Summit gate -> ILLIDAN. "
+      .. "Fastest order after Supremus: Gurtogg (pure tank-and-spank solo) -> "
+      .. "Teron -> Akama -> Reliquary (the slow one), then Shahraz.",
+    bosses = {
+      { n = "High Warlord Naj'entus", t = "A 30-SECOND DPS RACE. Not a mechanics fight - if he lives past ~60s you cannot win.",
+        tips = {
+          "Tidal Shield at 60s is FULL IMMUNITY to all 7 schools for 45s, and he heals ~1% max HP every 2s under it (~22% per shield). It is not an absorb, not dispellable, and cannot be out-damaged. Only a thrown Impaling Spine breaks it.",
+          "You cannot get a spine solo. He picks the spine target from the threat list EXCLUDING top threat - solo that is nobody. If a guardian pulls threat off you, YOU get impaled instead: 30-SECOND STUN plus 2750 per 3s, and only another PLAYER can pull it out. Confirmed in Ebonhold Discord: 'I can't retrieve the spines on my own'.",
+          "So the whole fight is: kill him inside your opening window. First impale attempt lands at ~30s, shield at 60s. Ebonhold Discord answer, verbatim: 'you have like 20-30 seconds for the first spine' and 'For najentus you need to be doing enough damage to bypass the mechanic'.",
+          "Check his HP bar on the pull and divide by 30 - that is the DPS you need. If you miss it, RESET and come back with more power; grinding attempts past the shield is wasted time, he heals faster than your 12s windows.",
+          "Needle Spine every 2s is the only incoming damage worth naming, and it is small. This fight is not a survival check at your HP - it is purely a damage check.",
+          "If you genuinely cannot beat the timer: ONE other player solves it permanently. They pull the spine out of you and throw it to pop the bubble, and the kill unlocks the gate for your whole lockout.",
+        } },
+      { n = "Supremus", t = "Two 60s phases. The chase phase is FREE solo - he never fixates.",
+        tips = {
+          "Chase phase: he picks a fixate target excluding top threat -> nobody solo. He also snares HIMSELF for that phase, so he just trudges at you. Free damage; only step out of the Volcanic Eruptions every 10s.",
+          "Strike phase is the real one: Hateful Strike hits the HIGHEST-CURRENT-HP target in melee, which solo is always you, every 5s. Stay topped; JoL plus Art of War covers it.",
+          "Molten Punch every 15-20s and the volcano fire patches are ground damage - keep moving, never stand in a pool while a Hateful Strike is due.",
+          "15 min berserk. That is enormous - there is no rush, play the volcanoes clean.",
+        } },
+      { n = "Shade of Akama", t = "An escort/defend fight. Kill the Channelers, protect Akama - a pure AoE job.",
+        tips = {
+          "The Shade is untouchable until the Ashtongue Channelers keeping him bound are dead. Kill Channelers FIRST, always; the Shade fixates on Akama, not you.",
+          "Waves of Ashtongue Defenders/Sorcerers/Rogues stream in on timers. Consecration plus Divine Storm on the spawn points is the whole fight; this is where a Ret paladin is at his best.",
+          "Akama has his own health bar and drinks a healing potion when low. Do not let a wave sit on him uncontested - if Akama dies, the event fails.",
+          "Undead adds here: Holy Wrath stuns them and Exorcism auto-crits. Use Holy Wrath as an AoE stun on every wave, not as filler damage.",
+        } },
+      { n = "Teron Gorefiend", t = "His signature mechanic NEVER FIRES solo. He is a tank-and-spank with floating adds.",
+        tips = {
+          "Shadow of Death (the die-and-play-a-ghost mechanic) picks a target excluding top threat -> nobody solo. It simply does not happen. Do not prepare for it.",
+          "THE ONE RISK: bring a guardian that steals threat and Shadow of Death becomes eligible on YOU - you die, become a Vengeful Spirit, and have to clear Shadowy Constructs with a borrowed ability bar. Avoidable entirely by having no summons out.",
+          "Doom Blossoms every 30-40s: floating shadow flowers that cast Shadow Bolt from above. They are the real damage. Kill them as they spawn or eat a growing bolt barrage.",
+          "Incinerate every 12-20s and Crushing Shadows every 18-30s on you. Cleanse anything that lands and keep JoL up; 10 min berserk is generous.",
+        } },
+      { n = "Gurtogg Bloodboil", t = "Solo he is stuck in Phase 1 FOREVER. The easiest mandatory boss in the raid.",
+        tips = {
+          "Phase 2 (Fel Rage) needs a non-tank player to grab. Solo there is none, and the script explicitly resets him back to Phase 1 instead. He never transforms, never geysers, never charges.",
+          "So it is one loop: Bloodboil, Arcing Smash, Fel Acid Breath, Eject, Bewildering Strike. Face-tank it. This is a good boss to test your sustain on before Reliquary.",
+          "Fel Acid Breath is a frontal cone - you are in melee anyway, just keep JoL rolling.",
+          "10 min berserk, and with no phase transitions your uptime is 100%. If you cannot beat this timer, fix your build before attempting Illidan.",
+        } },
+      { n = "Reliquary of Souls", t = "Three essences back to back. Essence of SUFFERING turns your healing OFF - that is the fight.",
+        tips = {
+          "Essence of Suffering's aura is -100% healing taken AND -100% health regen in combat. JoL, Art of War Flash of Light and Lay on Hands all do NOTHING while it is up. This is Loatheb rules: enter at full HP and burn it down on the HP you brought.",
+          "Suffering also Frenzies (~45s) and Soul Drains. Divine Shield is RESERVED for this essence - it is the only phase where you cannot heal your way out of a mistake.",
+          "Essence of Desire: Deaden DOUBLES your damage taken for its duration, and Spirit Shock hits and interrupts. Rune Shield is only a 50k absorb every 16s - your damage eats that in a second, ignore it. Healing works again here, so top off HARD before Anger.",
+          "Essence of Anger: Seethe only triggers when the top-threat target CHANGES. Solo it never changes, so Seethe never fires - his scariest ability is off. Just eat Soul Scream and Spite (~7.5k shadow every 20s).",
+          "After Anger dies the Reliquary releases a swarm of Enslaved Souls that all have to die. Consecration plus Divine Storm plus Holy Wrath; this is a victory lap, not a threat.",
+        } },
+      { n = "Mother Shahraz", t = "Fatal Attraction cannot touch you. SABER LASH lands unsplit - that is the whole danger.",
+        tips = {
+          "Saber Lash is 76k-84k physical DIVIDED among up to 3 targets. Solo, nothing divides it - you take the full hit. Armor eats roughly two thirds, but it is still the biggest single hit in Black Temple. Never be low when one is due.",
+          "Good news: Fatal Attraction skips anyone carrying Saber Lash Immunity, and solo you are the one getting Saber Lashed, so you hold that immunity. The teleport-and-explode mechanic effectively does not exist for you.",
+          "Prismatic Shield every 15s gives her resistance to ONE random school at a time. Your damage is spread across many schools plus physical, so it only ever dents you - do not chase it, do not stop.",
+          "Silencing Shriek every 18-30s: your instants keep working, only casts are locked. Nothing to plan around as Ret.",
+          "She enrages at 10% and berserks at 10 min. Save Avenging Wrath for the last 10% so the enrage window is as short as possible.",
+        } },
+      { n = "Illidari Council", t = "4 bosses, ONE shared health pool. Lady Malande's REFLECTIVE SHIELD is what kills geared solo players.",
+        tips = {
+          "REFLECT WARNING, the #1 death here: Malande casts Reflective Shield every ~25s and your damage comes back at you. At echo-proc output that is lethal - a player reported dying in Black Temple to reflect while doing 10m dps. The moment it goes up, STOP hitting Malande.",
+          "You do not lose progress by switching: Empyreal Equivalency spreads health across all four, so beat on Gathios/Veras/Zerevor instead and the shared pool still drops. Target-swapping off reflect is free.",
+          "Same rule for Gathios' Blessing of Protection (physical immunity) - he throws it on a random council member every 30-45s. Whoever has it, hit someone else.",
+          "Gathios' Hammer of Justice picks a target excluding top threat -> never fires solo. One less stun to worry about.",
+          "Malande also Circle-of-Heals the council; Zerevor drops Blizzard/Flamestrike and Dampen Magic (hurts your echo procs); Veras Vanishes and comes back with Envenom. Keep moving out of the ground effects and just keep the shared bar falling.",
+          "15 min berserk. This is an endurance fight, not a burn - play the reflect discipline and you win it.",
+        } },
+      { n = "Illidan Stormrage", t = "SHEAR is the fight: -60% max HP every 12s. Be topped or be dead.",
+        tips = {
+          "Shear hits your current tank (solo: always you) every 12s for -60% MAXIMUM HEALTH for 7s, and it is UNDISPELLABLE. Your 102k becomes ~41k while he keeps swinging. Rule: never let Shear land while you are below full. Everything else here is secondary.",
+          "P1 (100-65%): Shear, Flame Crash (move out), Draw Soul every 34s - it is a FRONTAL CONE that heals him for what it hits, so run behind him as he casts it. Parasitic Shadowfiend DOES fire solo (it does not exclude the tank) - kill the fiends it spawns.",
+          "P2 at 65% - Flames of Azzinoth: he flies up and BOTH Flames must die before he lands. Solo you fight both at once. The Uncaged Wrath tether enrage is not implemented on this core, so you can drag them wherever you like - group them and cleave. Watch Flame Blast (every 12s) and their Charge.",
+          "P3 (ground again): P1's kit plus Agonizing Flames, plus DEMON FORM every 60s (lasts ~72s). In demon form he roots himself, resets threat and casts Shadow Blast/Flame Burst - and summons SHADOW DEMONS. A Shadow Demon that reaches you paralyzes and eats your soul: kill it on approach or outrun it, never ignore it.",
+          "P4 at 30%: Maiev arrives and he adds Frenzy every ~40s. This is where Divine Shield and Lay on Hands get spent - hold them this long on purpose.",
+          "25 MINUTE berserk. There is no timer pressure at all. Play slow, stay topped for Shear, and let the proc damage do the work.",
+        } },
+    },
+  },
+  {
+    key = "reaper", name = "The Reaper (Intensity 5)", zone = "Icecrown",
+    note = "Not a raid boss -- a world event you SUMMON by holding Intensity 5 "
+      .. "and unbroken combat for 10 minutes. He drops one Tome of Echoes per "
+      .. "kill (Reaper's Verdict / Doom / Reprieve) and those tomes ARE "
+      .. "tradeable, unlike ICC and Ruby Sanctum tomes.",
+    route = "Malykriss: The Vile Hold in Icecrown -- the UPPER hold, east side. "
+      .. "Level-80 zone, dense fast-respawning packs, which is exactly what the "
+      .. "10-minute combat clock needs. Hardcore level shards the layer: HC2/HC3 "
+      .. "are quiet, HC4 is crowded. Loot level = 1 + HC level.",
+    bosses = {
+      { n = "Intensity ladder", t = "Thresholds: I=75 II=200 III=275 IV=375 V=475. Intensity only climbs to III on its own.",
+        tips = {
+          "THE GOTCHA MOST PEOPLE MISS: intensity auto-rises only to level 3. To go past it you must CLICK THE UNLOCK BUTTON that appears in the intensity UI - it grants a temporary buff that permits IV and V, and it has a 5 MINUTE COOLDOWN. If you never press it you will grind forever at III and no Reaper will ever spawn.",
+          "The unlock lasts until your intensity falls BELOW level 3. Drop under 275 and you need the button again, cooldown permitting.",
+          "Killing faster raises intensity faster. GREY (trivial) mobs give ZERO intensity - a level-80 zone is mandatory, which is why Malykriss works and low-level farm spots do not.",
+          "Intensity decays while OUT of combat. Combat uptime is the whole game here.",
+          "What you are fighting through at V: every mob is Elite and gains damage/health on engage (III); shadow-damage attackers (II); up to 3+ shadow ground marks at once that also HEAL nearby enemies (III); and the Lich King's Champions, scripted elites that are genuinely dangerous (IV).",
+        } },
+      { n = "The 10-minute clock", t = "Ten minutes at Intensity 5 with combat NEVER breaking. Any blink resets it.",
+        tips = {
+          "Dropping combat restarts the timer even if intensity stays at 5. If the crossed-swords icon vanishes for a single moment, you start over.",
+          "Dropping below Intensity 5 also restarts it.",
+          "Waffle Masta's method (a player who has killed him repeatedly): run WIDE CIRCLES through the upper hold and do NOT deliberately kill things - let your echo procs do the killing while you keep pulling fresh mobs. Killing everything yourself outruns the respawns and you fall out of combat.",
+          "Run NO PET ECHOES for the summon attempt. Pets clear packs too fast and break the chain.",
+          "If mobs are thin, run up and down the wall to drag more in from range.",
+          "Get an addon timer: fear-the-reaper (github.com/danhicks853/fear-the-reaper) starts a clock on Intensity 475 + in-combat and resets it on either loss. Guessing at the combat gap is how people waste 20 minutes.",
+        } },
+      { n = "The Reaper", t = "Spawns ON YOU, not at a fixed spot. Despawns after 15 minutes.",
+        tips = {
+          "He appears at your location - people who see the spawn message and then run somewhere are chasing nothing.",
+          "15-minute despawn window once he is up, so damage is the real check, not survival. 'Biggest issue is having enough damage before despawn.'",
+          "Once he is up you may go back to actively killing mobs: cleaving the pack around you is where your sustain comes from (leech/proc healing off many targets). Fight him while you keep circling.",
+          "Reaper's Reprieve (you own it) is a free extra life here - fatal damage becomes 1 HP, 3s immunity and a 35% heal, once an hour. Enter the attempt with it available.",
+          "Consensus on difficulty: hard, easiest for classes with heavy leech. If you cannot hold up, drop a hardcore level - lower HC means a weaker layer (at the cost of loot level).",
+          "One tome per kill, and Reaper tomes are the only loot he drops. Two more kills gets you Verdict and Doom.",
+        } },
+    },
+  },
 }
 
 -- Multi-body encounters die under their members' names in the combat log;
@@ -413,6 +555,13 @@ G.KILL_ALIASES = {
   ["runemaster molgeim"] = "Assembly of Iron",
   ["stormcaller brundir"] = "Assembly of Iron",
   ["icehowl"] = "Northrend Beasts",
+  ["gathios the shatterer"] = "Illidari Council",
+  ["high nethermancer zerevor"] = "Illidari Council",
+  ["lady malande"] = "Illidari Council",
+  ["veras darkshadow"] = "Illidari Council",
+  ["essence of suffering"] = "Reliquary of Souls",
+  ["essence of desire"] = "Reliquary of Souls",
+  ["essence of anger"] = "Reliquary of Souls",
 }
 
 -- Flat lookup: normalized boss name -> { boss = entry, raid = raidEntry }.

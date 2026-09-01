@@ -44,13 +44,71 @@ local function BuildText()
   return table.concat(t)
 end
 
+-- A 3.3.5 FontString silently CLIPS very long strings -- the ICC guide is
+-- ~20,000 characters and was being cut off mid-sentence ("Val'kyr Shadowguard
+-- grabs you ("). Nothing errors; the tail just never draws. So the text is
+-- split across a pool of FontStrings, chunked on line boundaries.
+local CHUNK = 1800          -- comfortably under where clipping starts
+local chunkFS = {}
+
+local function ChunkFS(i)
+  if chunkFS[i] then return chunkFS[i] end
+  local f = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  -- Must match the base `fs` exactly (width AND spacing) or line rhythm jumps
+  -- at every chunk boundary and the seams become visible.
+  f:SetWidth(456); f:SetJustifyH("LEFT"); f:SetJustifyV("TOP"); f:SetSpacing(2)
+  chunkFS[i] = f
+  return f
+end
+
+-- Split on newlines so a chunk boundary never lands mid-line (which would
+-- break a colour code across two FontStrings and leak escape text).
+local function Split(text)
+  local out, buf = {}, ""
+  for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+    if #buf + #line + 1 > CHUNK and buf ~= "" then
+      out[#out + 1] = buf; buf = line
+    else
+      buf = (buf == "") and line or (buf .. "\n" .. line)
+    end
+  end
+  if buf ~= "" then out[#out + 1] = buf end
+  return out
+end
+
 function RG.Refresh()
   if not fs then return end
   for _, btn in ipairs(raidButtons or {}) do
     if btn.raidKey == selectedKey then btn:LockHighlight() else btn:UnlockHighlight() end
   end
-  fs:SetText(BuildText())
-  if content then content:SetHeight((fs:GetHeight() or 600) + 20) end
+  local parts = Split(BuildText())
+  fs:SetText(parts[1] or "")
+
+  -- CHAIN the anchors instead of computing offsets. A FontString's GetHeight()
+  -- is not valid in the same frame as its SetText -- it returns the PREVIOUS
+  -- layout's value -- so accumulating it stacked chunks on top of each other.
+  -- Anchoring each chunk to the previous one's BOTTOMLEFT hands the layout to
+  -- WoW, which resolves it after the text is measured. No arithmetic to get
+  -- wrong.
+  local prev = fs
+  for i = 2, #parts do
+    local f = ChunkFS(i)
+    f:ClearAllPoints()
+    f:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -2)
+    f:SetText(parts[i])
+    f:Show()
+    prev = f
+  end
+  for i = #parts + 1, #chunkFS do chunkFS[i]:SetText(""); chunkFS[i]:Hide() end
+
+  -- Scroll extent only: GetStringHeight IS derived from the text, so it's safe
+  -- here, and being a little off just changes how far you can scroll.
+  local h = 0
+  for i = 1, #parts do
+    local f = (i == 1) and fs or chunkFS[i]
+    h = h + (f:GetStringHeight() or 0) + 2
+  end
+  if content then content:SetHeight(math.max(10, h + 24)) end
 end
 
 function RG.Select(key)

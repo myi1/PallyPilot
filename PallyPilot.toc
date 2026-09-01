@@ -1,7 +1,7 @@
 ## Interface: 30300
 ## Title: EbonPilot
 ## Notes: Multi-class solo co-pilot for Project Ebonhold: per-class build, stat/gear/affix dashboard, Soul Ash advisor, missing-tome farm queue. (Formerly PallyPilot.)
-## Version: 0.76.0
+## Version: 0.77.0
 ## SavedVariables: PallyPilotDB
 ## OptionalDeps: CallboardHunter, EbonholdHub, ProjectEbonhold
 
@@ -19,6 +19,9 @@ GearOpt.lua
 EchoFlow.lua
 TomeManager.lua
 BuildScore.lua
+BuildLog.lua
+RerollTarget.lua
+BisPlan.lua
 BossCard.lua
 RunLog.lua
 HubSync.lua

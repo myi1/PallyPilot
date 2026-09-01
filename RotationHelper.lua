@@ -124,9 +124,60 @@ local function SlotHasSpell(slot, spell, wantTex)
   return false
 end
 
+-- Which action slot is physically displayed on main-bar button `i` RIGHT NOW?
+--
+-- Buttons 1-12 do not show slots 1-12 unconditionally. A stance/form pushes a
+-- bonus bar in front of them (Shadowform is one), and paging shifts them too.
+-- Getting this wrong is what made the HUD report a main-bar key for a spell
+-- that is actually sitting on the Shadowform page.
+local function CurrentSlotForButton(i)
+  local offset = GetBonusBarOffset and GetBonusBarOffset() or 0
+  if offset and offset > 0 then
+    return 72 + (offset - 1) * 12 + i        -- bonus/stance bar in front
+  end
+  local page = (GetActionBarPage and GetActionBarPage()) or 1
+  return (page - 1) * 12 + i
+end
+
 -- Find the keybind for the action slot holding `spell`.
+--
+-- ORDER MATTERS, and it used to be wrong. The old version scanned slots 1..120
+-- and took the FIRST match, so a spell that also sits on the main bar reported
+-- the main-bar key even while a form had swapped the buttons to another page.
+-- What the player actually presses is whatever the on-screen button says, so
+-- read THAT first and treat the slot maths as a fallback.
 local function KeybindFor(spell)
   local wantTex = GetSpellTexture(spell)
+
+  -- 1. Ground truth: an on-screen button currently holding this spell. Its
+  --    displayed HotKey is, by definition, the key that casts it -- including
+  --    modifier bindings ("s-4") and any custom bar addon.
+  for _, prefix in ipairs(BARS) do
+    for i = 1, 12 do
+      local btn = _G[prefix .. i]
+      if btn and btn.IsVisible and btn:IsVisible() then
+        local slot = btn.action or (btn.GetAttribute and btn:GetAttribute("action"))
+        if slot and SlotHasSpell(slot, spell, wantTex) then
+          local hk = _G[prefix .. i .. "HotKey"]
+          local txt = hk and hk.GetText and hk:GetText()
+          if txt and txt ~= "" and txt ~= RANGE_INDICATOR then
+            return AbbrevKey(txt)
+          end
+        end
+      end
+    end
+  end
+
+  -- 2. The page/bonus-bar the main buttons are showing right now.
+  for i = 1, 12 do
+    local slot = CurrentSlotForButton(i)
+    if slot and HasAction(slot) and SlotHasSpell(slot, spell, wantTex) then
+      local key = GetBindingKey("ACTIONBUTTON" .. i)
+      if key then return AbbrevKey(key) end
+    end
+  end
+
+  -- 3. Static slot -> binding map for the always-visible side bars.
   for slot = 1, 120 do
     if HasAction(slot) and SlotHasSpell(slot, spell, wantTex) then
       local bind = SLOT_BIND[slot]
@@ -166,22 +217,60 @@ end
 -- suggestion, else this class's top rotation spell. Prints BOTH the SLOT_BIND
 -- path AND the on-screen button's live HotKey text, so a Shadowform / stance /
 -- paged bar (slots outside SLOT_BIND's 1-72 range) is visible.
+-- With no argument it now dumps the WHOLE rotation, because a keybind bug is
+-- rarely about one spell -- and a second round trip to scan the next one is a
+-- second /reload. Output goes to SavedVariables only; chat gets one line.
 function RH.KeyScan(spellArg)
   local B = PP.Build
-  local spell = (spellArg and spellArg ~= "" and spellArg) or Suggest()
-    or (B and B.rotationPriority and B.rotationPriority[1] and B.rotationPriority[1].spell)
-  if not spell then
-    PP.print("Keyscan: nothing to scan. Usage: |cffe0b352/pp keyscan <exact spell name>|r, "
-      .. "or target a mob so the HUD suggests one.")
-    return
+  local list = {}
+  if spellArg and spellArg ~= "" then
+    list[1] = spellArg
+  else
+    local seen = {}
+    local function push(s)
+      if s and s ~= "" and not seen[s] then seen[s] = true; list[#list + 1] = s end
+    end
+    push(Suggest())
+    for _, e in ipairs((B and B.rotationPriority) or {}) do push(e.spell) end
   end
-  local wantTex = GetSpellTexture(spell)
-  if not wantTex then
-    PP.print("Keyscan: '" .. spell .. "' isn't a known spell (check spelling / spellbook).")
+  if #list == 0 then
+    PP.print("Keyscan: nothing to scan. Usage: |cffe0b352/pp keyscan <exact spell name>|r.")
     return
   end
   local out = {}
-  local function add(s) out[#out + 1] = s; DEFAULT_CHAT_FRAME:AddMessage(s) end
+  -- Accumulate, never print: the whole point is that it lands on disk.
+  local function add(s) out[#out + 1] = s end
+  add(("keyscan  form=%s barPage=%s bonusOffset=%s  spells=%d"):format(
+    tostring(GetShapeshiftForm and GetShapeshiftForm()),
+    tostring(GetActionBarPage and GetActionBarPage()),
+    tostring(GetBonusBarOffset and GetBonusBarOffset()), #list))
+  -- What each physical main-bar button is actually showing right now. This is
+  -- the mapping the old code got wrong under Shadowform.
+  for i = 1, 12 do
+    local slot = CurrentSlotForButton(i)
+    local atype, id = GetActionInfo(slot)
+    -- Capture into locals first: these APIs can return NOTHING rather than
+    -- nil, and tostring() with no argument is an error, not "nil".
+    local nm
+    if atype == "spell" and id then nm = GetSpellInfo(id) end
+    local bind = GetBindingKey("ACTIONBUTTON" .. i)
+    add(("  BTN%-2d -> slot %-3d %-7s %-24s bind=%s"):format(i, slot,
+      tostring(atype), tostring(nm), tostring(bind)))
+  end
+  for _, spell in ipairs(list) do RH.KeyScanOne(spell, add) end
+  PP.db = PP.db or {}; PP.db.scans = PP.db.scans or {}
+  PP.db.scans.keyscan = out
+  PP.db.scans.keyscanTime = date("%Y-%m-%d %H:%M")
+  PP.print(("Keyscan saved (%d spells, %d lines). |cffe0b352/reload|r and it's on disk.")
+    :format(#list, #out))
+end
+
+function RH.KeyScanOne(spell, add)
+  local wantTex = GetSpellTexture(spell)
+  if not wantTex then
+    add("Keyscan '" .. tostring(spell) .. "': not a known spell")
+    return
+  end
   add("Keyscan '" .. spell .. "' tex=" .. tostring(wantTex)
     .. " form=" .. tostring(GetShapeshiftForm and GetShapeshiftForm())
     .. " barPage=" .. tostring(GetActionBarPage and GetActionBarPage())
@@ -230,11 +319,6 @@ function RH.KeyScan(spellArg)
     end
   end
   if hits == 0 then add("  '" .. spell .. "' not found on slots 1-120 (icon or macro).") end
-  PP.db = PP.db or {}; PP.db.scans = PP.db.scans or {}
-  PP.db.scans.keyscan = out
-  PP.db.scans.keyscanTime = date("%Y-%m-%d %H:%M")
-  PP.print("Keyscan saved (" .. #out .. " lines). |cffe0b352/reload|r then tell Claude -- "
-    .. "no need to paste, it's in SavedVariables now.")
 end
 
 local function OnUpdate(self, elapsed)

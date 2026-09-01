@@ -110,9 +110,27 @@ local GLYPH_MAJOR = { "Glyph of Judgement (+10% Judgement dmg)",
 local GLYPH_MINOR = { "Glyph of Sense Undead (+1% dmg vs undead — huge for AotC/ICC)",
   "Glyph of Blessing of Kings", "Glyph of Lay on Hands" }
 
+-- WHO THIS ADVICE IS FOR. Every table below (enchants, gems, glyphs) is
+-- Retribution-paladin specific: Strength/AP plate. The Gear page is shared by
+-- every class, so without a guard a priest was being told to put Icescale Leg
+-- Armor and +AP plate enchants on cloth. Gate it rather than pretend.
+local ADVICE_SPEC = "Retribution Paladin"
+local ADVICE_CLASS = "PALADIN"
+local function AdviceApplies()
+  local _, token = UnitClass("player")
+  return token == ADVICE_CLASS
+end
+
 function GO.Report()
   Print(GOLD .. "Gear optimizer" .. R .. DIM
-    .. " — enchants / gems / glyphs (Strength-priority Ret)" .. R)
+    .. " — enchants / gems / glyphs (" .. ADVICE_SPEC .. ")" .. R)
+  if not AdviceApplies() then
+    local name = UnitClass("player") or "this class"
+    Print(EMBER .. "NOT FOR " .. string.upper(tostring(name)) .. "." .. R .. DIM
+      .. " These are " .. ADVICE_SPEC .. " enchants and gems (Strength/AP plate). "
+      .. "Shown for reference only -- do not follow them on " .. tostring(name)
+      .. "." .. R)
+  end
 
   -- ENCHANTS -----------------------------------------------------------------
   local missing, empties = {}, {}
@@ -211,6 +229,9 @@ local BASE_SRC = {
 -- slot: { ilvl, encMiss, encRec, encSrc, enchantable, sockets, emptyGems }.
 function GO.SlotReport()
   local out = {}
+  -- Return nothing off-class: GearAudit renders these as MISSING/gap markers on
+  -- the paperdoll, and a wrong "missing enchant" flag is worse than silence.
+  if not AdviceApplies() then return out end
   for slot = 1, 18 do
     local link = GetInventoryItemLink("player", slot)
     if link then

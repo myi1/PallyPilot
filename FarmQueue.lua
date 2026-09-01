@@ -12,6 +12,7 @@ local F = PP.FarmQueue
 local GOLD = "|cffe0b352"
 local BRIGHT = "|cfff6d888"
 local DIM = "|cffb4a586"
+local EMBER = "|cffd9694a"   -- warning tone, matches the other panels
 local R = "|r"
 
 local MARK = { CORE = "S+", S = "S", A = "A", B = "B" }
@@ -28,7 +29,11 @@ end
 -- Owned = learned tomes, read off the catalog tiles (accurate). Returns a set
 -- of normalized names, or nil if the Echoes window isn't open.
 local function OwnedTomeNames()
-  local tiles = PP.TomeManager and PP.TomeManager.AllTiles and PP.TomeManager.AllTiles()
+  -- MergedTiles, not AllTiles: the journal scroll is virtualized, so
+  -- AllTiles() returns only the rendered slice and any ownership answer
+  -- built on it is a fraction of the collection.
+  local tiles = PP.TomeManager and PP.TomeManager.MergedTiles
+    and PP.TomeManager.MergedTiles()
   if not tiles then return nil end
   local set = {}
   for _, t in ipairs(tiles) do
@@ -70,11 +75,105 @@ local function EaseOf(item)
   return 2, "Open world"
 end
 
+-- Tome locations come from EbonholdHub's map data (read live, never copied).
+-- When Ebonhold MOVES a drop and that data hasn't caught up, the queue sends you
+-- to the old mob -- so corrections go here, keyed by lower-cased echo name.
+-- Keep the `notes` honest about how confident we are.
+local TOME_OVERRIDE = {
+  ["demonic awakening"] = {
+    placeName = "Black Temple - Shadowmoon Valley",
+    -- mobs MUST be a table: the renderer does table.concat(item.mobs, ", ").
+    -- A bare string here threw mid-loop, and because Refresh runs under
+    -- safeCall the error was swallowed -- the queue just stopped drawing rows
+    -- after this entry with no visible failure.
+    mobs = { "Illidan Stormrage" },
+    notes = "MOVED off Doom Lord Kazzak (his respawn was too slow). "
+      .. "Reported in-game, not yet confirmed by me -- verify before a long trip.",
+  },
+
+  -- ICC / Ruby Sanctum tomes. EbonholdHub's map data predates those patches, so
+  -- every one of them lands in "Location unknown" without an entry here.
+  -- Sources: Ebonhold Discord, #paladin and #general, Aug 2026. ICC and RS tomes
+  -- are SOULBOUND -- the AH is not an option for these.
+  ["necrotic plague"] = {
+    placeName = "Icecrown Citadel - The Lich King",
+    mobs = { "The Lich King" },
+    notes = "SOULBOUND -- must be farmed yourself. LK drops 1 of 3: Necrotic "
+      .. "Plague / Frostmourne Hungers / Defile. 10-HEROIC reportedly always "
+      .. "drops Necrotic Plague (community report, Aug 2026 -- not dev-confirmed).",
+  },
+  ["frostmourne hungers"] = {
+    placeName = "Icecrown Citadel - The Lich King",
+    mobs = { "The Lich King" },
+    notes = "SOULBOUND -- must be farmed yourself. LK drops 1 of 3: Necrotic "
+      .. "Plague / Frostmourne Hungers / Defile. 25-HEROIC is the reported best "
+      .. "odds for Frostmourne (community report, Aug 2026 -- not dev-confirmed).",
+  },
+  ["gunship barrage"] = {
+    placeName = "Icecrown Citadel - Gunship Battle",
+    mobs = { "Gunship Battle" },
+    notes = "INFERRED, not confirmed: the name matches the ICC Gunship encounter "
+      .. "and it sits in the ICC/RS block of the Hub's echo data. Verify before "
+      .. "a dedicated trip. Two players in #rogue and #mage called this echo "
+      .. "worthless -- consider dropping it off the target list entirely.",
+  },
+
+  -- The Reaper trio. The map data has the spawn CONDITION but not the where/how.
+  ["reaper's verdict"] = {
+    placeName = "Icecrown - Malykriss: The Vile Hold (upper hold, east side)",
+    mobs = { "The Reaper" },
+    notes = "Tradeable (unlike ICC/RS tomes). Hold Intensity 5 (475) plus "
+      .. "UNBROKEN combat for 10 min; he spawns on you and despawns after 15. "
+      .. "Wide circles through the upper hold, no pet echoes, let procs do the "
+      .. "killing. See /ep guide reaper.",
+  },
+  ["reaper's doom"] = {
+    placeName = "Icecrown - Malykriss: The Vile Hold (upper hold, east side)",
+    mobs = { "The Reaper" },
+    notes = "Tradeable (unlike ICC/RS tomes). Hold Intensity 5 (475) plus "
+      .. "UNBROKEN combat for 10 min; he spawns on you and despawns after 15. "
+      .. "Wide circles through the upper hold, no pet echoes, let procs do the "
+      .. "killing. See /ep guide reaper.",
+  },
+  ["reaper's reprieve"] = {
+    placeName = "Icecrown - Malykriss: The Vile Hold (upper hold, east side)",
+    mobs = { "The Reaper" },
+    notes = "Tradeable (unlike ICC/RS tomes). Hold Intensity 5 (475) plus "
+      .. "UNBROKEN combat for 10 min; he spawns on you and despawns after 15. "
+      .. "See /ep guide reaper.",
+  },
+}
+
+-- The queue farms CORE/S/A, but the BiS pool keeps only CORE/S -- so without
+-- this an A-tier tome reads as "go farm it" here and "switch it off" there, for
+-- the same echo on the same evening. Say the disposition on the row instead of
+-- letting the two tools contradict each other.
+--
+-- It matters more than tidiness now that unlocking a tome PERMANENTLY enlarges
+-- the draw pool: farming something you will immediately disable is not neutral,
+-- it is a trip you did not need to make.
+local function PoolFate(name)
+  if not name then return nil end
+  if PP.BisPlan and PP.BisPlan.IsTarget and PP.BisPlan.IsTarget(name) then
+    return "CHASE"   -- short list: worth orbs, worth a dedicated trip
+  end
+  if PP.BisPlan and PP.BisPlan.IsKeep and PP.BisPlan.IsKeep(name) then
+    return "KEEP"    -- stays enabled for breadth; draft it, never reroll for it
+  end
+  return "CUT"       -- the pool disables it, so farming it is wasted effort
+end
+
 function F.Compute()
   local owned, tiles = OwnedTomeNames()
   local list = {}
 
   local function record(name, tier, loc, continent)
+    local ov = name and TOME_OVERRIDE[string.lower(name)]
+    if ov then
+      -- Override wins, but keep any coords we had; they're wrong for the new
+      -- place, so drop them rather than point the arrow at the old mob.
+      loc = { placeName = ov.placeName, mobs = ov.mobs, notes = ov.notes }
+    end
     local item = {
       name = name, tier = tier,
       place = loc and loc.placeName or nil,
@@ -84,6 +183,7 @@ function F.Compute()
       continent = continent, hasLoc = loc ~= nil,
     }
     item.easeRank, item.easeLabel = EaseOf(item)
+    item.fate = PoolFate(name)
     list[#list + 1] = item
   end
 
@@ -134,7 +234,12 @@ function F.Compute()
     end
   end
 
+  -- BiS targets outrank everything: a trip for a tome the pool will disable is
+  -- the last thing you should be doing with an evening.
+  local FATE_RANK = { CHASE = 1, KEEP = 2, CUT = 4 }
   table.sort(list, function(a, b)
+    local fa, fb = FATE_RANK[a.fate] or 2, FATE_RANK[b.fate] or 2
+    if fa ~= fb then return fa < fb end
     if a.easeRank ~= b.easeRank then return a.easeRank < b.easeRank end
     local ra, rb = TIER_RANK[a.tier] or 9, TIER_RANK[b.tier] or 9
     if ra ~= rb then return ra < rb end
@@ -149,6 +254,26 @@ end
 -- Landmarks / instances / sub-zones that name a spot but not a portable zone;
 -- map them to the zone the checkpoint system can actually reach (raid entrances
 -- map to their outdoor zone).
+-- ORDERED overrides, checked FIRST and in this exact order. PLACE_ZONE below is
+-- a plain hash scanned with pairs(), whose order is UNDEFINED -- so when two of
+-- its keys both appear in a placeName the winner is arbitrary and can differ
+-- between sessions. Anything ambiguous must live here, not there.
+--
+-- The case that forced this: "Caverns of Time - The Culling of Stratholme"
+-- contains "stratholme", so it matched Eastern Plaguelands and ported a whole
+-- continent away. Every Caverns of Time instance is THEMATICALLY set somewhere
+-- else but its physical ENTRANCE is in Tanaris -- always route to Tanaris.
+local PLACE_ZONE_FIRST = {
+  { "caverns of time", "Tanaris" },
+  { "culling of stratholme", "Tanaris" },
+  { "old hillsbrad", "Tanaris" },          -- thematically Hillsbrad Foothills
+  { "escape from durnholde", "Tanaris" },
+  { "black morass", "Tanaris" },           -- thematically Blasted Lands
+  { "opening of the dark portal", "Tanaris" },
+  { "battle for mount hyjal", "Tanaris" },
+  { "mount hyjal", "Tanaris" },
+}
+
 local PLACE_ZONE = {
   ["hearthglen"] = "Western Plaguelands",
   ["sorrow hill"] = "Western Plaguelands",
@@ -213,7 +338,12 @@ local function ZoneForPlace(place)
      or string.find(low, "unknown", 1, true) then
     return nil
   end
-  -- Landmark override wins (raids, sub-zones).
+  -- Ordered overrides win outright (Caverns of Time etc; see PLACE_ZONE_FIRST).
+  for _, e in ipairs(PLACE_ZONE_FIRST) do
+    if string.find(low, e[1], 1, true) then return e[2] end
+  end
+  -- Landmark override next (raids, sub-zones). Unordered -- keep keys here
+  -- mutually exclusive, or move the ambiguous one into PLACE_ZONE_FIRST.
   for key, zone in pairs(PLACE_ZONE) do
     if string.find(low, key, 1, true) then return zone end
   end
@@ -261,9 +391,27 @@ function F.Refresh()
     frame.status:SetText(BRIGHT .. "No keeper tomes missing" .. R .. DIM
       .. " — you own every S+/S/A in this view. Push the ash tree next." .. R)
   else
-    frame.status:SetText(GOLD .. #list .. R .. " keeper tome(s) to farm"
-      .. (accurate and "" or (DIM .. "  (open the Echoes window for exact "
-        .. "ownership; showing curated targets)" .. R)))
+    -- A degraded count must not look like a real one. The accurate path reads
+    -- your tome CATALOG (every unowned keeper); the fallback only knows a small
+    -- curated list, so the number silently collapses -- 19 became 2 -- while the
+    -- old copy explained it in a parenthetical nobody reads. Say it loudly.
+    if accurate then
+      frame.status:SetText(GOLD .. #list .. R .. " keeper tome(s) to farm")
+    else
+      frame.status:SetText(EMBER .. "PARTIAL LIST -- this is not your real count."
+        .. R .. "\n" .. DIM .. "Your tome catalog isn't loaded, so only " .. #list
+        .. " curated target(s) can be checked. " .. R .. BRIGHT
+        .. "Open the Echoes window once" .. R .. DIM .. ", then Refresh." .. R)
+    end
+  end
+
+  -- Status is 1 line when accurate, 2-3 when warning -- anchor the list under
+  -- whatever height it actually took, or the warning overlaps the first row.
+  if frame.scroll then
+    local top = 44 + (frame.status:GetStringHeight() or 16) + 12
+    frame.scroll:ClearAllPoints()
+    frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -top)
+    frame.scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 14)
   end
 
   local y, lastRank = -4, nil
@@ -287,8 +435,17 @@ function F.Refresh()
     end
 
     row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 8, top)
+    -- Words, not colour: the fate has to survive a colourblind read.
+    local fate = ""
+    if item.fate == "CHASE" then
+      fate = DIM .. "  -- CHASE: reroll toward this" .. R
+    elseif item.fate == "KEEP" then
+      fate = DIM .. "  -- KEEP: draft it, don't spend orbs on it" .. R
+    elseif item.fate == "CUT" then
+      fate = DIM .. "  -- CUT: the pool disables this; farming it is wasted" .. R
+    end
     row.name:SetText("[" .. (MARK[item.tier] or "?") .. "]  " .. BRIGHT
-      .. item.name .. R)
+      .. item.name .. R .. fate)
     row.port:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, top)
 
     local info
@@ -306,7 +463,12 @@ function F.Refresh()
       else
         head = BRIGHT .. place .. R
       end
-      local mobs = item.mobs and (DIM .. "kill: " .. table.concat(item.mobs, ", ") .. R) or nil
+      -- Accept a string or a list -- upstream data (and overrides) supply both,
+      -- and a bare table.concat on a string aborts the whole render.
+      local mobsTxt
+      if type(item.mobs) == "table" then mobsTxt = table.concat(item.mobs, ", ")
+      elseif type(item.mobs) == "string" then mobsTxt = item.mobs end
+      local mobs = mobsTxt and (DIM .. "kill: " .. mobsTxt .. R) or nil
       info = head
       if mobs then info = info .. "\n" .. mobs end
       local note = item.notes
@@ -365,7 +527,9 @@ function F.Init()
 
   frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   frame.status:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -44)
-  frame.status:SetWidth(380); frame.status:SetJustifyH("LEFT")
+  -- 360 keeps the two-line warning clear of the Refresh button on the right.
+  frame.status:SetWidth(360); frame.status:SetJustifyH("LEFT")
+  frame.status:SetSpacing(2)
 
   local refresh = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   refresh:SetWidth(80); refresh:SetHeight(20)
@@ -374,6 +538,7 @@ function F.Init()
   refresh:SetScript("OnClick", function() F.Refresh() end)
 
   local scroll = CreateFrame("ScrollFrame", "PallyPilotFarmScroll", frame, "UIPanelScrollFrameTemplate")
+  frame.scroll = scroll        -- Refresh re-anchors it under the status text
   scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -70)
   scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
   frame.content = CreateFrame("Frame", nil, scroll)

@@ -948,7 +948,11 @@ function AA.ShowBuildBox(title, text, isImport)
       edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32,
       edgeSize = 24, insets = { left = 8, right = 8, top = 8, bottom = 8 } })
     f:EnableMouse(true); f:SetMovable(true); f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMoving)
+    -- StopMovingOrSizing, not StopMoving: there is no Frame:StopMoving in the
+    -- 3.3.5 API, so the handler was nil and the frame stayed glued to the
+    -- cursor after the first drag.
+    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal"); f.title:SetPoint("TOP", 0, -14)
     f.title:SetWidth(420)
     local sf = CreateFrame("ScrollFrame", "PallyPilotAshBuildScroll", f, "UIPanelScrollFrameTemplate")

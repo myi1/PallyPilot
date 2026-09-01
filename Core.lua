@@ -6,7 +6,7 @@ EbonPilot = {
   Dashboard = {}, FarmQueue = {}, DrawHelper = {}, EchoAudit = {}, RaidGuide = {},
   GearAudit = {}, EchoFlow = {}, BossCard = {}, RunLog = {}, HubSync = {},
   CombatMeter = {}, AshAdvisor = {}, Waypoints = {}, TomeManager = {},
-  BuildScore = {}, GearOpt = {},
+  BuildScore = {}, GearOpt = {}, BuildLog = {}, RerollTarget = {}, BisPlan = {},
   Classes = {},  -- per-class guide data, keyed by UnitClass token (PALADIN, HUNTER, ...)
 }
 -- Back-compat alias: every module still does `local PP = PallyPilot`.
@@ -16,8 +16,12 @@ local PP = EbonPilot
 local DB_VERSION = 1
 local DEFAULTS = {
   version = DB_VERSION,
+  -- lockSlots is SIX (counted in-game 2026-09-01). It shipped as 5, which made
+  -- "Lock Now" recommend one fewer lock than the player actually has -- a
+  -- permanently wasted slot, every run. See the migration in OnEvent: a new
+  -- default alone does not reach installs that already persisted the 5.
   options = { winPos = nil, autoDraw = false, autoTalents = false, rotationHelper = true,
-              rerollOrbs = 1, lockSlots = 5 },
+              rerollOrbs = 1, lockSlots = 6 },
   -- Diagnostic captures (gear tooltips, UI frame dumps). Written here so they
   -- land in SavedVariables on /reload and can be read from WTF directly.
   scans = {},
@@ -35,6 +39,9 @@ local function CopyDefaults(src, dst)
 end
 
 function PP.print(msg)
+  -- PP._quiet suppresses chat during automatic background captures, so the
+  -- auto-snapshot doesn't spam on every reload. Set/cleared by PP.AutoSnapshot.
+  if PP._quiet then return end
   DEFAULT_CHAT_FRAME:AddMessage("|cffe0b352EbonPilot|r: " .. tostring(msg))
 end
 
@@ -74,6 +81,17 @@ local function OnEvent(self, event, ...)
       end
       CopyDefaults(DEFAULTS, PallyPilotDB)
       PP.db = PallyPilotDB
+      -- One-time correction of the shipped lockSlots=5. CopyDefaults only
+      -- fills nil keys, so an existing install keeps the wrong value forever;
+      -- bumping DB_VERSION would fix it by wiping the whole DB, taking the
+      -- fight log and build history with it. Correct just this key, once, and
+      -- leave any other value the player chose deliberately alone.
+      if not PallyPilotDB.lockSlotsFixed then
+        PallyPilotDB.lockSlotsFixed = true
+        if PallyPilotDB.options and PallyPilotDB.options.lockSlots == 5 then
+          PallyPilotDB.options.lockSlots = 6
+        end
+      end
     end
   elseif event == "PLAYER_LOGIN" then
     PP.safeCall(PP.Dashboard.Init)
@@ -85,6 +103,8 @@ local function OnEvent(self, event, ...)
     PP.safeCall(PP.RunLog.Init)
     PP.safeCall(PP.CombatMeter.Init)
     if PP.AshAdvisor.InitRail then PP.safeCall(PP.AshAdvisor.InitRail) end
+    if PP.BuildLog and PP.BuildLog.Init then PP.safeCall(PP.BuildLog.Init) end
+    if PP.RerollTarget and PP.RerollTarget.Init then PP.safeCall(PP.RerollTarget.Init) end
     -- Class dispatch: load the guide data for whoever is logged in. Modules read
     -- PP.Build; we re-point it to this class's data (falling back to whatever a
     -- data file registered, so nothing nil-errors on an unsupported class).
@@ -105,6 +125,35 @@ PP.frame = CreateFrame("Frame")
 PP.frame:SetScript("OnEvent", OnEvent)
 PP.frame:RegisterEvent("ADDON_LOADED")
 PP.frame:RegisterEvent("PLAYER_LOGIN")
+
+-- Live-snapshot triggers on their own frame so they can't interfere with the
+-- main event handler. PLAYER_LOGOUT is the one that matters (fires on /reload,
+-- and SavedVariables are written after it); the rest are cheap top-ups.
+do
+  local snap = CreateFrame("Frame")
+  local lastAt = 0
+  local function Top(why, minGap)
+    local now = (GetTime and GetTime()) or 0
+    if minGap and (now - lastAt) < minGap then return end
+    lastAt = now
+    PP.safeCall(PP.AutoSnapshot, why)
+  end
+  snap:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_LOGOUT" then
+      Top("reload/logout")                       -- never throttled: this is the one
+    elseif event == "PLAYER_ENTERING_WORLD" then
+      Top("entering world", 30)
+    elseif event == "PLAYER_LEVEL_UP" then
+      Top("level up", 5)
+    else
+      Top(string.lower(event), 60)               -- gear changes: at most once a minute
+    end
+  end)
+  snap:RegisterEvent("PLAYER_LOGOUT")
+  snap:RegisterEvent("PLAYER_ENTERING_WORLD")
+  snap:RegisterEvent("PLAYER_LEVEL_UP")
+  snap:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+end
 
 -- Diagnostic: dump equipped-item tooltip lines so we can learn Ebonhold's
 -- affix text format (feeds the future gear/affix auditor).
@@ -216,7 +265,42 @@ function PP.Snapshot()
   PP.db.scans.snapshotTime = date("%Y-%m-%d %H:%M")
   if PP.GearScan then PP.safeCall(PP.GearScan) end
   if PP.AshTreeScan then PP.safeCall(PP.AshTreeScan) end
-  PP.print("Snapshot captured: stats + gear + ash ranks. /reload, then tell Claude.")
+  PP.print("Snapshot captured: stats + gear + ash ranks. /reload, then tell Claude. "
+    .. "(You don't normally need this -- a snapshot is taken automatically on every "
+    .. "reload/logout. Open the Skill Tree tab once if you want live ash ranks.)")
+end
+
+-- ---------------------------------------------------------------------------
+-- LIVE SNAPSHOT. You should never have to remember to run /ep snapshot: this
+-- re-captures automatically so whatever is on disk is current as of your last
+-- reload. The load-bearing trigger is PLAYER_LOGOUT -- it fires on /reload as
+-- well as a real logout, and the client serialises SavedVariables AFTER it, so
+-- a capture there lands in the file every time. The other triggers just keep an
+-- in-memory copy reasonably fresh in case a logout capture ever fails.
+--
+-- CAVEAT worth knowing: the ASH-TREE half reads live server state, which only
+-- populates once the Skill Tree tab has been opened this session. Stats and
+-- gear are always accurate; if you want the ash ranks too, open that tab once
+-- before reloading. snapshotAsh below records which you actually got.
+function PP.AutoSnapshot(why)
+  if not (PP.db and PP.Snapshot) then return end
+  PP._quiet = true
+  PP.safeCall(PP.Snapshot)
+  PP._quiet = nil
+  if PP.db.scans then
+    PP.db.scans.snapshotWhy = why or "auto"
+    -- Did the ash scan actually get live data, or just the empty template?
+    local ash, ranks = PP.db.scans.ashTree, 0
+    if type(ash) == "table" then
+      for _, line in ipairs(ash) do
+        local r = string.match(line, "| rank=(%d+)")
+        if r and tonumber(r) > 0 then ranks = ranks + 1 end
+      end
+    end
+    PP.db.scans.snapshotAsh = (ranks > 0)
+      and ("live (" .. ranks .. " owned nodes)")
+      or "STALE - Skill Tree tab was not opened this session"
+  end
 end
 
 function PP.UiScan()
@@ -717,6 +801,23 @@ SlashCmdList["EBONPILOT"] = function(line)
     else PP.safeCall(PP.RunLog.Status) end
   elseif cmd == "hubsync" then
     if PP.HubSync.Push then PP.safeCall(PP.HubSync.Push, arg) end
+  elseif cmd == "now" then
+    -- The front door: one action, one command to type. Everything else in this
+    -- addon is optional depth behind it. Deliberately NOT bound to bare "/ep"
+    -- (that opens the dashboard) or "next" (already the draft-advance command).
+    if PP.BisPlan.Now then PP.safeCall(PP.BisPlan.Now) end
+  elseif cmd == "bis" or cmd == "targetbuild" then
+    -- The target-build pipeline: what's done, what's next, per BiS echo.
+    if PP.BisPlan.Command then PP.safeCall(PP.BisPlan.Command) end
+  elseif cmd == "reroll" or cmd == "chase" then
+    -- Chase one echo: odds, ranked banish list, stop-detection. Never auto-rolls.
+    if PP.RerollTarget.Command then PP.safeCall(PP.RerollTarget.Command, arg) end
+  elseif cmd == "builds" or cmd == "compare" then
+    -- Side-by-side of every saved build we've fingerprinted (measured first).
+    if PP.BuildLog.Command then PP.safeCall(PP.BuildLog.Command, arg) end
+  elseif cmd == "want" or cmd == "draft" then
+    -- "I farmed a tome, now what?" -- owned + rated but not yet in the run.
+    if PP.EchoAudit.WantReport then PP.safeCall(PP.EchoAudit.WantReport) end
   elseif cmd == "buildcode" or cmd == "export" then
     -- Shareable EBH1 loadout string for this class's curated build.
     if PP.HubSync.ShowExport then PP.safeCall(PP.HubSync.ShowExport) end
@@ -734,7 +835,10 @@ SlashCmdList["EBONPILOT"] = function(line)
     if PP.GearOpt.Upgrades then PP.safeCall(PP.GearOpt.Upgrades) end
   elseif cmd == "gear" then
     if PP.GearAudit.Toggle then PP.GearAudit.Toggle() end
-  elseif cmd == "reroll" then
+  -- (The old `cmd == "reroll"` -> EchoFlow.StartReroll branch here was DEAD:
+  -- "reroll" is consumed earlier by the chase handler, so this never ran and
+  -- the engine silently lost its slash command. It lives on as "rolljunk".)
+  elseif cmd == "rolljunk" then
     if PP.EchoFlow.StartReroll then PP.safeCall(PP.EchoFlow.StartReroll) end
   elseif cmd == "qualityfish" or cmd == "fish" then
     if string.lower(arg or "") == "status" then

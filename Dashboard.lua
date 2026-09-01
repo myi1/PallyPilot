@@ -24,12 +24,24 @@ function D.NextAction()
   local mode = PP.db.buildMode
   local modeWord = (mode == "farm" and "Farm pool") or "Raid pool"
 
-  -- 1. Run start — level to 80, banishing junk; the saved build restores at 80.
+  -- 1a. LEVEL 1 is the only moment tome toggles apply, so it outranks
+  --     everything else that could be said here.
+  if lvl == 1 then
+    return GOLD .. "Level 1 — curate the pool NOW. " .. R
+      .. "This is the " .. BRIGHT .. "only" .. R .. " moment tome toggles work ("
+      .. BRIGHT .. "/ep tomes bis" .. R .. "). Only unlockable echoes toggle; the "
+      .. "base pool is fixed, so this trims dilution rather than concentrating "
+      .. "every draw."
+  end
+  -- 1b. Run start. EBH's automation drafts, rerolls AND banishes during 1-80 --
+  --     the player never clicks a banish -- so the only lever is keeping it
+  --     aimed at our build.
   if lvl <= 5 then
     return GOLD .. "Run start. " .. R
       .. "Level to 80 (" .. BRIGHT .. modeWord .. R
-      .. " + banish junk as it appears). Your saved build restores by "
-      .. BRIGHT .. "activating its Snapshot AT 80" .. R
+      .. "). EBH auto-picks and banishes for you — just keep it aimed at your "
+      .. "build (" .. BRIGHT .. "/ep bis -> Sync" .. R .. ", once per run). Your "
+      .. "saved build restores by " .. BRIGHT .. "activating its Snapshot AT 80" .. R
       .. " (full swap, Epic quality included) — the old level-1 guarantee is gone."
   end
   -- 2. Prestige ready — spend into permanents, then reset.
@@ -37,7 +49,7 @@ function D.NextAction()
   local gate = PP.AshData and PP.AshData.PRESTIGE and PP.AshData.PRESTIGE.gate
   if st and st.committed and gate and st.committed >= gate then
     return GOLD .. "Prestige ready. " .. R
-      .. "Skill Tree \226\134\146 pour banked ash into the infinites (permanent), then prestige."
+      .. "Skill Tree -> pour banked ash into the infinites (permanent), then prestige."
   end
   -- 3. Inside a known raid — route + boss cards.
   local raid = PP.GuideData and PP.GuideData.RaidForZone
@@ -53,8 +65,9 @@ function D.NextAction()
   if lvl >= 80 then
     return GOLD .. "At 80. " .. R
       .. "Have a saved build? " .. BRIGHT .. "activate its Snapshot now" .. R
-      .. " for a full swap (Epic restored). Else polish (Reroll junk / orb-fish "
-      .. "on a banished pool) and " .. BRIGHT .. "save at 80" .. R .. "."
+      .. " for a full swap (Epic restored). Else polish — orb-reroll your "
+      .. "weakest echo (you pick the fodder; it need not be junk) and fish "
+      .. "sub-Epic keepers to Epic — then " .. BRIGHT .. "save at 80" .. R .. "."
   end
   -- 5. Leveling.
   return GOLD .. "Leveling (" .. (mode and string.upper(mode) or "?") .. "). " .. R
@@ -90,10 +103,22 @@ local function BuildText()
     t[#t+1] = line(GOLD .. "Blessing " .. R .. (B.blessing or "?"))
     t[#t+1] = line(BRIGHT .. "Rotation  " .. R .. (B.rotation or "?"))
     if B.locked then
-      t[#t+1] = H("Lock these six")
-      local locked = {}
-      for _, n in ipairs(B.locked) do locked[#locked + 1] = n end
+      t[#t+1] = H("Lock these " .. ((PP.EchoAudit and PP.EchoAudit.LockSlots
+        and PP.EchoAudit.LockSlots()) or 6))
+      -- B.locked is deliberately ONE longer than the slot count so there is
+      -- always a ranked fallback. Printing all of it under a "lock these six"
+      -- header showed seven names for six slots; cap the list and name the
+      -- overflow as the reserve it is.
+      local slots = (PP.EchoAudit and PP.EchoAudit.LockSlots
+        and PP.EchoAudit.LockSlots()) or 6
+      local locked, spare = {}, {}
+      for i, n in ipairs(B.locked) do
+        if i <= slots then locked[#locked + 1] = n else spare[#spare + 1] = n end
+      end
       t[#t+1] = line("  " .. BRIGHT .. table.concat(locked, DIM .. " · " .. BRIGHT) .. R)
+      if #spare > 0 then
+        t[#t+1] = line("  " .. DIM .. "next in line: " .. table.concat(spare, ", ") .. R)
+      end
     end
   end
 
@@ -126,7 +151,22 @@ function D.Refresh()
   end
   if not fs then return end
   fs:SetText(BuildText())
-  if content then content:SetHeight((fs:GetHeight() or 600) + 20) end
+  -- GetStringHeight, not GetHeight: GetHeight is stale in the same frame as
+  -- SetText (the Kologarn overlap bug's cause) -- StringHeight is text-derived.
+  if content then content:SetHeight((fs:GetStringHeight() or 600) + 20) end
+  -- The NEXT hero card is sized to its wrapped text; a fixed 66px clipped the
+  -- longer advice lines (review finding). The reference scroll below moves with
+  -- it -- growing the card into a fixed-offset scroll would just recreate the
+  -- overlap class of bug.
+  if frame and frame.nowCard and frame.now then
+    local h = math.max(66, 34 + (frame.now:GetStringHeight() or 24))
+    frame.nowCard:SetHeight(h)
+    if frame.homeScroll then
+      frame.homeScroll:ClearAllPoints()
+      frame.homeScroll:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 0, -(h + 12))
+      frame.homeScroll:SetPoint("BOTTOMRIGHT", frame.home, "BOTTOMRIGHT", -26, 2)
+    end
+  end
 end
 
 -- Palette (RGBA) for the solid-texture chrome. One warm-neutral hue, shifted
@@ -152,6 +192,9 @@ local TX = {
 local VIEWS = {
   audit = { label = "Echo Audit", mod = function() return PP.EchoAudit end },
   score = { label = "Build Score", mod = function() return PP.BuildScore end },
+  builds = { label = "Builds", mod = function() return PP.BuildLog end },
+  chase  = { label = "Chase an echo", mod = function() return PP.RerollTarget end },
+  bis    = { label = "Target build", mod = function() return PP.BisPlan end },
   gear  = { label = "Gear", mod = function() return PP.GearAudit end },
   farm  = { label = "Farm Queue", mod = function() return PP.FarmQueue end },
   raid  = { label = "Raid Guide", mod = function() return PP.RaidGuide end },
@@ -253,7 +296,12 @@ end
 function D.Init()
   if frame then return end
   frame = CreateFrame("Frame", "PallyPilotFrame", UIParent)
-  frame:SetWidth(640); frame:SetHeight(560)
+  -- 700, not 640: the viewport is (width - 168 rail - 10 pad), and panels are
+  -- reparented into it at their own hardcoded widths (FarmQueue 500, RaidGuide
+  -- 520). At 640 the viewport was 462, so those panels' right-hand controls --
+  -- the Port buttons -- were clipped off the edge. 700 gives 522, which clears
+  -- the widest panel.
+  frame:SetWidth(700); frame:SetHeight(560)
   frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   frame:SetMovable(true); frame:EnableMouse(true); frame:RegisterForDrag("LeftButton")
   frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
@@ -304,7 +352,8 @@ function D.Init()
   frame.navBtns = {}
   SectionLabel(frame, -46, "VIEWS")
   local views = {
-    { "Home", "home" }, { "Build score", "score" }, { "Echo audit", "audit" },
+    { "Home", "home" }, { "Target build", "bis" }, { "Build score", "score" },
+    { "Builds", "builds" }, { "Chase echo", "chase" }, { "Echo audit", "audit" },
     { "Farm tomes", "farm" }, { "Gear", "gear" }, { "Raid guide", "raid" },
   }
   local y = -64
@@ -352,6 +401,7 @@ function D.Init()
   frame.home:SetAllPoints(frame.viewport)
 
   local nowCard = CreateFrame("Frame", nil, frame.home)
+  frame.nowCard = nowCard          -- Refresh resizes it to fit the NEXT text
   nowCard:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 0, 0)
   nowCard:SetPoint("TOPRIGHT", frame.home, "TOPRIGHT", -6, 0)
   nowCard:SetHeight(66)
@@ -374,6 +424,7 @@ function D.Init()
   frame.now:SetJustifyH("LEFT"); frame.now:SetJustifyV("TOP")
 
   local scroll = CreateFrame("ScrollFrame", "PallyPilotScroll", frame.home, "UIPanelScrollFrameTemplate")
+  frame.homeScroll = scroll        -- Refresh re-anchors it under the sized card
   scroll:SetPoint("TOPLEFT", frame.home, "TOPLEFT", 0, -78)
   scroll:SetPoint("BOTTOMRIGHT", frame.home, "BOTTOMRIGHT", -26, 2)
   content = CreateFrame("Frame", nil, scroll)

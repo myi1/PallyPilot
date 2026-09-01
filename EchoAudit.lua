@@ -191,7 +191,9 @@ function A.LockSlots()
     local ok, n = pcall(EB.GetLockedSlotCount)
     if ok and type(n) == "number" and n > 0 then return n end
   end
-  return (PP.db and PP.db.options and PP.db.options.lockSlots) or 5
+  -- SIX, not five: counted in-game 2026-09-01, and every other caller in
+  -- the addon already assumes six.
+  return (PP.db and PP.db.options and PP.db.options.lockSlots) or 6
 end
 
 function A.LockNow(buckets)
@@ -302,6 +304,203 @@ function A.RunQualityTargets()
     return a.name < b.name
   end)
   return out
+end
+
+-- ---------------------------------------------------------------------------
+-- FODDER RANKING: which echo to sacrifice to the orb next.
+--
+-- Corrected 2026-09-01 by the player, after this addon spent a long time
+-- asserting otherwise: an orb reroll consumes an echo YOU SELECT and rerolls
+-- it into a fresh draw. It does not require "junk". So there is no such thing
+-- as running out of fodder while you still have echoes -- the only question is
+-- which one you can most afford to lose.
+--
+-- That makes the endgame loop: feed your WEAKEST echo, roll for a target,
+-- repeat until all CHASE echoes are in. That is the BiS build.
+--
+-- Ordering is weakest-first: lowest tier, then lowest quality, then fewest
+-- stacks. Excluded outright:
+--   * CHASE targets  -- feeding the thing you are hunting is self-defeating
+--   * locked echoes  -- they persist across runs; do not burn them
+-- A same-tier draw is a wash and a worse draw is a real loss, so feeding from
+-- the bottom is what keeps the expected value positive.
+function A.FodderRank()
+  local gp = ProjectEbonhold and ProjectEbonhold.Perks
+    and ProjectEbonhold.Perks.grantedPerks
+  if not gp then return nil end
+
+  local isTarget = (PP.BisPlan and PP.BisPlan.IsTarget) or function() return false end
+  local locked = {}
+  for _, n in ipairs((PP.Build and PP.Build.locked) or {}) do
+    locked[Norm(n)] = true
+  end
+
+  local minQ, stacks = {}, {}
+  for key, value in pairs(gp) do
+    if type(key) == "string" then
+      local list = (type(value) == "table" and value[1] ~= nil) and value or { value }
+      for _, e in ipairs(list) do
+        if type(e) == "table" then
+          stacks[key] = (stacks[key] or 0) + 1
+          if e.quality and (minQ[key] == nil or e.quality < minQ[key]) then
+            minQ[key] = e.quality
+          end
+        end
+      end
+    end
+  end
+
+  -- Worst tier first. Anything unrated is the most expendable of all.
+  local rank = { CORE = 1, S = 2, A = 3, B = 4, C = 5, REROLL = 6, DISABLE = 7 }
+  local out = {}
+  for name, q in pairs(minQ) do
+    local base = StripQuality(Norm(name))
+    if not locked[base] and not isTarget(base) then
+      local v = Classify(base) or "REROLL"
+      out[#out + 1] = { name = name, q = q, tier = v,
+                        stacks = stacks[name] or 1, rank = rank[v] or 6 }
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.rank ~= b.rank then return a.rank > b.rank end      -- worst tier first
+    if a.q ~= b.q then return a.q < b.q end                  -- then lowest quality
+    if a.stacks ~= b.stacks then return a.stacks < b.stacks end
+    return a.name < b.name
+  end)
+  return out
+end
+
+-- "I just farmed a tome -- now what?" Echoes you COULD run but aren't: tome
+-- owned, rated CORE/S/A, and absent from the current run. Owning a tome only
+-- puts an echo in your draftable POOL; it still has to be drawn.
+function A.WantList()
+  -- TWO DIFFERENT SETS, and mixing them up is the whole difficulty here:
+  --   * catalog TILES        = every tome you have LEARNED (+ its on/off flag)
+  --   * EbonholdHub OwnedSet = what is IN THE RUN right now, LOCKS INCLUDED
+  --     (TomeManager: "at level 1 the run set is just your 6 locks")
+  -- So "can draft but haven't" = tiles(known) MINUS the run set.
+  -- grantedPerks is NOT usable as the run set -- it omits locked echoes, which
+  -- made Ambidexterity/Pandemic/etc show up as "not taken".
+  local run = OwnedSet()
+  if not run then return nil end
+  local inRun = {}
+  for lower in pairs(run) do inRun[StripQuality(Norm(lower))] = true end
+  -- OWNERSHIP SOURCE: the journal's CATALOG TILES, not EbonholdHub. This is the
+  -- documented distinction in TomeManager's header -- EbonholdHub's set is the
+  -- RUN-ECHO set, so using it here meant "owned minus in-run" came out empty and
+  -- genuinely owned tomes (Temporal Pressure) reported as un-chaseable. Tiles
+  -- carry .tomeKnown (do you have it) and .tomeDisabled (can it be drawn).
+  -- MergedTiles, not AllTiles: the journal scroll is virtualized, so
+  -- AllTiles() returns only the rendered slice and any ownership answer
+  -- built on it is a fraction of the collection.
+  local tiles = PP.TomeManager and PP.TomeManager.MergedTiles
+    and PP.TomeManager.MergedTiles()
+  local names, rank, out, seen = DisplayNames(), { CORE = 1, S = 2, A = 3 }, {}, {}
+
+  if tiles then
+    for _, t in ipairs(tiles) do
+      local base = t.name and StripQuality(Norm(t.name))
+      if base and t.known and not seen[base] and not inRun[base] then
+        seen[base] = true
+        local v = Classify(base)
+        if rank[v] then
+          out[#out + 1] = { name = names[base] or t.name, tier = v,
+                            order = TierOrderIndex(base),
+                            disabled = (t.disabled == true) }
+        end
+      end
+    end
+  else
+    -- Journal never opened this session, so the tome collection isn't readable
+    -- at all. Without it we cannot know what you own but haven't drafted --
+    -- better to say so than to invent a list.
+    return nil, "closed"
+  end
+  table.sort(out, function(a, b)
+    if rank[a.tier] ~= rank[b.tier] then return rank[a.tier] < rank[b.tier] end
+    return a.order < b.order
+  end)
+  return out
+end
+
+-- The REAL draw pool: every learned, enabled tome not already in the run --
+-- regardless of rating. A reroll draws from all of these, not just the ones
+-- worth having, so odds computed over the rated subset alone are too generous.
+-- Returns total, and how many of them are junk (the banishable slice).
+function A.PoolSize()
+  -- MergedTiles, not AllTiles: the journal scroll is virtualized, so
+  -- AllTiles() returns only the rendered slice and any ownership answer
+  -- built on it is a fraction of the collection.
+  local tiles = PP.TomeManager and PP.TomeManager.MergedTiles
+    and PP.TomeManager.MergedTiles()
+  local run = OwnedSet()
+  if not (tiles and run) then return nil end
+  local inRun = {}
+  for lower in pairs(run) do inRun[StripQuality(Norm(lower))] = true end
+  local total, junk, seen, junkNames = 0, 0, {}, {}
+  for _, t in ipairs(tiles) do
+    local base = t.name and StripQuality(Norm(t.name))
+    if base and t.known and not t.disabled and not inRun[base] and not seen[base] then
+      seen[base] = true
+      total = total + 1
+      local v = Classify(base)
+      if v == "REROLL" or v == "DISABLE" or v == "C" then
+        junk = junk + 1
+        junkNames[#junkNames + 1] = t.name
+      end
+    end
+  end
+  table.sort(junkNames)
+  -- Third return = the NAMES of the banishable pool junk. NB these are POOL
+  -- entries (drawable, unwanted) -- the correct banish candidates -- not the
+  -- run's junk fodder, which is a different list with a different job.
+  return total, junk, junkNames
+end
+
+-- Print it with the actual mechanic, because "what do I do" is the real question.
+function A.WantReport()
+  local want = A.WantList()
+  if not want then
+    PP.print("Need your run loaded (level 80, in a run) + EbonholdHub to work this out.")
+    return
+  end
+  if #want == 0 then
+    PP.print(VERD .. "Nothing to chase" .. R .. " -- every CORE/S/A echo whose tome "
+      .. "you own is already in this run.")
+    return
+  end
+  local fodder = A.RerollList and A.RerollList() or nil
+  PP.print(GOLD .. "CAN DRAFT, NOT IN RUN" .. R .. DIM
+    .. " -- tome owned, still needs to be drawn:" .. R)
+  local anyOff = false
+  for i = 1, math.min(#want, 12) do
+    local w = want[i]
+    if w.disabled then anyOff = true end
+    DEFAULT_CHAT_FRAME:AddMessage("   " .. BRIGHT .. "[" .. w.tier .. "] " .. w.name .. R
+      .. (w.disabled and (EMBER .. "   TOME OFF -- cannot be drawn" .. R) or ""))
+  end
+  if anyOff then
+    PP.print(EMBER .. "Some tomes above are DISABLED." .. R .. DIM .. " A disabled tome "
+      .. "is never offered -- not on a level-up, not on a reroll. Toggling is "
+      .. "LEVEL-1 ONLY, so re-enable them at the start of your next run: " .. R
+      .. GOLD .. "/ep tome" .. R .. DIM .. " lists exactly which to right-click." .. R)
+  end
+  if #want > 12 then
+    DEFAULT_CHAT_FRAME:AddMessage("   " .. DIM .. "... and " .. (#want - 12) .. " more" .. R)
+  end
+  local lvl = UnitLevel("player") or 80
+  if lvl >= 80 then
+    PP.print(DIM .. "At 80 the " .. R .. BRIGHT .. "Orb is the only way in" .. R .. DIM
+      .. ": pick a fodder tile -> Forget -> you get a RANDOM draw from your owned "
+      .. "pool. You cannot target one echo -- feed your weakest echo to the orb "
+      .. "and keep rolling until it shows. (Banish is a level-up-only offer and "
+      .. "EBH spends it for you, so it is not a lever here.)"
+      .. (fodder and (" You have " .. #fodder .. " fodder tile(s) to feed it.") or "")
+      .. R)
+  else
+    PP.print(DIM .. "You are level " .. lvl .. " -- these can also come up on a "
+      .. "normal level-up draw, which is free. Orbs are the level-80 route." .. R)
+  end
 end
 
 -- Quality-fishing readout: the unique-echo count (= Adaptive Power %) and,
@@ -481,8 +680,11 @@ end
 local SECTIONS = {
   { key = "REROLL", color = EMBER, title = "Fodder — feed to an Orb",
     note = "Not in the build. These are your reroll currency — no build slot wants them." },
-  { key = "DISABLE", color = EMBER, title = "Banish — turn off",
-    note = "Actively bad for this build. Turn them off; banish from draws when offered." },
+  { key = "DISABLE", color = EMBER, title = "Turn off — bad for this build",
+    -- Not "banish": the player never clicks one. Tome toggles (level 1) are
+    -- the lever they actually control.
+    note = "Actively bad for this build. Switch their tomes off at level 1; "
+      .. "prime fodder for the orb in the meantime." },
   { key = "C", color = DIM, title = "Breadth — keep active",
     note = "No build value on their own, but every unique active echo is +1% "
       .. "damage via Adaptive Power. Never reroll these below the active cap." },
@@ -544,7 +746,8 @@ end
 function A.Refresh()
   if not fs then return end
   fs:SetText(BuildText())
-  if content then content:SetHeight((fs:GetHeight() or 600) + 20) end
+  -- GetStringHeight, not GetHeight -- GetHeight is stale right after SetText.
+  if content then content:SetHeight((fs:GetStringHeight() or 600) + 20) end
 end
 
 function A.Init()
@@ -611,12 +814,19 @@ local VERDICT_LABEL = {
   A = ASH .. "[A] Staple — keep" .. R,
   B = DIM .. "[B] Filler — keep, low priority" .. R,
   C = DIM .. "[C] Breadth — +1% Adaptive Power" .. R,
-  DISABLE = EMBER .. "[!] Banish — bad for the build" .. R,
+  DISABLE = EMBER .. "[!] Turn off — bad for the build" .. R,
   REROLL = EMBER .. "[X] Fodder — feed to an Orb unless it reads strong" .. R,
 }
 
+-- Nothing ever created PP.db.audit -- it is not in Core's DEFAULTS and no other
+-- module writes it -- so this returned nil forever, CheckForNewEchoes bailed on
+-- its first guard every 30s, and the "New echo: X" notice has never once fired.
+-- Create it lazily here rather than in DEFAULTS, so it also self-heals on an
+-- install whose saved DB predates the key.
 local function Snapshot()
-  return PP.db and PP.db.audit
+  if not PP.db then return nil end
+  if type(PP.db.audit) ~= "table" then PP.db.audit = { known = {}, seeded = false } end
+  return PP.db.audit
 end
 
 local function CheckForNewEchoes()
