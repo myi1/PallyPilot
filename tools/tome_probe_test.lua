@@ -5,6 +5,7 @@ PallyPilot = { TomeManager = {}, print = function(s) print("[EP] " .. s) end }
 EbonPilot = PallyPilot
 local PP = PallyPilot
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, s) print(s) end }
+function date() return "2026-09-01 18:00" end
 function UnitLevel() return 1 end
 function GetSpellInfo(id) return "Spell" .. tostring(id) end
 PP.EchoAudit = { ClassifyName = function() return "A" end }

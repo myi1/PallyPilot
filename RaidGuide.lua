@@ -49,7 +49,12 @@ end
 -- grabs you ("). Nothing errors; the tail just never draws. So the text is
 -- split across a pool of FontStrings, chunked on line boundaries.
 local CHUNK = 1800          -- comfortably under where clipping starts
+-- chunkFS is indexed from 2 -- chunk 1 is the base `fs`. That hole at [1]
+-- makes `#chunkFS` return 0 no matter how many strings exist, which silently
+-- disabled the stale-chunk cleanup: a short guide selected after a long one
+-- kept the long one's tail on screen. Track the high-water mark instead.
 local chunkFS = {}
+local chunkMax = 0
 
 local function ChunkFS(i)
   if chunkFS[i] then return chunkFS[i] end
@@ -58,6 +63,7 @@ local function ChunkFS(i)
   -- at every chunk boundary and the seams become visible.
   f:SetWidth(456); f:SetJustifyH("LEFT"); f:SetJustifyV("TOP"); f:SetSpacing(2)
   chunkFS[i] = f
+  if i > chunkMax then chunkMax = i end
   return f
 end
 
@@ -99,7 +105,9 @@ function RG.Refresh()
     f:Show()
     prev = f
   end
-  for i = #parts + 1, #chunkFS do chunkFS[i]:SetText(""); chunkFS[i]:Hide() end
+  for i = math.max(2, #parts + 1), chunkMax do
+    if chunkFS[i] then chunkFS[i]:SetText(""); chunkFS[i]:Hide() end
+  end
 
   -- Scroll extent only: GetStringHeight IS derived from the text, so it's safe
   -- here, and being a little off just changes how far you can scroll.

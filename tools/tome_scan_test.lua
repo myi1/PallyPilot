@@ -114,23 +114,33 @@ print(string.format("breadth:     base=%d enabled=%d off=%d pool=%d uniques=%.1f
   base, on, off, pool, uniq))
 assert(TM.ExpectedUniques(100, 79) > 0, "ExpectedUniques must be callable as a TM field")
 
--- REGRESSION: Preview's breadth branch called a file-local declared BELOW it,
--- which compiles to a global lookup and threw "attempt to call a nil value" in
--- the live client. Run Preview with breadth resolvable and assert the line
--- actually prints, so that path can never go uncovered again.
+-- REGRESSION: the breadth readout calls file-locals (ExpectedUniques) declared
+-- BELOW it, which compile to a global lookup and threw "attempt to call a nil
+-- value" in the live client. Exercise it with breadth resolvable so that path
+-- can never go uncovered again.
 local printed = {}
 local realPrint = PP.print
 PP.print = function(s) printed[#printed + 1] = s end
-TM.Preview("bis")
+TM.Breadth()
 PP.print = realPrint
 local sawBreadth = false
 for _, l in ipairs(printed) do
-  if string.find(l, "BREADTH", 1, true) then sawBreadth = true end
+  if string.find(l, "POOL BREADTH", 1, true) then sawBreadth = true end
 end
-assert(sawBreadth, "Preview must print the BREADTH line when breadth resolves")
-assert(#printed <= 5,
-  "Preview must stay terse -- no chat walls. Printed " .. #printed .. " lines")
-print("preview:     " .. #printed .. " lines, breadth line present")
+assert(sawBreadth, "Breadth must print the pool line when breadth resolves")
+assert(#printed <= 4,
+  "Breadth must stay terse -- no chat walls. Printed " .. #printed .. " lines")
+print("breadth out: " .. #printed .. " lines, pool line present")
+
+-- TM.Plan must read the MERGED catalog, never the rendered slice: BuildScore
+-- grades pool hygiene off it, and a slice read made the score move with the
+-- journal's scroll position.
+local merged = TM.Plan("bis")
+assert(merged, "Plan must build from MergedTiles")
+assert(merged.total >= 40,
+  "Plan saw only " .. tostring(merged.total) .. " tomes -- that is the slice, "
+  .. "not the merged catalog")
+print("plan source: merged catalog, " .. merged.total .. " known tomes")
 
 -- /ep tomes bis must WALK, not read the visible slice. A slice-built plan once
 -- reported "nothing to do" while 28 tomes were still wrong.

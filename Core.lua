@@ -307,7 +307,7 @@ function PP.UiScan()
   local out, count = {}, 0
   local f = EnumerateFrames()
   while f do
-    local ok = pcall(function()
+    pcall(function()
       if f.IsVisible and f:IsVisible() then
         local name = f.GetName and f:GetName() or nil
         local ftype = f.GetObjectType and f:GetObjectType() or "?"
@@ -325,7 +325,8 @@ function PP.UiScan()
         end
       end
     end)
-    if not ok then count = count end
+    -- A frame that throws on inspection is skipped, not fatal: this walks
+    -- every frame in the client, including other addons' broken ones.
     f = EnumerateFrames(f)
   end
   PP.db.scans = PP.db.scans or {}
@@ -356,7 +357,7 @@ function PP.OrbScan()
     local hit = nil
     local f = EnumerateFrames()
     while f do
-      local found = pcall(function()
+      pcall(function()
         if f.IsVisible and f:IsVisible()
            and f.GetObjectType and f:GetObjectType() == "Button" then
           local fs = f.GetFontString and f:GetFontString()
@@ -703,7 +704,7 @@ function PP.QualityScan()
   -- Orb dialog slider cap (open the Forget dialog first to capture it).
   local f = EnumerateFrames()
   while f do
-    local ok = pcall(function()
+    pcall(function()
       if f.IsVisible and f:IsVisible() and f.GetObjectType and f:GetObjectType() == "Slider"
          and f.GetMinMaxValues then
         local lo, hi = f:GetMinMaxValues()
@@ -713,7 +714,7 @@ function PP.QualityScan()
         end
       end
     end)
-    if not ok then end
+    -- Same as the UI sweep: an un-inspectable frame is skipped silently.
     f = EnumerateFrames(f)
   end
   PP.db.scans = PP.db.scans or {}
@@ -804,7 +805,8 @@ SlashCmdList["EBONPILOT"] = function(line)
     -- The target-build pipeline: what's done, what's next, per BiS echo.
     if PP.BisPlan.Command then PP.safeCall(PP.BisPlan.Command) end
   elseif cmd == "reroll" or cmd == "chase" then
-    -- Chase one echo: odds, ranked banish list, stop-detection. Never auto-rolls.
+    -- Chase one echo: odds, the next echo to feed the orb, stop-detection.
+    -- Never auto-rolls.
     if PP.RerollTarget.Command then PP.safeCall(PP.RerollTarget.Command, arg) end
   elseif cmd == "builds" or cmd == "compare" then
     -- Side-by-side of every saved build we've fingerprinted (measured first).
@@ -870,8 +872,14 @@ SlashCmdList["EBONPILOT"] = function(line)
     local kills = PP.db.kills and PP.db.kills[zone]
     if kills and next(kills) then
       PP.print("Recorded kills in " .. zone .. ":")
-      for boss, k in pairs(kills) do
-        DEFAULT_CHAT_FRAME:AddMessage("  |cff8aa96a" .. boss .. "|r — " .. (k.when or "?"))
+      -- pairs() order is undefined, so the same list came out shuffled on every
+      -- reload. Anything a person reads gets sorted.
+      local names = {}
+      for boss in pairs(kills) do names[#names + 1] = boss end
+      table.sort(names)
+      for _, boss in ipairs(names) do
+        DEFAULT_CHAT_FRAME:AddMessage("  |cff8aa96a" .. boss .. "|r — "
+          .. (kills[boss].when or "?"))
       end
     else
       PP.print("No kills recorded in " .. tostring(zone)

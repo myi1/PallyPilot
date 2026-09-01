@@ -313,49 +313,27 @@ function BL.Report()
     return (a.score or 0) > (b.score or 0)
   end)
 
-  PP.print(GOLD .. "BUILD COMPARISON" .. R .. DIM .. "  (" .. #rows .. " captured)" .. R)
-  for i, r in ipairs(rows) do
-    local head = BRIGHT .. i .. ". " .. r.name .. R
-    if r.score then head = head .. DIM .. "  score " .. R .. r.score .. "/100 (" .. (r.grade or "?") .. ")" end
-    DEFAULT_CHAT_FRAME:AddMessage(head)
-
-    -- MEASURED first: this is the only line that is evidence rather than theory.
+  -- ONE line per build, five builds, then a pointer. This is the chat glance;
+  -- the Builds page is where the comparison actually lives, and six lines per
+  -- build meant the top of the list had scrolled away before you read it.
+  PP.print(GOLD .. "BUILD COMPARISON" .. R .. DIM .. "  (" .. #rows
+    .. " tracked -- " .. R .. GOLD .. "/ep builds" .. R .. DIM
+    .. " for the full page)" .. R)
+  for i = 1, math.min(#rows, 5) do
+    local r = rows[i]
+    local detail
     if r._m then
-      DEFAULT_CHAT_FRAME:AddMessage("     " .. VERD .. "measured " .. R
-        .. "avg " .. BRIGHT .. K(r._m.avg) .. R .. " dps, best " .. K(r._m.best)
-        .. DIM .. "  over " .. r._m.n .. " fight" .. (r._m.n == 1 and "" or "s") .. R)
+      detail = VERD .. "avg " .. K(r._m.avg) .. R .. DIM .. " dps over " .. r._m.n
+        .. " fight" .. (r._m.n == 1 and "" or "s") .. R
     else
-      DEFAULT_CHAT_FRAME:AddMessage("     " .. EMBER .. "NOT MEASURED" .. R .. DIM
-        .. " -- no logged fights on this build; everything below is prediction." .. R)
+      detail = EMBER .. "not measured" .. R
+        .. (r.score and (DIM .. ", predicted " .. r.score .. "/100" .. R) or "")
     end
-
-    local comp = {}
-    if r.core then comp[#comp + 1] = r.core .. " core" end
-    if r.S then comp[#comp + 1] = r.S .. " S" end
-    if r.A then comp[#comp + 1] = r.A .. " A" end
-    if r.B then comp[#comp + 1] = r.B .. " B" end
-    if r.uniques then comp[#comp + 1] = r.uniques .. " uniques (+" .. r.uniques .. "% Adaptive)" end
-    if #comp > 0 then
-      DEFAULT_CHAT_FRAME:AddMessage("     " .. DIM .. "has:  " .. R .. table.concat(comp, " · "))
-    end
-
-    local gaps = {}
-    if r.missingN and r.missingN > 0 then gaps[#gaps + 1] = r.missingN .. " draftable not taken" end
-    if r.qSub and r.qSub > 0 then gaps[#gaps + 1] = r.qSub .. " keeper(s) sub-Epic" end
-    if r.junkOn and r.junkOn > 0 then gaps[#gaps + 1] = r.junkOn .. " junk enabled" end
-    if r.filled and r.slots then gaps[#gaps + 1] = "locks " .. r.filled .. "/" .. r.slots end
-    if #gaps > 0 then
-      DEFAULT_CHAT_FRAME:AddMessage("     " .. DIM .. "gaps: " .. R .. table.concat(gaps, " · "))
-    end
-    if r.missingTop and r.missingTop ~= "" then
-      DEFAULT_CHAT_FRAME:AddMessage("     " .. DIM .. "want: " .. r.missingTop .. R)
-    end
-
-    local p = r.power or {}
-    DEFAULT_CHAT_FRAME:AddMessage("     " .. DIM .. "power: " .. R
-      .. K(p.hp) .. " hp · " .. num(p.crit) .. "% crit · " .. num(p.haste) .. "% haste · "
-      .. K(p.ap) .. " ap · " .. K(p.sp) .. " sp"
-      .. DIM .. "   [" .. (r.when or "?") .. "]" .. R)
+    DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. i .. ". " .. r.name .. R
+      .. DIM .. " -- " .. R .. detail)
+  end
+  if #rows > 5 then
+    PP.print(DIM .. "  +" .. (#rows - 5) .. " more on the Builds page." .. R)
   end
 
   local anyMeasured = false

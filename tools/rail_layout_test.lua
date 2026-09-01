@@ -52,6 +52,10 @@ local names = { "title", "nextFS", "nextBtn", "chaseFS", "body", "aimFS",
 for _, n in ipairs(names) do
   local isBtn = n:match("Btn$") or n:match("^pool[FR]") or n:match("^orb[MP]")
   rail[n] = Widget(n, isBtn and 22 or 14)
+  -- Mark buttons explicitly. The old name-pattern check inside simulate() only
+  -- matched "Btn$", so the Farm/Raid pair and the orb stepper were being
+  -- dropped as "empty text" and never took part in the layout at all.
+  rail[n].__isBtn = (isBtn ~= nil)
 end
 rail.nextBtn.__h = 24
 
@@ -90,8 +94,12 @@ local function simulate(bodyText)
   local y, boxes = 14, {}
   for _, step in ipairs(ORDER) do
     local w = rail[step[1]]
-    local h = (w.GetStringHeight and w.__text ~= "" and w:GetStringHeight()) or w:GetHeight()
-    if w.__text == "" and w.GetStringHeight and not step[1]:match("Btn$") then h = 0 end
+    local h = w.__isBtn and w:GetHeight() or w:GetStringHeight()
+    if not w.__isBtn and w.__text == "" then h = 0 end
+    -- A control the current level cannot use is hidden outright, and must take
+    -- its gap with it -- a hidden button that still advanced y left a hole
+    -- exactly where the eye expects the next control.
+    if w.__ppOff then h = 0 end
     if h > 0 then
       boxes[#boxes + 1] = { name = step[1], top = y, bottom = y + h }
       y = y + h + step[2]
@@ -144,4 +152,31 @@ end
 assertNoOverlap(boxes, "collapsed")
 print(("collapsed  : %d elements, %dpx tall"):format(#boxes, total))
 
-print("\nRAIL LAYOUT OK -- sequential measured placement, no overlap at any length.")
+-- 4. Level-gated tools: at 80 the tome plan is gone, while levelling BOTH
+--    toolsets are gone. Each must close up cleanly, not leave a hole.
+rail.chaseFS:SetText("chasing: Sanguine Bulwark +5 more")
+rail.poolLeft:SetText("")
+rail.toolCap:SetText("")
+rail.tomeBtn.__ppOff = true                       -- level 80: no tome toggles
+local atCap = select(1, simulate("BUILD: RAID (breadth)"))
+for _, b in ipairs(atCap) do
+  assert(b.name ~= "tomeBtn", "the tome plan must not render at 80")
+end
+assertNoOverlap(atCap, "level 80")
+print(("level 80   : %d elements, tome plan hidden"):format(#atCap))
+
+rail.orbMinus.__ppOff = true                      -- mid-levels: no orbs either
+rail.rerollBtn.__ppOff = true
+rail.toolCap:SetText("Level 42: tome toggles closed until your next run.")
+local levelling = select(1, simulate("BUILD: RAID (breadth)"))
+for _, b in ipairs(levelling) do
+  assert(b.name ~= "tomeBtn" and b.name ~= "orbMinus" and b.name ~= "rerollBtn",
+    b.name .. " must not render while levelling")
+end
+assertNoOverlap(levelling, "levelling")
+assert(#levelling < #atCap,
+  "the levelling rail must be SHORTER than the level-80 one, not padded with gaps")
+print(("levelling  : %d elements, both toolsets hidden"):format(#levelling))
+
+print("\nRAIL LAYOUT OK -- sequential measured placement, no overlap at any")
+print("length, and hidden tools take their gap with them.")

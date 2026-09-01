@@ -147,7 +147,10 @@ local function NextLearnable()
       end
     end
   end
-  return steps[1], steps
+  -- Nothing passed the tier gate. Falling back to steps[1] handed the caller a
+  -- talent that CANNOT be taken yet, so the guide glowed a locked button and
+  -- T.Apply burned its retry on it. "Nothing placeable" is the honest answer.
+  return nil, steps
 end
 
 -- A saved build is a name -> desired-rank map (order/index proof).
@@ -161,7 +164,12 @@ function T.Save()
       if name and (rank or 0) > 0 then talents[name] = rank; total = total + rank end
     end
   end
-  PP.db.talentBuild = { talents = talents, total = total, source = "Your saved build" }
+  -- Carry the priority list forward. Dropping it silently downgraded the
+  -- applier from importance order to raw tree/tier order, so a re-saved build
+  -- spent scarce points differently from the template it came from.
+  local prev = PP.db.talentBuild
+  PP.db.talentBuild = { talents = talents, total = total,
+    source = "Your saved build", priority = prev and prev.priority }
   PP.print("Talent build saved (" .. total .. " points). " .. GOLD .. "/pp talents apply" ..
     R .. " to re-apply, or " .. GOLD .. "/pp talents auto" .. R .. " to auto-apply as you level.")
 end
@@ -177,21 +185,22 @@ function T.Apply(silent)
     if not silent then PP.print("Can't change talents in combat.") end
     return
   end
-  local spent, blocked = 0, 0
+  local spent = 0
   -- Spend in priority order (Ret-first, tier-legal, prereq-resolved), one point
   -- at a time, until nothing changes (out of points or blocked by protection).
   local guard = 0
   while guard < 400 do
     guard = guard + 1
+    -- nil now means "nothing is placeable yet" rather than "here is a locked
+    -- talent anyway", so this break is the tier gate doing its job.
     local step = NextLearnable()
     if not step then break end
     local before = step.rank
-    local ok = pcall(LearnTalent, step.tab, step.index)
+    pcall(LearnTalent, step.tab, step.index)
     local _, _, _, _, after = GetTalentInfo(step.tab, step.index)
     if (after or 0) > before then
       spent = spent + ((after or 0) - before)
     else
-      if not ok then blocked = blocked + 1 end
       break -- no progress: out of points or blocked
     end
   end
@@ -253,6 +262,9 @@ function T.Preview()
     end
   end
   if #missing > 0 then
+    -- Built from a pairs() walk, so without this the same mismatch list came
+    -- out in a different order every time you ran it.
+    table.sort(missing)
     PP.print("|cffff5050Not found in your tree (name mismatch):|r " .. table.concat(missing, ", "))
   else
     PP.print("All template talents matched your tree. /pp talents apply to spend.")
@@ -289,12 +301,16 @@ local function GlowButton(step)
     glow.tex = t
   end
   HideGlow()
+  -- PlayerTalentFrameTalent<n> is indexed WITHIN the displayed tab, so glowing
+  -- by index alone pointed at whatever talent happened to sit at that position
+  -- in whichever tree was open -- confidently wrong advice. If we cannot
+  -- confirm the tab, glow nothing; the guide text already names the tab and the
+  -- talent, which is enough to find it.
+  local shownTab = PanelTemplates_GetSelectedTab
+    and PlayerTalentFrame and PanelTemplates_GetSelectedTab(PlayerTalentFrame)
+  if shownTab ~= step.tab then return end
   local btn = _G["PlayerTalentFrameTalent" .. step.index]
-  -- Only valid if the talent frame is open AND showing this step's tab.
-  local shownTab = PlayerTalentFrame and PlayerTalentFrame.selectedPlayerSpec
   if btn and btn:IsVisible() then
-    -- Confirm the button currently maps to our talent (name match via tooltip is
-    -- costly; rely on tab check where available, else just glow by index).
     glow:SetPoint("CENTER", btn, "CENTER", 0, 0)
     glow:SetWidth((btn:GetWidth() or 36) + 16)
     glow:SetHeight((btn:GetHeight() or 36) + 16)
@@ -321,8 +337,12 @@ local function GuideUpdate()
       guideText:SetText("|cff8aa96aBuild complete!|r")
       PP.print("Guided talents: build complete.")
     end
-    if guideFrame then guideFrame:UnregisterEvent("CHARACTER_POINTS_CHANGED") end
-    guideFrame.done = true
+    -- Unregister BOTH, or PLAYER_TALENT_UPDATE keeps re-running this after the
+    -- build is finished. (The old `done` flag it set was never read.)
+    if guideFrame then
+      guideFrame:UnregisterEvent("CHARACTER_POINTS_CHANGED")
+      guideFrame:UnregisterEvent("PLAYER_TALENT_UPDATE")
+    end
     return
   end
   local prereqLine = step.prereq

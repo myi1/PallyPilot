@@ -19,6 +19,9 @@ local SLOT_NAMES = {
   [1]="Head",[3]="Shoulder",[5]="Chest",[6]="Waist",[7]="Legs",[8]="Feet",
   [9]="Wrist",[10]="Hands",[15]="Back",[16]="Main Hand",[17]="Off Hand",
   [11]="Ring 1",[12]="Ring 2",[18]="Ranged",
+  -- Neck and both trinkets are slots /ep upgrades explicitly targets, yet had
+  -- no names here -- so it printed "slot 2" / "slot 13" / "slot 14".
+  [2]="Neck",[13]="Trinket 1",[14]="Trinket 2",
 }
 
 -- Enchant recommendation per slot. `optional` slots aren't flagged as MISSING
@@ -148,10 +151,15 @@ function GO.Report()
     Print(VERD .. "Enchants: every core slot is enchanted." .. R)
   else
     Print(EMBER .. "Enchants MISSING (" .. #missing .. ") — free power:" .. R)
-    for _, slot in ipairs(missing) do
+    for i = 1, math.min(#missing, 4) do
+      local slot = missing[i]
       local rec = ENCH[slot]
       DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. SLOT_NAMES[slot] .. R .. ": "
         .. rec.rec .. DIM .. "  (" .. rec.src .. ")" .. R)
+    end
+    if #missing > 4 then
+      Print(DIM .. "  +" .. (#missing - 4) .. " more -- " .. R .. GOLD .. "/ep gear"
+        .. R .. DIM .. " has room for the full list." .. R)
     end
   end
 
@@ -174,15 +182,18 @@ function GO.Report()
   else
     local total = 0
     for _, e in ipairs(empties) do total = total + e.n end
-    Print(EMBER .. "Empty sockets (" .. total .. ") — free power:" .. R)
+    local names = {}
     for _, e in ipairs(empties) do
-      DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. (SLOT_NAMES[e.slot] or ("slot " .. e.slot))
-        .. R .. DIM .. ": " .. e.n .. " empty" .. R)
+      names[#names + 1] = (SLOT_NAMES[e.slot] or ("slot " .. e.slot))
+        .. (e.n > 1 and (" x" .. e.n) or "")
     end
+    Print(EMBER .. "Empty sockets (" .. total .. ")" .. R .. DIM .. ": " .. R
+      .. table.concat(names, DIM .. ", " .. R))
   end
-  Print(DIM .. "Gem plan:" .. R)
-  for _, l in ipairs(GEM_REC) do DEFAULT_CHAT_FRAME:AddMessage("  " .. l) end
-  Print(DIM .. "  " .. GEM_NOTE .. R)
+  if #empties > 0 then
+    Print(DIM .. "Gem plan: " .. R .. table.concat(GEM_REC, DIM .. " | " .. R))
+    Print(DIM .. "  " .. GEM_NOTE .. R)
+  end
 
   -- GLYPHS -------------------------------------------------------------------
   local g = GlyphState()
@@ -194,12 +205,12 @@ function GO.Report()
   else
     Print(DIM .. "Glyphs: couldn't read your glyph sockets — recommendations:" .. R)
   end
-  Print(BRIGHT .. "Major glyphs:" .. R)
-  for _, l in ipairs(GLYPH_MAJOR) do DEFAULT_CHAT_FRAME:AddMessage("  " .. l) end
-  Print(BRIGHT .. "Minor glyphs:" .. R)
-  for _, l in ipairs(GLYPH_MINOR) do DEFAULT_CHAT_FRAME:AddMessage("  " .. l) end
-  Print(DIM .. "Enchants/gems/glyphs are standard WotLK — verify names at your "
-    .. "trainer/AH; the picks lean Strength/AP per your build." .. R)
+  -- Only worth the lines when there is a slot to fill. A filled glyph bar does
+  -- not need the whole recommendation table reprinted underneath it.
+  if not g or g.empty > 0 then
+    Print(BRIGHT .. "Major: " .. R .. table.concat(GLYPH_MAJOR, DIM .. " | " .. R))
+    Print(BRIGHT .. "Minor: " .. R .. table.concat(GLYPH_MINOR, DIM .. " | " .. R))
+  end
 end
 
 -- ------------------------------------------------------------ /pp upgrades
@@ -297,17 +308,19 @@ function GO.Upgrades()
   local byIlvl = {}
   for _, r in ipairs(rows) do byIlvl[#byIlvl + 1] = r end
   table.sort(byIlvl, function(x, y) return x.ilvl < y.ilvl end)
-  Print(EMBER .. "Biggest base upgrades (lowest item level):" .. R)
+  -- Three worst slots, ONE line each. Five slots at two lines apiece pushed
+  -- the average-ilvl line and everything above it out of the chat frame.
+  Print(EMBER .. "Weakest slots:" .. R)
   local shown = 0
   for _, r in ipairs(byIlvl) do
-    if shown < 5 and r.ilvl > 0 then
+    if shown < 3 and r.ilvl > 0 then
       shown = shown + 1
       local lag = avg - r.ilvl
-      local lagTxt = (lag >= 13) and (EMBER .. " (-" .. string.format("%.0f", lag) .. " vs avg)" .. R)
-        or (lag >= 6 and (DIM .. " (-" .. string.format("%.0f", lag) .. ")" .. R) or "")
-      DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s%-10s%s ilvl %s%d%s%s",
-        BRIGHT, SLOT_NAMES[r.slot] or ("slot " .. r.slot), R, GOLD, r.ilvl, R, lagTxt))
-      DEFAULT_CHAT_FRAME:AddMessage("      " .. DIM .. (BASE_SRC[r.slot] or BASE_SRC_DEFAULT) .. R)
+      DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT
+        .. (SLOT_NAMES[r.slot] or ("slot " .. r.slot)) .. R .. DIM .. " ilvl " .. R
+        .. GOLD .. r.ilvl .. R
+        .. (lag >= 6 and (DIM .. " (-" .. string.format("%.0f", lag) .. " vs avg)" .. R) or "")
+        .. DIM .. " -- " .. (BASE_SRC[r.slot] or BASE_SRC_DEFAULT) .. R)
     end
   end
 
@@ -321,12 +334,15 @@ function GO.Upgrades()
     if #parts > 0 then wins[#wins + 1] = { slot = r.slot, txt = table.concat(parts, ", ") } end
   end
   if #wins > 0 then
-    Print(BRIGHT .. "Quick wins (free power, any slot):" .. R)
+    local names = {}
     for _, w in ipairs(wins) do
-      DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. (SLOT_NAMES[w.slot] or ("slot " .. w.slot))
-        .. R .. DIM .. ": " .. w.txt .. R)
+      names[#names + 1] = (SLOT_NAMES[w.slot] or ("slot " .. w.slot))
     end
-    Print(DIM .. "Fix affixes in /pp gear, enchants/gems in /pp gems." .. R)
+    Print(BRIGHT .. "Quick wins" .. R .. DIM .. " (free power on " .. #wins
+      .. " slot" .. (#wins == 1 and "" or "s") .. "): " .. R
+      .. table.concat(names, DIM .. ", " .. R))
+    Print(DIM .. "Affixes in " .. R .. GOLD .. "/ep gear" .. R .. DIM
+      .. ", enchants and gems in " .. R .. GOLD .. "/ep gems" .. R .. DIM .. "." .. R)
   else
     Print(VERD .. "No affix/enchant/gem gaps — every slot is fully kitted." .. R)
   end

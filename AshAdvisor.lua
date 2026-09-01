@@ -560,14 +560,26 @@ end
 local rail
 local glowing = {}
 
+local claimed = {}
+
 local function ClearGlows()
   for _, t in ipairs(glowing) do t:Hide() end
   glowing = {}
+  claimed = {}
 end
 
-local function GlowNode(id, r, g, b)
+-- A glow that says WHICH one it is.
+--
+-- Buy-next versus later-in-the-plan used to be gold-vs-green glow and nothing
+-- else, which is invisible to a colourblind reader -- and the two glows share
+-- one texture per node, so an imported plan repainted the very node the
+-- buy-next glow had just claimed. `mark` fixes both: it is drawn over the node
+-- as a number, and the first caller to claim a node keeps it for that frame.
+local function GlowNode(id, r, g, b, mark)
   local btn = _G["skillTreeNode" .. id]
   if not btn then return end
+  if claimed[id] then return end
+  claimed[id] = true
   local t = btn.__ppGlow
   if not t then
     t = btn:CreateTexture(nil, "OVERLAY")
@@ -580,6 +592,16 @@ local function GlowNode(id, r, g, b)
   t:SetVertexColor(r, g, b, 0.9)
   t:Show()
   glowing[#glowing + 1] = t
+
+  local fs = btn.__ppMark
+  if not fs then
+    fs = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+    fs:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 3, 3)
+    btn.__ppMark = fs
+  end
+  fs:SetText(mark or "")
+  if mark then fs:Show() else fs:Hide() end
+  glowing[#glowing + 1] = fs
 end
 
 -- You've prestiged at least once (Borrowed Power owned) => the enablers are
@@ -709,7 +731,7 @@ function AA.RefreshRail()
       rail.nextWhy:SetText(DIM .. (why == "connector"
         and "Buy this to reach the next node in your build."
         or "Next node in your imported build.") .. R)
-      GlowNode(nId, 1, 0.72, 0.20)
+      GlowNode(nId, 1, 0.72, 0.20, "1")
     else
       rail.nextHead:SetText(GOLD .. "BUY NEXT" .. R)
       rail.nextName:SetText(why == "done" and (VERD .. "Build complete" .. R)
@@ -724,7 +746,7 @@ function AA.RefreshRail()
       if nd and cr < NodeMaxRank(nd) and id ~= nId then
         local c = NodeRankCost(nd, cr + 1)
         t[#t + 1] = BRIGHT .. NodeName(id) .. R .. DIM .. (c and (" — " .. Fmt(c)) or "") .. R
-        GlowNode(id, 0.54, 0.66, 0.42)
+        GlowNode(id, 0.54, 0.66, 0.42, tostring(#t + 1))
         if #t >= 3 then break end
       end
     end
@@ -811,8 +833,10 @@ function AA.RefreshRail()
       rail.guideBtn:SetScript("OnClick", function() AA.GuideNext() end)
       -- Auto-advance: glow the plan's next node GREEN so it moves along as you
       -- buy (each purchase pushes a loadout update that re-runs this refresh).
+      -- Marked "1" too: with a plan imported this IS the buy-next node, and
+      -- GlowNode's claim stops it repainting one that is already marked.
       local nid = AA.NextPlanNode(ranks)
-      if nid then GlowNode(nid, 0.42, 0.95, 0.45) end
+      if nid then GlowNode(nid, 0.42, 0.95, 0.45, "1") end
     else
       rail.guideBtn:SetText("Import build")
       rail.guideBtn:SetScript("OnClick", function()

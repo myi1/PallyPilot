@@ -208,8 +208,10 @@ function HS.Push(mode)
     echoBundles = AssembleBundles(),
     echoMaxPicks = (function()
       if mode ~= "farm" then return {} end -- empty = 1 copy each = breadth
-      -- Farm mode: the enabled pool is tiny (locks + epics), so nearly
-      -- every window is repeats — and repeats ARE the goal (rank-ups).
+      -- Farm mode wants RANK-UPS, so repeats are the goal rather than a
+      -- stall. (The old note claimed the enabled pool shrinks to "locks +
+      -- epics" -- it cannot: only tome echoes toggle, and the base pool is
+      -- always in the hat. The uncap is right; the reason was wrong.)
       -- Uncap everything rated so auto-pick drafts through repeat windows
       -- instead of stalling on them (post-prestige field bug 2026-08-25).
       local mp = {}

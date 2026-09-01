@@ -237,7 +237,10 @@ end
 function BP.NextAction(st)
   local lvl = UnitLevel("player") or 80
   local c = st.counts
-  if lvl == 1 and (c.OFF > 0 or true) then
+  -- Level 1 always leads with curation, whether or not anything is currently
+  -- OFF -- the point is that this is the only moment toggles work. The old
+  -- `c.OFF > 0 or true` said exactly that but read like a bug.
+  if lvl == 1 then
     return GOLD .. "LEVEL 1 -- curate the pool NOW." .. R .. DIM
       .. " This is the only moment tome toggles work. Apply the BiS pool "
       .. "(button below) to switch OFF the unlockable echoes that aren't "

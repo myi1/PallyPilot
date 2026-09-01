@@ -228,19 +228,45 @@ function TM.PlanRecords(records, mode)
   return { disable = disable, reenable = reenable, total = #records, mode = mode }
 end
 
--- WARNING: this reads only the tiles rendered RIGHT NOW. The journal scroll is
--- virtualized (proven 2026-09-01), so this plan is a slice, never the whole
--- collection. TM.Scan() walks the full list; prefer it.
+-- Plans over the whole collection, not the rendered slice -- while keeping
+-- per-TILE granularity wherever the game is actually showing tiles.
+--
+-- Two sources, and they have opposite strengths. The scan snapshot covers every
+-- tome but stores one record per echo (WriteScan collapses quality variants by
+-- name). The live tiles cover only what is rendered but give each variant its
+-- own toggle state. So: take the live tiles verbatim, then fill in from the
+-- snapshot every echo the live view did not render.
+--
+-- Neither source alone works. Slice-only was the old bug -- BuildScore graded
+-- pool hygiene off whatever happened to be on screen, so the score moved when
+-- you scrolled. Snapshot-only would collapse an ON variant into an OFF one and
+-- silently drop it from the disable list.
 function TM.Plan(mode)
-  local tiles, why = Tiles()
-  if not tiles then return nil, why end
-  local records = {}
-  for _, t in ipairs(tiles) do
-    records[#records + 1] = {
-      tile = t, spellId = t.spellId, name = TomeName(t),
-      disabled = (t.tomeDisabled == true), locked = (t.isLocked == true),
-    }
+  local records, seenBase = {}, {}
+  local live = TM.AllTiles()
+  if live then
+    for _, t in ipairs(live) do
+      if t.known then
+        seenBase[StripQ(Norm(t.name))] = true
+        records[#records + 1] = { spellId = t.spellId, name = t.name,
+          disabled = t.disabled, locked = t.locked }
+      end
+    end
   end
+
+  local snap = PP.db and PP.db.scans and PP.db.scans.tomes
+  if snap and snap.tomes then
+    for _, t in ipairs(snap.tomes) do
+      local base = StripQ(Norm(t.name or ""))
+      if base ~= "" and not seenBase[base] then
+        seenBase[base] = true
+        records[#records + 1] = { spellId = t.spellId, name = t.name,
+          disabled = (t.off == 1), locked = (t.locked == 1) }
+      end
+    end
+  end
+
+  if #records == 0 then return nil, "closed" end
   return TM.PlanRecords(records, mode)
 end
 
@@ -293,6 +319,7 @@ function TM.Left()
     .. "check the rest, or /ep tomes scan for the exact figure.")
 end
 
+-- Why the catalog could not be read, in the terms the fix is stated in.
 local function CantRead(why)
   if why == "notarget" then
     PP.print("No target build for this class yet -- the bis pool needs the "
@@ -303,65 +330,6 @@ local function CantRead(why)
   else
     PP.print("Couldn't read the echo catalog.")
   end
-end
-
--- ---------------------------------------------------------------------------
-function TM.Preview(mode)
-  mode = mode or "clean"
-  local plan, why = TM.Plan(mode)
-  if not plan then CantRead(why); return end
-  local lvl = UnitLevel("player") or 1
-  PP.print("TOME PLAN (" .. string.upper(mode) .. ") — read " .. plan.total
-    .. " known tomes. Toggles apply at LEVEL 1 only"
-    .. (lvl == 1 and " (you are level 1 — ready)." or (" — you are level " .. lvl
-        .. ", so this is preview-only.")))
-  -- NO LISTS IN CHAT. Both halves of the plan are per-tile instructions, so
-  -- both get badged and chat gets counts only. A scrollback wall is unusable
-  -- while you are clicking through a catalog, and it pushes everything else
-  -- out of view. Full lists live in SavedVariables via /ep tomes scan.
-  TM.Mark(plan)
-  if #plan.disable == 0 and #plan.reenable == 0 then
-    PP.print("-> Pool already matches the plan. Nothing to toggle.")
-  else
-    PP.print(("-> %d to switch OFF (X badge), %d to switch back ON (tick "
-      .. "badge). Scroll the catalog and right-click every badged tile."):format(
-      #plan.disable, #plan.reenable))
-  end
-  -- Adaptive Power turns pool size into a damage stat, so a curation plan that
-  -- never mentions breadth is only telling half the story.
-  local base, on, off, uniq, pool = TM.PoolBreadth()
-  if base and mode == "bis" then
-    local after = pool - #plan.disable + #plan.reenable
-    -- Round explicitly. "%d" with a float truncates on 5.1 and is an outright
-    -- error on stricter Lua, which is how the offline suite catches it.
-    local uNow = math.floor(uniq + 0.5)
-    local uAfter = math.floor(TM.ExpectedUniques(after, 79) + 0.5)
-    PP.print(("BREADTH: pool %d -> %d (%d base pool is fixed). Unique echoes "
-      .. "over a run ~%d -> ~%d, i.e. Adaptive Power ~+%d%% -> ~+%d%%."):format(
-      pool, after, base, uNow, uAfter, uNow, uAfter))
-  end
-  if #plan.disable > 0 or #plan.reenable > 0 then
-    if lvl == 1 then
-      PP.print("Tiles also carry their verdict LETTER (top-right). "
-        .. "/ep tomes left = progress; /ep tomes scan = full list to disk.")
-    else
-      PP.print("Start a fresh run (level 1) to apply these toggles.")
-    end
-  end
-end
-
--- ---------------------------------------------------------------------------
--- Advisor-only, by design. The game's catalog tile handler toggles the tome
--- under the CURSOR (not the tile passed to it) and pops a per-toggle Yes/No
--- confirm, so a programmatic clicker would (a) hit the wrong tome and (b) still
--- need a manual Yes — worse than nothing. Instead we identify exactly what to
--- change and the tile LETTER badges make each target easy to find; you do the
--- handful of right-clicks. This is also the safe side of the automation ban.
-function TM.Go(mode)
-  mode = mode or "clean"
-  PP.print("Toggling is manual (the game confirms each one and targets by "
-    .. "cursor, so it can't be safely automated). Here's exactly what to do:")
-  TM.Preview(mode)
 end
 
 -- ---------------------------------------------------------------------------
@@ -421,23 +389,27 @@ function TM.Debug()
     .. " known (" .. off .. " already OFF, " .. locked .. " locked), "
     .. uniq .. " distinct names.")
   if #dupes == 0 then
-    PP.print("No duplicate names. A repeat plan therefore means the view is "
-      .. "PARTIAL -- scroll the catalog to the very top and re-run.")
+    -- Scrolling is no longer a workaround: every plan routes through
+    -- TM.Scan(), which walks the whole list itself. A partial read here just
+    -- means the window was closed or filtered when AllTiles() ran.
+    PP.print("No duplicate names. This is the RENDERED slice only -- the plan "
+      .. "itself comes from /ep tomes scan, which walks the full catalog.")
   else
     PP.print("Duplicate names: " .. #dupes .. " (" .. diffId
       .. " with DIFFERENT spellIds = real quality variants, each needing its "
       .. "own toggle; " .. sameId .. " with the SAME spellId = the same tile "
       .. "counted twice, which is a read bug).")
-    for i = 1, math.min(#dupes, 12) do
-      local d = dupes[i]
-      DEFAULT_CHAT_FRAME:AddMessage("   " .. i .. ". " .. d.rec.name .. "  x"
-        .. #d.rec.ids .. "  ids: " .. table.concat(d.rec.ids, ", ")
-        .. "  off: " .. d.rec.offs .. "/" .. #d.rec.ids
-        .. (d.allSame and "  [SAME ID -- read bug]" or "  [variants]"))
+    local rows = {}
+    for _, d in ipairs(dupes) do
+      rows[#rows + 1] = d.rec.name .. "  x" .. #d.rec.ids .. "  ids: "
+        .. table.concat(d.rec.ids, ", ") .. "  off: " .. d.rec.offs .. "/"
+        .. #d.rec.ids .. (d.allSame and "  [SAME ID -- read bug]" or "  [variants]")
     end
+    PP.db = PP.db or {}
+    PP.db.scans = PP.db.scans or {}
+    PP.db.scans.tomeDebug = { when = date("%Y-%m-%d %H:%M"), dupes = rows }
+    PP.print("Full list in PallyPilotDB.scans.tomeDebug after a /reload.")
   end
-  PP.print("If 'tiles rendered' changes when you scroll the catalog, the list "
-    .. "is virtualized and no single plan is ever complete.")
 end
 
 -- ---------------------------------------------------------------------------
@@ -472,6 +444,34 @@ function TM.ExpectedUniques(pool, draws)
   return pool * (1 - ((pool - 1) / pool) ^ (draws or 79))
 end
 local ExpectedUniques = TM.ExpectedUniques
+
+-- IS THIS ECHO GATED BEHIND A TOME AT ALL?
+--
+-- The whole addon used to read `tomeKnown == false` as "you cannot have this",
+-- which is wrong for the ~400 base-pool echoes that need no tome: they are
+-- always drawable and there is nothing to farm. Only an echo with a drop
+-- source is tome-gated, and only for those does "no tome" mean "not yet".
+--
+-- Returns true (needs a tome), false (base pool), or nil when the client
+-- tables aren't loaded -- callers must treat nil as "don't know", never false.
+local gatedCache = nil
+function TM.TomeGated(name)
+  local key = StripQ(Norm(name or ""))
+  if key == "" then return nil end
+  if not gatedCache then
+    local PE = _G.ProjectEbonhold
+    local db = PE and PE.PerkDatabase
+    local byGroup = PE and PE.PerkDropSourceByGroup
+    if type(db) ~= "table" or type(byGroup) ~= "table" then return nil end
+    gatedCache = {}
+    for _, d in pairs(db) do
+      if type(d) == "table" and d.comment and d.groupId and byGroup[d.groupId] then
+        gatedCache[StripQ(Norm(d.comment))] = true
+      end
+    end
+  end
+  return gatedCache[key] == true
+end
 
 -- Returns basePool, enabledTomes, ownedOff, expectedUniques -- or nil if the
 -- client tables needed to separate base from tome-gated aren't available.
@@ -1017,10 +1017,16 @@ function TM.ProbeLines()
   return L
 end
 
+-- Diagnostics go to SavedVariables, never to chat: the probe is dozens of
+-- lines, nobody can read it out of the scrollback, and it is only ever wanted
+-- after a /reload anyway.
 function TM.Probe()
-  for _, line in ipairs(TM.ProbeLines()) do
-    DEFAULT_CHAT_FRAME:AddMessage(line)
-  end
+  local lines = TM.ProbeLines()
+  PP.db = PP.db or {}
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.probe = { when = date("%Y-%m-%d %H:%M"), lines = lines }
+  PP.print(("Probe written: %d lines in PallyPilotDB.scans.probe. "):format(#lines)
+    .. "/reload to write it to disk.")
 end
 
 -- ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
--- Offline exercise of TomeManager.Preview + TomeManager.Debug against a fake
+-- Offline exercise of TomeManager.Plan + TomeManager.Debug against a fake
 -- Echo Journal, covering the exact shape keepsy hit: quality variants of one
 -- echo (same name, DIFFERENT spellIds) sitting next to a same-id read bug.
 PallyPilot = { TomeManager = {}, print = function(s) print("[EP] " .. s) end }
@@ -6,6 +6,7 @@ EbonPilot = PallyPilot
 local PP = PallyPilot
 
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, s) print(s) end }
+function date() return "2026-09-01 18:00" end
 function UnitLevel() return 1 end
 function GetSpellInfo(id) return "Spell" .. tostring(id) end
 
@@ -53,13 +54,15 @@ local chunk = assert(loadfile("TomeManager.lua"))
 chunk()
 local TM = PP.TomeManager
 
-print("=== Preview(bis) ===")
-TM.Preview("bis")
 print("\n=== Debug ===")
 TM.Debug()
 
 -- Assertions: the plan must list every enabled non-target TILE (variants are
 -- separate toggles), and must never list an already-disabled or unowned tile.
+--
+-- This is why TM.Plan takes the LIVE tiles verbatim rather than merging them by
+-- name: the scan snapshot stores one record per echo, so a name merge would
+-- collapse an enabled variant into a disabled one and drop it from the list.
 local plan = assert(TM.Plan("bis"), "plan should build")
 local names = {}
 for _, e in ipairs(plan.disable) do names[#names + 1] = e.name end

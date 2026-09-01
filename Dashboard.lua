@@ -103,21 +103,44 @@ local function BuildText()
     t[#t+1] = line(GOLD .. "Blessing " .. R .. (B.blessing or "?"))
     t[#t+1] = line(BRIGHT .. "Rotation  " .. R .. (B.rotation or "?"))
     if B.locked then
-      t[#t+1] = H("Lock these " .. ((PP.EchoAudit and PP.EchoAudit.LockSlots
-        and PP.EchoAudit.LockSlots()) or 6))
       -- B.locked is deliberately ONE longer than the slot count so there is
       -- always a ranked fallback. Printing all of it under a "lock these six"
       -- header showed seven names for six slots; cap the list and name the
       -- overflow as the reserve it is.
       local slots = (PP.EchoAudit and PP.EchoAudit.LockSlots
         and PP.EchoAudit.LockSlots()) or 6
-      local locked, spare = {}, {}
+      local want, spare = {}, {}
       for i, n in ipairs(B.locked) do
-        if i <= slots then locked[#locked + 1] = n else spare[#spare + 1] = n end
+        if i <= slots then want[#want + 1] = n else spare[#spare + 1] = n end
       end
-      t[#t+1] = line("  " .. BRIGHT .. table.concat(locked, DIM .. " · " .. BRIGHT) .. R)
-      if #spare > 0 then
-        t[#t+1] = line("  " .. DIM .. "next in line: " .. table.concat(spare, ", ") .. R)
+
+      -- Which of them are ALREADY in a slot. A list that never shrinks cannot
+      -- tell you whether you have done the job, so drop the ones that are set
+      -- and let the header carry the count.
+      local set, known = {}, false
+      local tiles = PP.TomeManager and PP.TomeManager.MergedTiles
+        and PP.TomeManager.MergedTiles()
+      if tiles then
+        known = true
+        for _, tile in ipairs(tiles) do
+          if tile.locked and tile.name then set[string.lower(tile.name)] = true end
+        end
+      end
+      local todo = {}
+      for _, n in ipairs(want) do
+        if not (known and set[string.lower(n)]) then todo[#todo + 1] = n end
+      end
+
+      if known and #todo == 0 then
+        t[#t+1] = H("Locks set")
+        t[#t+1] = line("  " .. VERD .. "all " .. #want .. " are in slots" .. R)
+      else
+        t[#t+1] = H(known and ("Lock these " .. #todo .. " of " .. #want)
+          or ("Lock these " .. slots))
+        t[#t+1] = line("  " .. BRIGHT .. table.concat(todo, DIM .. " · " .. BRIGHT) .. R)
+        if #spare > 0 then
+          t[#t+1] = line("  " .. DIM .. "next in line: " .. table.concat(spare, ", ") .. R)
+        end
       end
     end
   end
@@ -138,7 +161,10 @@ end
 
 function D.Refresh()
   if frame and frame.now then
-    frame.now:SetText(PP.safeCall and D.NextAction and D.NextAction() or "")
+    -- Testing safeCall for truthiness and then calling D.NextAction directly
+    -- meant an error in it took the whole refresh down -- the guard was there
+    -- and doing nothing. Actually call through it.
+    frame.now:SetText((D.NextAction and PP.safeCall(D.NextAction)) or "")
     if frame.status then
       local mode = PP.db.buildMode
       -- Mode chip carries the WORD (FARM/RAID) so it reads without color;

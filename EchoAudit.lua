@@ -196,15 +196,39 @@ function A.LockSlots()
   return (PP.db and PP.db.options and PP.db.options.lockSlots) or 6
 end
 
+-- The best N owned echoes to put in permanent lock slots -- and, for each,
+-- whether it is ALREADY in one.
+--
+-- Without that flag the panel showed the same six names forever, so a list you
+-- had fully acted on looked identical to one you had not touched. Second
+-- return says whether the lock state could be read at all; a caller must not
+-- render "not locked" when the honest answer is "the catalog is closed".
 function A.LockNow(buckets)
   local pick, max = {}, A.LockSlots()
-  for _, key in ipairs({ "CORE", "S", "A", "B" }) do
-    for _, name in ipairs(buckets[key]) do
-      if #pick >= max then return pick end
-      pick[#pick + 1] = { name = name, tier = key }
+
+  local lockedSet, lockKnown = {}, false
+  local tiles = PP.TomeManager and PP.TomeManager.MergedTiles
+    and PP.TomeManager.MergedTiles()
+  if tiles then
+    lockKnown = true
+    for _, t in ipairs(tiles) do
+      if t.locked and t.name then lockedSet[StripQuality(Norm(t.name))] = true end
     end
   end
-  return pick
+
+  for _, key in ipairs({ "CORE", "S", "A", "B" }) do
+    for _, name in ipairs(buckets[key]) do
+      if #pick >= max then return pick, lockKnown end
+      -- Spelled out, not `a and b or nil`: that idiom collapses a legitimate
+      -- FALSE into nil, which would make "known to be unlocked" indistinguish-
+      -- able from "could not read the catalog" -- the one distinction this
+      -- return exists to make.
+      local isLocked
+      if lockKnown then isLocked = (lockedSet[StripQuality(Norm(name))] == true) end
+      pick[#pick + 1] = { name = name, tier = key, locked = isLocked }
+    end
+  end
+  return pick, lockKnown
 end
 
 -- ---------------------------------------------------------------------------
@@ -372,6 +396,24 @@ end
 
 -- "I just farmed a tome -- now what?" Echoes you COULD run but aren't: tome
 -- owned, rated CORE/S/A, and absent from the current run. Owning a tome only
+-- CAN THIS ECHO COME UP IN A DRAW?
+--
+-- Not the same question as "do you own its tome". Base-pool echoes need no
+-- tome, so `known == false` on one of those means "always available", not
+-- "unobtainable" -- and gating on `known` alone silently dropped every one of
+-- them from both the pool count and the chase list. Only a tome-GATED echo is
+-- excluded by a missing tome. When the client tables aren't loaded TomeGated
+-- returns nil, and we fall back to the old conservative reading rather than
+-- inventing a pool that may not exist.
+local function Drawable(tile, base)
+  if tile.disabled then return false end
+  if tile.known then return true end
+  local gated = PP.TomeManager and PP.TomeManager.TomeGated
+    and PP.TomeManager.TomeGated(base)
+  if gated == nil then return false end
+  return not gated
+end
+
 -- puts an echo in your draftable POOL; it still has to be drawn.
 function A.WantList()
   -- TWO DIFFERENT SETS, and mixing them up is the whole difficulty here:
@@ -400,7 +442,7 @@ function A.WantList()
   if tiles then
     for _, t in ipairs(tiles) do
       local base = t.name and StripQuality(Norm(t.name))
-      if base and t.known and not seen[base] and not inRun[base] then
+      if base and Drawable(t, base) and not seen[base] and not inRun[base] then
         seen[base] = true
         local v = Classify(base)
         if rank[v] then
@@ -423,10 +465,10 @@ function A.WantList()
   return out
 end
 
--- The REAL draw pool: every learned, enabled tome not already in the run --
+-- The REAL draw pool: every echo you can draw that is not already in the run --
 -- regardless of rating. A reroll draws from all of these, not just the ones
 -- worth having, so odds computed over the rated subset alone are too generous.
--- Returns total, and how many of them are junk (the banishable slice).
+-- Returns total, and how many of them are rated junk.
 function A.PoolSize()
   -- MergedTiles, not AllTiles: the journal scroll is virtualized, so
   -- AllTiles() returns only the rendered slice and any ownership answer
@@ -440,7 +482,7 @@ function A.PoolSize()
   local total, junk, seen, junkNames = 0, 0, {}, {}
   for _, t in ipairs(tiles) do
     local base = t.name and StripQuality(Norm(t.name))
-    if base and t.known and not t.disabled and not inRun[base] and not seen[base] then
+    if base and Drawable(t, base) and not inRun[base] and not seen[base] then
       seen[base] = true
       total = total + 1
       local v = Classify(base)
@@ -451,55 +493,61 @@ function A.PoolSize()
     end
   end
   table.sort(junkNames)
-  -- Third return = the NAMES of the banishable pool junk. NB these are POOL
-  -- entries (drawable, unwanted) -- the correct banish candidates -- not the
-  -- run's junk fodder, which is a different list with a different job.
+  -- Third return = the NAMES of the rated junk sitting in the draw pool. These
+  -- are what DILUTES your odds. They are not a to-do list: banish is a 1-80
+  -- level-up action that EbonholdHub spends for you, and at 80 the only lever
+  -- over pool junk is the tome toggle.
   return total, junk, junkNames
 end
 
--- Print it with the actual mechanic, because "what do I do" is the real question.
+-- Print it with the actual mechanic, because "what do I do" is the real
+-- question. FOUR lines, hard cap: this is a slash command, and an eighteen-line
+-- dump scrolls the answer off the top of the chat frame before it is read.
 function A.WantReport()
   local want = A.WantList()
   if not want then
-    PP.print("Need your run loaded (level 80, in a run) + EbonholdHub to work this out.")
+    -- WantList returns nil for an unread catalog just as often as for a
+    -- missing run, and blaming EbonholdHub for both sent people to the wrong
+    -- fix. Say which one is actually missing.
+    local run = OwnedSet()
+    if not run then
+      PP.print("Need your run loaded (level 80, in a run) + EbonholdHub to work this out.")
+    else
+      PP.print("Open the " .. BRIGHT .. "Echoes" .. R .. " window once this session "
+        .. "-- the catalog tiles are the only place your tome list lives.")
+    end
     return
   end
   if #want == 0 then
-    PP.print(VERD .. "Nothing to chase" .. R .. " -- every CORE/S/A echo whose tome "
-      .. "you own is already in this run.")
+    PP.print(VERD .. "Nothing to chase" .. R .. " -- every CORE/S/A echo you can "
+      .. "draw is already in this run.")
     return
   end
-  local fodder = A.RerollList and A.RerollList() or nil
-  PP.print(GOLD .. "CAN DRAFT, NOT IN RUN" .. R .. DIM
-    .. " -- tome owned, still needs to be drawn:" .. R)
-  local anyOff = false
-  for i = 1, math.min(#want, 12) do
-    local w = want[i]
-    if w.disabled then anyOff = true end
-    DEFAULT_CHAT_FRAME:AddMessage("   " .. BRIGHT .. "[" .. w.tier .. "] " .. w.name .. R
-      .. (w.disabled and (EMBER .. "   TOME OFF -- cannot be drawn" .. R) or ""))
+
+  local top, off = {}, 0
+  for _, w in ipairs(want) do
+    if w.disabled then off = off + 1
+    elseif #top < 3 then top[#top + 1] = "[" .. w.tier .. "] " .. w.name end
   end
-  if anyOff then
-    PP.print(EMBER .. "Some tomes above are DISABLED." .. R .. DIM .. " A disabled tome "
-      .. "is never offered -- not on a level-up, not on a reroll. Toggling is "
-      .. "LEVEL-1 ONLY, so re-enable them at the start of your next run: " .. R
-      .. GOLD .. "/ep tome" .. R .. DIM .. " lists exactly which to right-click." .. R)
-  end
-  if #want > 12 then
-    DEFAULT_CHAT_FRAME:AddMessage("   " .. DIM .. "... and " .. (#want - 12) .. " more" .. R)
+  local more = #want - #top - off
+  PP.print(GOLD .. "CHASING " .. #want .. R .. DIM .. ": " .. R
+    .. table.concat(top, DIM .. ", " .. R)
+    .. (more > 0 and (DIM .. " +" .. more .. " more" .. R) or ""))
+  if off > 0 then
+    PP.print(EMBER .. off .. " have their tome OFF" .. R .. DIM .. " and can never "
+      .. "be drawn. Toggling is level-1 only -- " .. R .. GOLD .. "/ep tome" .. R
+      .. DIM .. " badges them at the start of your next run." .. R)
   end
   local lvl = UnitLevel("player") or 80
   if lvl >= 80 then
-    PP.print(DIM .. "At 80 the " .. R .. BRIGHT .. "Orb is the only way in" .. R .. DIM
-      .. ": pick a fodder tile -> Forget -> you get a RANDOM draw from your owned "
-      .. "pool. You cannot target one echo -- feed your weakest echo to the orb "
-      .. "and keep rolling until it shows. (Banish is a level-up-only offer and "
-      .. "EBH spends it for you, so it is not a lever here.)"
-      .. (fodder and (" You have " .. #fodder .. " fodder tile(s) to feed it.") or "")
+    local fodder = A.FodderRank and A.FodderRank()
+    PP.print(DIM .. "At 80 the orb is the only way in: feed it " .. R
+      .. BRIGHT .. ((fodder and fodder[1] and fodder[1].name) or "your weakest echo")
+      .. R .. DIM .. " and keep rolling. Draws are random -- you cannot target one."
       .. R)
   else
-    PP.print(DIM .. "You are level " .. lvl .. " -- these can also come up on a "
-      .. "normal level-up draw, which is free. Orbs are the level-80 route." .. R)
+    PP.print(DIM .. "Level " .. lvl .. " -- these also come up on free level-up "
+      .. "draws. Orbs are the level-80 route." .. R)
   end
 end
 
@@ -511,10 +559,14 @@ function A.FishStatus()
   local gp = ProjectEbonhold and ProjectEbonhold.Perks
     and ProjectEbonhold.Perks.grantedPerks
   if not gp then return nil end
-  local byNorm, uniques = {}, 0
+  -- grantedPerks OMITS locked echoes -- the same gap that made Ambidexterity
+  -- and Pandemic read as "not taken". Adaptive Power counts every unique echo
+  -- active, locks included, so count them from the run set and only fall back
+  -- to grantedPerks when the run set is unreadable.
+  local byNorm, uniques, seen = {}, 0, {}
   for key, value in pairs(gp) do
     if type(key) == "string" then
-      uniques = uniques + 1
+      seen[StripQuality(Norm(key))] = true
       local stacks = (type(value) == "table" and value[1] ~= nil) and value or { value }
       local m
       for _, e in ipairs(stacks) do
@@ -525,6 +577,11 @@ function A.FishStatus()
       byNorm[Norm(key)] = m or 0
     end
   end
+  local run = OwnedSet()
+  if run then
+    for lower in pairs(run) do seen[StripQuality(Norm(lower))] = true end
+  end
+  for _ in pairs(seen) do uniques = uniques + 1 end
   local procs, subEpic, missing = {}, 0, 0
   for _, name in ipairs(PP.Build.TopProcs()) do
     local q = byNorm[Norm(name)]
@@ -538,15 +595,6 @@ function A.FishStatus()
     uniques = uniques, procs = procs,
     subEpic = subEpic, missing = missing, allEpic = (subEpic == 0),
   }
-end
-
--- Cheap change signature for "did I just learn something?" polling.
-function A.OwnedSignature()
-  local owned = OwnedSet()
-  if not owned then return nil end
-  local n = 0
-  for _ in pairs(owned) do n = n + 1 end
-  return n
 end
 
 -- Best N owned echoes as PLAIN display names (no colors/quality tags) —
@@ -737,7 +785,7 @@ local VERDICT_LABEL = {
   A = ASH .. "[A] Staple — keep" .. R,
   B = DIM .. "[B] Filler — keep, low priority" .. R,
   C = DIM .. "[C] Breadth — +1% Adaptive Power" .. R,
-  DISABLE = EMBER .. "[!] Turn off — bad for the build" .. R,
+  DISABLE = EMBER .. "[!] Turn off at level 1 — bad for the build" .. R,
   REROLL = EMBER .. "[X] Fodder — feed to an Orb unless it reads strong" .. R,
 }
 
@@ -793,6 +841,6 @@ watch:SetScript("OnEvent", function(self)
     PP.safeCall(CheckForNewEchoes)
   end)
   -- Seed shortly after login once EbonholdHub has its data up.
-  f = self
+  local f = self
   f.elapsed = 25
 end)

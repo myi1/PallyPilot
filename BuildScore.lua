@@ -104,7 +104,9 @@ function BS.Compute()
   local qualityScore
   if lvl >= 80 and qTotal then qualityScore = (qTotal - qSub) / qTotal end
 
-  -- Hygiene: junk enabled + keepers wrongly disabled (from the tome plan).
+  -- Hygiene: junk enabled + keepers wrongly disabled. TM.Plan reads the MERGED
+  -- catalog (last full scan union the live tiles), so this no longer swings
+  -- with the journal's scroll position the way a rendered-slice read did.
   local junkOn, keepersOff = 0, 0
   local plan = PP.TomeManager and PP.TomeManager.Plan
     and PP.TomeManager.Plan("clean")
@@ -131,7 +133,6 @@ function BS.Compute()
     missing = missing,
     qualityScore = qualityScore, qTotal = qTotal, qSub = qSub,
     hygieneScore = hygieneScore, junkOn = junkOn, keepersOff = keepersOff,
-    total = #tiles,
   }
 end
 
@@ -345,4 +346,3 @@ end
 function BS.Report()
   if PP.Dashboard and PP.Dashboard.Open then PP.Dashboard.Open("score") end
 end
-BS.Toggle = BS.Report

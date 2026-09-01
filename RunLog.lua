@@ -29,7 +29,10 @@ end
 
 function RL.Start()
   local runs = Runs()
-  if runs.current and not runs.current.finished then
+  -- Archive the previous run WHATEVER its state. The `not finished` guard meant
+  -- a run that actually reached 80 -- the only kind worth keeping -- was thrown
+  -- away when the next run started, so history only ever held abandoned runs.
+  if runs.current then
     runs.history[#runs.history + 1] = runs.current
   end
   runs.current = {

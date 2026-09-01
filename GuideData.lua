@@ -584,11 +584,20 @@ function G.FindBoss(name)
   if not index then BuildIndex() end
   local q = Norm(name)
   if index[q] then return index[q].boss, index[q].raid end
-  for key, hit in pairs(index) do
+  -- Deterministic substring fallback. pairs() order is undefined, so an
+  -- ambiguous query ("the") returned a DIFFERENT boss between sessions. Walk
+  -- sorted keys and prefer the closest match (shortest key that contains the
+  -- query) rather than whichever the hash happened to yield first.
+  local keys = {}
+  for key in pairs(index) do keys[#keys + 1] = key end
+  table.sort(keys)
+  local bestKey
+  for _, key in ipairs(keys) do
     if string.find(key, q, 1, true) or string.find(q, key, 1, true) then
-      return hit.boss, hit.raid
+      if not bestKey or #key < #bestKey then bestKey = key end
     end
   end
+  if bestKey then return index[bestKey].boss, index[bestKey].raid end
   return nil
 end
 

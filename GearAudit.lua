@@ -104,8 +104,12 @@ end
 
 function GA.Compute()
   local results = {}
+  -- Slots 4 (shirt) and 19 (tabard) carry no stats and cannot take an affix,
+  -- so grading them produced red "no affix" dots on the paperdoll and a
+  -- tooltip telling you to re-roll an affix onto your tabard.
+  local COSMETIC = { [4] = true, [19] = true }
   for slot = 1, 19 do
-    local item = ScanSlot(slot)
+    local item = not COSMETIC[slot] and ScanSlot(slot) or nil
     if item then
       local j = Judge(slot, item)
       if j then results[#results + 1] = j end
@@ -417,10 +421,13 @@ local SLOT_BUTTON = {
   [16]="CharacterMainHandSlot",[17]="CharacterSecondaryHandSlot",
   [18]="CharacterRangedSlot",[19]="CharacterTabardSlot",
 }
-local DOT_COLOR = {
-  missing = { 0.85, 0.25, 0.15 },
-  swap = { 0.85, 0.41, 0.29 },
-  rank = { 0.96, 0.85, 0.53 },
+-- Colour AND a letter. Three shades of orange-red is not a distinction a
+-- colourblind reader can make, and the paperdoll has no legend to consult:
+--   X = no affix at all   S = wrong affix, swap it   R = right affix, low rank
+local DOT_MARK = {
+  missing = { 0.85, 0.25, 0.15, "X" },
+  swap    = { 0.85, 0.41, 0.29, "S" },
+  rank    = { 0.96, 0.85, 0.53, "R" },
 }
 
 local cache, cacheAt = nil, 0
@@ -433,22 +440,33 @@ local function CachedResults()
 end
 
 function GA.MarkPaperDoll()
+  -- Clear EVERY slot first. Iterating only the slots with results left a stale
+  -- dot on any slot that stopped producing advice -- you fixed the affix, the
+  -- warning stayed until the next /reload.
+  for _, name in pairs(SLOT_BUTTON) do
+    local btn = _G[name]
+    if btn and btn.__ppDot then btn.__ppDot:Hide() end
+    if btn and btn.__ppMark then btn.__ppMark:Hide() end
+  end
   for _, r in ipairs(CachedResults()) do
     local btn = _G[SLOT_BUTTON[r.slot]]
-    if btn then
+    local c = btn and DOT_MARK[r.status]
+    if c then
       if not btn.__ppDot then
         local t = btn:CreateTexture(nil, "OVERLAY")
-        t:SetWidth(10); t:SetHeight(10)
+        t:SetWidth(12); t:SetHeight(12)
         t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -1, -1)
         btn.__ppDot = t
       end
-      local c = DOT_COLOR[r.status]
-      if c then
-        btn.__ppDot:SetTexture(c[1], c[2], c[3], 0.95)
-        btn.__ppDot:Show()
-      else
-        btn.__ppDot:Hide()
+      if not btn.__ppMark then
+        local fs = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+        fs:SetPoint("CENTER", btn.__ppDot, "CENTER", 0, 0)
+        btn.__ppMark = fs
       end
+      btn.__ppDot:SetTexture(c[1], c[2], c[3], 0.95)
+      btn.__ppDot:Show()
+      btn.__ppMark:SetText(c[4])
+      btn.__ppMark:Show()
     end
   end
 end
@@ -476,7 +494,9 @@ function GA.HookUI()
         if r.status == "missing" then
           tip:AddLine("EbonPilot: no affix — add " .. r.want, 0.85, 0.25, 0.15)
         elseif r.status == "swap" then
-          tip:AddLine("EbonPilot: re-affix to " .. r.want .. " (survival plan)", 0.85, 0.41, 0.29)
+          -- Not "survival plan" any more: the affix targets moved to the
+          -- crit/haste damage list when Ret's Ebonhold meta was pinned down.
+          tip:AddLine("EbonPilot: re-affix to " .. r.want, 0.85, 0.41, 0.29)
         elseif r.status == "rank" then
           tip:AddLine("EbonPilot: raise affix to VI (now " .. (r.rank or "?") .. "/" .. (r.target or 6) .. ")", 0.96, 0.85, 0.53)
         end

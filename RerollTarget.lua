@@ -6,9 +6,11 @@
 -- the ODDS. A reroll is a random draw from your enabled pool, so the only real
 -- lever is making that pool smaller, and nothing in the UI tells you that.
 --
--- It gives you: your true per-roll chance, a ranked list of what to banish to
--- improve it (banishes persist), instant "STOP - you got it" detection so you
--- don't overshoot, and an orb budget so you know when to walk away.
+-- It gives you: your true per-roll chance, the echo you should feed the orb
+-- next (weakest first, never a chase target or a lock), instant "STOP - you
+-- got it" detection so you don't overshoot, and an orb budget so you know when
+-- to walk away. Banish is NOT a lever here -- it exists only on the 1-80
+-- level-up draw, and EbonholdHub spends it for you.
 local PP = PallyPilot
 local RT = {}
 PP.RerollTarget = RT
@@ -33,16 +35,15 @@ local function Pool()
   local gp = ProjectEbonhold and ProjectEbonhold.Perks
     and ProjectEbonhold.Perks.grantedPerks
   if not gp then return nil end
-  local want = A.WantList()          -- rated + owned + not in run
-  local junk = A.RerollList and A.RerollList() or {}
-  return want, junk
+  return A.WantList()                -- rated + owned + not in run
 end
 
 -- ---------------------------------------------------------------------------
 -- THE ACTUAL DECISION: reroll, or start a fresh run? These are not equivalent,
 -- and the constraints that decide it are mechanical, not preference:
---   * The ORB can only recycle echoes that are IN YOUR RUN. No junk in the run
---     = no fodder = you literally cannot reroll, however many orbs you hold.
+--   * The ORB consumes an echo YOU SELECT and rerolls it. There is no junk
+--     requirement and no "out of fodder" state -- if you hold orbs you can
+--     always roll; the only question is what you are willing to spend.
 --   * LEVEL-UP draws are FREE and draw from the same pool, and EbonholdHub's
 --     auto-pick takes whatever our tiers rate highest -- so a fresh run is a
 --     long series of free attempts at everything you're missing at once.
@@ -54,7 +55,11 @@ end
 function RT.Advice()
   local want = Pool()
   if not want then return nil end
-  local fodder = (PP.EchoFlow and PP.EchoFlow.RunJunkList and PP.EchoFlow.RunJunkList()) or {}
+  -- Fodder is whatever you PICK, so it is the weakest echo you hold that is
+  -- neither a chase target nor a lock -- not "junk that happens to be in the
+  -- run". Reading it as run-junk produced a "you cannot reroll" dead end the
+  -- game never actually puts you in.
+  local fodder = (PP.EchoAudit.FodderRank and PP.EchoAudit.FodderRank()) or {}
   local pool = PP.EchoAudit.PoolSize and PP.EchoAudit.PoolSize() or #want
   local missing = 0
   for _, w in ipairs(want) do if not w.disabled then missing = missing + 1 end end
@@ -67,14 +72,6 @@ function RT.Advice()
       .. "same pool, and auto-pick takes your top-rated echo. Orbs are the "
       .. "level-80 tool, for when free draws have run out." .. R
   end
-  if #fodder == 0 then
-    return EMBER .. "YOU CANNOT REROLL RIGHT NOW.",
-      DIM .. "The orb only recycles echoes that are IN your run, and yours has no "
-      .. "junk to spend -- orbs don't help. Your options are a " .. R .. BRIGHT
-      .. "fresh run" .. R .. DIM .. " (free draws all the way up; auto-pick takes "
-      .. "these for you) or playing on until you draft something junk enough to "
-      .. "feed it." .. R
-  end
   if missing >= 8 then
     return BRIGHT .. "A FRESH RUN IS PROBABLY BETTER.",
       DIM .. "You're missing " .. missing .. " rated echoes. Rerolling chases ONE "
@@ -82,10 +79,10 @@ function RT.Advice()
       .. "Reroll only if you want one specific echo NOW and can accept the orb "
       .. "cost." .. R
   end
+  local feed = fodder[1] and (" Feed " .. fodder[1].name .. " first.") or ""
   return VERD .. "REROLLING IS THE RIGHT CALL.",
-    DIM .. "Only " .. missing .. " rated echo(es) missing and you have " .. #fodder
-    .. " fodder in run -- cheaper than releveling. ~" .. rolls .. " rolls for a "
-    .. "given target." .. R
+    DIM .. "Only " .. missing .. " rated echo(es) missing -- cheaper than "
+    .. "releveling. ~" .. rolls .. " rolls for a given target." .. feed .. R
 end
 
 function RT.Set(name)
@@ -164,11 +161,11 @@ function RT.Status()
 
   -- Odds come from the FULL enabled pool (PoolSize), never #want -- the pool
   -- includes B/C junk the shortlist doesn't, and quoting the shortlist as the
-  -- pool overstated the odds ~3x (Codex-review finding). Its junk names are
-  -- also the correct banish list: pool entries, not the run's fodder -- the old
-  -- code listed run fodder here AND double-subtracted it from a pool that
-  -- never contained it.
-  local pool, poolJunk, junkNames = PP.EchoAudit.PoolSize and PP.EchoAudit.PoolSize()
+  -- pool overstated the odds ~3x.
+  -- One value only: `f and f()` truncates a multi-return to its first result,
+  -- so the two extra locals this used to declare were nil at every call site
+  -- that read them.
+  local pool = PP.EchoAudit.PoolSize and PP.EchoAudit.PoolSize()
   if not pool or pool == 0 then
     PP.print(GOLD .. "CHASING " .. R .. BRIGHT .. "[" .. (t.tier or "?") .. "] "
       .. t.name .. R .. DIM .. " -- pool unreadable (open the Echoes window once), "
@@ -218,8 +215,8 @@ end
 
 -- ---------------------------------------------------------------------------
 -- PANEL. Same job as /ep reroll, but you click the echo instead of typing it --
--- and the odds and banish list stay on screen while you roll, which is when you
--- actually need them.
+-- and the odds and the next fodder stay on screen while you roll, which is when
+-- you actually need them.
 local frame, content, rows = nil, nil, {}
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 
@@ -245,14 +242,16 @@ end
 
 function RT.Refresh()
   if not (frame and content) then return end
-  local want, junk = Pool()
+  local want = Pool()
   local t = PP.db and PP.db.rerollTarget
 
   if not want then
-    frame.head:SetText(EMBER .. "Can't read your tome collection yet." .. R .. DIM
-      .. "  Open the " .. R .. BRIGHT .. "Echoes" .. R .. DIM .. " window once this "
-      .. "session -- the catalog tiles are the only place the real learned/disabled "
-      .. "state lives -- then come back." .. R)
+    -- Pool() returns nil for an unreadable run just as much as an unread
+    -- catalog, so name both causes instead of blaming the collection for each.
+    frame.head:SetText(EMBER .. "Can't read your echoes yet." .. R .. DIM
+      .. "  Be in a run with EbonholdHub loaded, and open the " .. R .. BRIGHT
+      .. "Echoes" .. R .. DIM .. " window once this session -- the catalog tiles "
+      .. "are the only place the real learned/disabled state lives." .. R)
     for _, r in ipairs(rows) do r:Hide() end
     frame.now:SetText(""); content:SetHeight(10)
     return
@@ -284,8 +283,10 @@ function RT.Refresh()
     .. "and rerolled into a fresh draw. More orbs, better draw. Level-ups draw "
     .. "the same way, but free." .. R)
 
-  -- What the orb would actually consume: junk that is IN YOUR RUN right now.
-  local fodder = (PP.EchoFlow and PP.EchoFlow.RunJunkList and PP.EchoFlow.RunJunkList()) or {}
+  -- What you would feed the orb next: weakest first, with chase targets and
+  -- locks already excluded. You choose the sacrifice, so this is a ranking --
+  -- never a gate on whether rerolling is possible at all.
+  local fodder = (PP.EchoAudit.FodderRank and PP.EchoAudit.FodderRank()) or {}
   local running = PP.EchoFlow and PP.EchoFlow.IsRunning and PP.EchoFlow.IsRunning()
 
   if t then
@@ -303,17 +304,18 @@ function RT.Refresh()
     end
     if #fodder > 0 then
       local shown = {}
-      for i = 1, math.min(#fodder, 2) do shown[#shown + 1] = tostring(fodder[i]) end
-      msg = msg .. "\n" .. DIM .. "Feeds: " .. R .. table.concat(shown, ", ")
+      for i = 1, math.min(#fodder, 2) do shown[#shown + 1] = tostring(fodder[i].name) end
+      msg = msg .. "\n" .. DIM .. "Feed next: " .. R .. table.concat(shown, ", ")
         .. (#fodder > 2 and (DIM .. " +" .. (#fodder - 2) .. R) or "")
-    else
-      msg = msg .. "\n" .. EMBER .. "No junk in run -- nothing safe to feed the orb." .. R
     end
     frame.now:SetText(msg)
     frame.stop:Show()
     frame.roll:Show()
-    frame.roll:SetText(running and "STOP rolling" or ("Roll (" .. #fodder .. ")"))
-    if #fodder == 0 and not running then frame.roll:Disable() else frame.roll:Enable() end
+    -- The count used to be "junk echoes in run", which is not a limit on
+    -- anything now that you pick the sacrifice yourself. Orbs are the limit.
+    local orbs = (PP.db and PP.db.options and PP.db.options.rerollOrbs) or 0
+    frame.roll:SetText(running and "STOP rolling" or ("Roll (" .. orbs .. " orbs)"))
+    frame.roll:Enable()
   else
     frame.now:SetText(DIM .. "Nothing being chased. Pick one below." .. R)
     frame.stop:Hide()

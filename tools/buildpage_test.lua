@@ -83,5 +83,20 @@ out = report()
 assert(not string.find(out, "idk", 1, true), "one-off tags must be filtered:\n" .. out)
 print("4. one-off tag filtered")
 
+-- 5. It is a chat GLANCE, not the page. Six lines per build with no cap meant
+--    the ranking scrolled out of view before you could read it.
+PP.db.buildLog = {}
+PP.db.fights = {}
+for i = 1, 9 do
+  for _ = 1, 5 do fight("build-" .. i, 100000 + i) end
+end
+OUT = {}
+BL.Report()
+print("report lines: " .. #OUT .. " for 9 builds")
+assert(#OUT <= 8, "/ep builds must stay within 8 chat lines, printed " .. #OUT)
+assert(string.find(table.concat(OUT, "\n"), "more on the Builds page", 1, true),
+  "the truncated tail must point at the page that has room for it")
+print("5. chat output capped, overflow signposted")
+
 print("\nBUILD PAGE OK -- names an answer, ranks evidence over prediction,")
-print("surfaces tag-only builds, and filters one-off noise.")
+print("surfaces tag-only builds, filters noise, and stays out of the scrollback.")

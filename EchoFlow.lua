@@ -37,7 +37,7 @@ local TIP_LABEL = {
   A = "Staple — strong, always keep",
   B = "Filler — keep until something better",
   C = "Breadth — kept for +1% Adaptive Power",
-  DISABLE = "Turn off — bad for this build",
+  DISABLE = "Turn off at level 1 — bad for this build",
   REROLL = "Fodder — feed to an Orb",
 }
 
@@ -113,7 +113,19 @@ local function EachTile(root, fn)
       local ok, ctype = pcall(c.GetObjectType, c)
       if ok and (ctype == "Button" or ctype == "CheckButton") and c:IsVisible() then
         local display, verdict = TileEcho(c)
-        if display then fn(c, display, verdict) end
+        if display then
+          fn(c, display, verdict)
+        elseif c.__ppLtr then
+          -- A tile we cannot resolve is usually a RECYCLED frame the journal
+          -- has repointed at a different echo. Leaving its old badges up means
+          -- the letter, X and OFF marker describe the previous occupant. Wipe
+          -- them rather than letting a stale verdict stand.
+          c.__ppLtr:Hide()
+          if c.__ppDot then c.__ppDot:Hide() end
+          if c.__ppX then c.__ppX:Hide() end
+          if c.__ppOn then c.__ppOn:Hide() end
+          if c.__ppOff then c.__ppOff:Hide() end
+        end
       end
       if ok then walk(c, depth + 1) end
     end
@@ -236,7 +248,11 @@ RefreshBadges = function()
   -- is: it ticks down as you click, with no command to run.
   EF.pendingOff, EF.pendingOn = pendingOff, pendingOn
   if rail and rail.poolLeft then
-    if not plan then
+    -- Badge progress is a level-1 readout: the right-clicks it counts are only
+    -- possible at level 1, so above that it is a stale number, not progress.
+    if (UnitLevel("player") or 80) ~= 1 then
+      rail.poolLeft:SetText("")
+    elseif not plan then
       rail.poolLeft:SetText("")
     elseif pendingOff == 0 and pendingOn == 0 then
       rail.poolLeft:SetText(VERD .. "pool: done on screen" .. R)
@@ -251,9 +267,13 @@ end
 -- journal's data, and the server UI exposes OnDataChanged for exactly this;
 -- scrolling recycles frames, so their badges are stale until redrawn.
 local function HookJournalRefresh()
-  if EF.__journalHooked then return end
+  -- NO early return on __journalHooked: the two hooks below install against
+  -- DIFFERENT frames that appear at different times. Bailing as soon as the
+  -- data hook landed meant the scroll hook was never retried, so badges went
+  -- stale on scroll for the rest of the session. Each hook guards itself.
   local ej = _G.ProjectEbonhold and _G.ProjectEbonhold.EchoJournal
-  if type(ej) == "table" and type(ej.OnDataChanged) == "function" then
+  if not EF.__journalHooked and type(ej) == "table"
+     and type(ej.OnDataChanged) == "function" then
     local orig = ej.OnDataChanged
     local unpackFn = unpack or table.unpack
     ej.OnDataChanged = function(...)
@@ -583,6 +603,23 @@ function EF.OnPickSignal(name)
     engine.pickFlag = true
     engine.lastPickName = name
   end
+end
+
+-- Guard for the tile-diff fallback: the snapshot only covers RENDERED tiles,
+-- so if the scroll moved between snapshot and comparison, previously-unseen
+-- echoes appear "new" and are mistaken for a pick.
+local function ScrollPos()
+  local sf = _G["ProjectEbonholdEchoJournalMyRunScroll"]
+  if sf and sf.GetVerticalScroll then
+    local ok, v = pcall(sf.GetVerticalScroll, sf)
+    if ok then return v end
+  end
+  return nil
+end
+local function ScrollMoved()
+  local now, then_ = ScrollPos(), engine and engine.snapScroll
+  if now == nil or then_ == nil then return false end
+  return math.abs(now - then_) > 1
 end
 
 -- Set of all echo names currently in the run panel.
@@ -939,6 +976,7 @@ local function EngineTick(elapsed)
     engine.prevOwned = PP.EchoAudit.OwnedCopy()
     engine.prevStats = StatSnap()
     engine.runSnapshot = RunNameSet()
+    engine.snapScroll = ScrollPos()
     engine.runSnapshot[name] = nil -- the forgotten one leaves; ignore it
     engine.pickFlag = false
     engine.lastPickName = nil
@@ -978,7 +1016,10 @@ local function EngineTick(elapsed)
         end
       end
       -- Manual pick: a new tile shows up in the run panel.
-      if not newName and engine.runSnapshot then
+      -- Only trust the tile diff when the view has not MOVED. The snapshot is
+      -- of rendered tiles, so scrolling alone makes unseen echoes look new and
+      -- fakes a pick, advancing the queue on nothing.
+      if not newName and engine.runSnapshot and not ScrollMoved() then
         EachTile(RunRoot(), function(_, display)
           if not newName and not engine.runSnapshot[display] then newName = display end
         end)
@@ -1335,9 +1376,10 @@ function EF.TileDiag(wanted)
   PP.print("Tile diagnostic saved (" .. #out .. " lines). /reload and it's on disk.")
 end
 
--- Public accessors so the Chase panel can show what WOULD be fed to the orb and
--- can halt the queue the instant the chased echo lands.
-function EF.RunJunkList() return RunJunk() end
+-- Public accessors so the Chase panel can halt the queue the instant the chased
+-- echo lands. (EF.RunJunkList went with the corrected fodder model: the Chase
+-- panel asks EchoAudit.FodderRank what to feed the orb, because you pick the
+-- sacrifice yourself and it need not be run junk.)
 function EF.IsRunning() return engine.phase ~= nil end
 function EF.Stop(msg) if engine.phase then StopEngine(msg or "Stopped.") end end
 
@@ -1405,7 +1447,9 @@ function EF.ResolveNextAction()
   local lvl = UnitLevel("player") or 80
 
   if lvl == 1 then
-    return "Curate pool (level 1)",
+    -- No "(level 1)" suffix: this button only EXISTS at level 1 now, so the
+    -- label saying so was telling you something the panel already showed.
+    return "Curate pool",
       "The ONLY moment tome toggles apply. Badges every tile to switch.",
       function() if PP.TomeManager then PP.safeCall(PP.TomeManager.Scan, "bis") end end
   end
@@ -1539,6 +1583,9 @@ function EF.LayoutRail()
   end
   local function placeBtn(b, gap, indentX, w)
     if not b then return end
+    -- A tool that does not apply right now is HIDDEN, not greyed: the rail is
+    -- narrow and a control you cannot use is just noise to read past.
+    if b.__ppOff then b:Hide(); return end
     b:Show()
     b:ClearAllPoints()
     b:SetPoint("TOPLEFT", rail, "TOPLEFT", indentX or X, -y)
@@ -1548,6 +1595,7 @@ function EF.LayoutRail()
   local function pair(a, b, gap)
     -- Two buttons side by side count as ONE row of height.
     if not (a and b) then return end
+    if a.__ppOff and b.__ppOff then a:Hide(); b:Hide(); return end
     a:Show(); b:Show()
     a:ClearAllPoints(); a:SetPoint("TOPLEFT", rail, "TOPLEFT", X, -y)
     b:ClearAllPoints(); b:SetPoint("LEFT", a, "RIGHT", 6, 0)
@@ -1571,15 +1619,20 @@ function EF.LayoutRail()
   pair(rail.poolFarm, rail.poolRaid, 3)
   place(rail.aimCap, 8)
 
-  -- Orb row: [-] label [+] on one line.
-  rail.orbMinus:Show(); rail.orbPlus:Show(); rail.orbLabel:Show()
-  rail.orbMinus:ClearAllPoints()
-  rail.orbMinus:SetPoint("TOPLEFT", rail, "TOPLEFT", X, -y)
-  rail.orbLabel:ClearAllPoints()
-  rail.orbLabel:SetPoint("LEFT", rail.orbMinus, "RIGHT", 4, 0)
-  rail.orbPlus:ClearAllPoints()
-  rail.orbPlus:SetPoint("LEFT", rail.orbLabel, "RIGHT", 4, 0)
-  y = y + rail.orbMinus:GetHeight() + 10
+  -- Orb row: [-] label [+] on one line. Orbs are a level-80 tool, so the whole
+  -- row disappears while you are levelling rather than sitting there inert.
+  if rail.orbMinus.__ppOff then
+    rail.orbMinus:Hide(); rail.orbPlus:Hide(); rail.orbLabel:Hide()
+  else
+    rail.orbMinus:Show(); rail.orbPlus:Show(); rail.orbLabel:Show()
+    rail.orbMinus:ClearAllPoints()
+    rail.orbMinus:SetPoint("TOPLEFT", rail, "TOPLEFT", X, -y)
+    rail.orbLabel:ClearAllPoints()
+    rail.orbLabel:SetPoint("LEFT", rail.orbMinus, "RIGHT", 4, 0)
+    rail.orbPlus:ClearAllPoints()
+    rail.orbPlus:SetPoint("LEFT", rail.orbLabel, "RIGHT", 4, 0)
+    y = y + rail.orbMinus:GetHeight() + 10
+  end
 
   placeBtn(rail.tomeBtn, 3, X, W)
   place(rail.toolCap, 6)
@@ -1616,6 +1669,30 @@ function EF.RefreshRail()
   -- big button, so the answer and the way to act on it are the same widget.
   EF.RefreshNextAction()
 
+  -- WHICH TOOLS EVEN APPLY RIGHT NOW.
+  --
+  -- Tome toggles are level-1-only and orbs are a level-80 tool, so at any given
+  -- moment at most one of those two toolsets can be used -- and while levelling
+  -- neither can. Showing both regardless meant half the rail was permanently
+  -- inert controls labelled "(level 1)", which is exactly the noise a narrow
+  -- panel cannot afford.
+  local lvl = UnitLevel("player") or 80
+  local atOne, atCap = (lvl == 1), (lvl >= 80)
+  rail.tomeBtn.__ppOff = not atOne
+  rail.orbMinus.__ppOff = not atCap
+  rail.rerollBtn.__ppOff = not atCap
+  -- Name the absence rather than leaving a silent gap where the tools were.
+  if atOne then
+    rail.toolCap:SetText(DIM .. "Badges every tile you need to right-click. "
+      .. "This is the only moment toggles apply." .. R)
+  elseif atCap then
+    rail.toolCap:SetText("")
+  else
+    rail.toolCap:SetText(DIM .. "Level " .. lvl .. ": tome toggles closed until "
+      .. "your next run, orbs open at 80. Level-up draws are free -- keep going."
+      .. R)
+  end
+
   local buckets = PP.EchoAudit.Compute and select(1, PP.EchoAudit.Compute())
   local t = {}
   if mode then
@@ -1628,10 +1705,27 @@ function EF.RefreshRail()
     t[#t+1] = " "
   end
   if buckets then
-    t[#t+1] = GOLD .. "LOCK NOW — best "
-      .. PP.EchoAudit.LockSlots() .. " owned" .. R
-    for _, p in ipairs(PP.EchoAudit.LockNow(buckets)) do
-      t[#t+1] = "  " .. p.name
+    -- A TO-DO LIST THAT EMPTIES. This used to print the same six names whether
+    -- or not you had already locked every one of them, so the panel looked
+    -- identical before and after you did the work. Only what is still outside a
+    -- lock slot gets listed; when nothing is, one line says so.
+    local picks, lockKnown = PP.EchoAudit.LockNow(buckets)
+    local todo = {}
+    for _, p in ipairs(picks) do
+      if not p.locked then todo[#todo + 1] = p end
+    end
+    if not lockKnown then
+      -- Catalog unread: we cannot tell locked from unlocked, so do not claim.
+      t[#t+1] = GOLD .. "LOCK THESE " .. #picks .. R
+      for _, p in ipairs(picks) do t[#t+1] = "  " .. p.name end
+      t[#t+1] = DIM .. "(open Echoes once to see which are already set)" .. R
+    elseif #todo == 0 then
+      t[#t+1] = VERD .. "LOCKS SET" .. R .. DIM .. " -- best " .. #picks
+        .. " owned are all in slots" .. R
+    else
+      t[#t+1] = GOLD .. "LOCK NOW" .. R .. DIM .. " -- "
+        .. (#picks - #todo) .. " of " .. #picks .. " done" .. R
+      for _, p in ipairs(todo) do t[#t+1] = "  " .. p.name end
     end
     local inRun = #RunJunk()
     local qt = PP.EchoAudit.RunQualityTargets and PP.EchoAudit.RunQualityTargets()
@@ -1720,7 +1814,7 @@ local function BuildRail()
 
   -- Build score moved to the Builds page, where the measured comparison
   -- lives; a composition grade means little next to real DPS.
-  rail.tomeBtn  = Btn(182, "Pool plan (level 1)")
+  rail.tomeBtn  = Btn(182, "Apply pool plan")
   rail.toolCap  = Text()
 
   rail.poolLeft = Text()
@@ -1754,7 +1848,7 @@ local function BuildRail()
   -- Captions: ONE short line each. The previous three-line explanations were
   -- most of what made the panel feel crowded.
   rail.aimCap:SetText(DIM .. "Raid = breadth. Farm = rank-ups." .. R)
-  rail.toolCap:SetText(DIM .. "Badges the tiles to toggle. Nothing to do here at 80." .. R)
+  -- Text set per refresh by EF.RefreshRail -- it depends on your level.
 
   -- Live pool progress: counts what is badged on screen right now, so it ticks
   -- down as you click. No command, no chat line.

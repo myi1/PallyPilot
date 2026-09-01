@@ -548,15 +548,29 @@ function CM.BuildReport()
   kitPct = kitPct / grand * 100
 
   local promote, demote, unmapped = {}, {}, {}
-  for i = 1, math.min(16, #rows) do
-    local r = rows[i]
+  -- Six rows in chat, the full table to disk. Sixteen rows plus three follow-up
+  -- lists is a scrollback wall, and the table is the part you want to read
+  -- slowly anyway. The tier letter in brackets carries the rating -- never
+  -- colour alone.
+  local dump = {}
+  for i, r in ipairs(rows) do
     local pct = r.d / grand * 100
     local tier = r.tier
-    local tc = TIERC[tier or ""] or EMBER
-    local mark = (tier == "KIT") and (DIM .. "[kit]" .. R)
-      or (tc .. "[" .. (tier or "?") .. "]" .. R)
-    DEFAULT_CHAT_FRAME:AddMessage(string.format("  %2d. %s%-24s%s %s%4.1f%%%s  %s",
-      i, BRIGHT, r.echo, R, DIM, pct, R, mark))
+    local mark = (tier == "KIT") and "[kit]" or ("[" .. (tier or "?") .. "]")
+    dump[#dump + 1] = string.format("%2d. %-28s %5.1f%%  %s  seen %d",
+      i, r.echo, pct, mark, r.seen or 0)
+    if i <= 6 then
+      local tc = TIERC[tier or ""] or EMBER
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("  %2d. %s%-24s%s %s%4.1f%%%s  %s",
+        i, BRIGHT, r.echo, R, DIM, pct, R,
+        (tier == "KIT") and (DIM .. mark .. R) or (tc .. mark .. R)))
+    end
+  end
+  PP.db.scans = PP.db.scans or {}
+  PP.db.scans.damageTable = { when = date("%Y-%m-%d %H:%M"), rows = dump }
+  if #rows > 6 then
+    PP.print(DIM .. "  +" .. (#rows - 6) .. " more -- full table in "
+      .. "PallyPilotDB.scans.damageTable after a /reload." .. R)
   end
   -- Two-way rating check across ALL echoes, not just the printed top rows.
   for _, r in ipairs(rows) do
@@ -577,29 +591,23 @@ function CM.BuildReport()
 
   PP.print(DIM .. "Kit " .. string.format("%.0f%%", kitPct) .. " / echoes "
     .. string.format("%.0f%%", 100 - kitPct) .. R)
-  if #unmapped > 0 then
-    PP.print(EMBER .. "Unmapped carries — real damage, no echo mapping:" .. R)
-    for _, p in ipairs(unmapped) do
-      DEFAULT_CHAT_FRAME:AddMessage("  " .. BRIGHT .. p .. R
-        .. DIM .. " -> tell Claude the echo that grants this proc" .. R)
-    end
+  PP.db.scans.ratingCheck = { when = date("%Y-%m-%d %H:%M"),
+    unmapped = unmapped, promote = promote, demote = demote }
+  local function line(label, list, colour)
+    if #list == 0 then return end
+    local head = {}
+    for i = 1, math.min(#list, 3) do head[#head + 1] = list[i] end
+    PP.print(colour .. label .. R .. DIM .. ": " .. R
+      .. table.concat(head, DIM .. ", " .. R)
+      .. (#list > 3 and (DIM .. " +" .. (#list - 3) .. R) or ""))
   end
-  if #promote > 0 then
-    PP.print(BRIGHT .. "Earning their damage but rated low:" .. R)
-    for _, p in ipairs(promote) do
-      DEFAULT_CHAT_FRAME:AddMessage("  " .. VERD .. p .. R .. DIM .. " -> promote?" .. R)
-    end
-  end
-  if #demote > 0 then
-    PP.print(EMBER .. "Rated high but barely earning (dead weight, or utility?):" .. R)
-    for _, p in ipairs(demote) do
-      DEFAULT_CHAT_FRAME:AddMessage("  " .. p)
-    end
-  end
+  line("Unmapped carries", unmapped, EMBER)
+  line("Under-rated", promote, BRIGHT)
+  line("Over-rated", demote, EMBER)
   if #unmapped == 0 and #promote == 0 and #demote == 0 then
     PP.print(VERD .. "Ratings match measured damage — build direction confirmed." .. R)
   else
-    PP.print(DIM .. "Tell Claude these lines and the ratings get corrected from your data." .. R)
+    PP.print(DIM .. "Full lists in PallyPilotDB.scans.ratingCheck after a /reload." .. R)
   end
 end
 
@@ -700,8 +708,14 @@ function CM.BenchReport()
     PP.print(DIM .. "Now tagging (manual): " .. R .. BRIGHT .. PP.db.benchTag .. R
       .. DIM .. "  (/pp bench off to return to auto)." .. R)
   else
+    -- Report the source fights are ACTUALLY tagged with. SaveFight prefers
+    -- BuildLog.CurrentKey (echo content) and only falls back to the skill-tree
+    -- loadout, so naming ActiveBuild here told you the wrong bucket.
     local bName
-    if PP.AshAdvisor and PP.AshAdvisor.ActiveBuild then
+    if PP.BuildLog and PP.BuildLog.CurrentKey then
+      local _; _, bName = PP.BuildLog.CurrentKey()
+    end
+    if not bName and PP.AshAdvisor and PP.AshAdvisor.ActiveBuild then
       local _; _, bName = PP.AshAdvisor.ActiveBuild()
     end
     if bName then
@@ -719,50 +733,6 @@ local function AttributeSpell(name)
   local tier = PP.EchoAudit and PP.EchoAudit.VerdictFor
     and select(1, PP.EchoAudit.VerdictFor(echo)) or nil
   return echo, tier
-end
-
--- Live snapshot for the meter HUD. mode = "damage"|"dps"|"taken";
--- segment = "current"|"last". Returns nil if there's no data yet.
-function CM.MeterData(mode, segment)
-  local f = (segment == "last") and lastFight or (fight or lastFight)
-  if not f then return nil end
-  local live = (f == fight)
-  local dur = live and math.max(0.1, GetTime() - f.start) or math.max(0.1, f.dur or 1)
-
-  if mode == "taken" then
-    local blows = {}
-    for _, b in ipairs(f.blows or {}) do blows[#blows + 1] = b end
-    table.sort(blows, function(a, b) return a.a > b.a end)
-    local rows = {}
-    for i = 1, math.min(12, #blows) do
-      rows[i] = { name = blows[i].s or "?", sub = blows[i].src, dmg = blows[i].a, kit = false }
-    end
-    return { rows = rows, total = f.taken or 0, dps = (f.taken or 0) / dur, dur = dur,
-             maxHit = f.maxHit or 0, live = live, mode = "taken", died = f.died }
-  end
-
-  local byEcho, tierOf, hitsOf, critsOf, mxOf = {}, {}, {}, {}, {}
-  for name, amt in pairs(f.spells or {}) do
-    local echo, tier = AttributeSpell(name)
-    byEcho[echo] = (byEcho[echo] or 0) + amt
-    tierOf[echo] = tier
-    hitsOf[echo] = (hitsOf[echo] or 0) + ((f.hits and f.hits[name]) or 0)
-    critsOf[echo] = (critsOf[echo] or 0) + ((f.crits and f.crits[name]) or 0)
-    if ((f.smax and f.smax[name]) or 0) > (mxOf[echo] or 0) then mxOf[echo] = f.smax[name] end
-  end
-  local total = f.total or 0
-  local rows, kit, uniq = {}, 0, 0
-  for echo, amt in pairs(byEcho) do
-    local isKit = (tierOf[echo] == "KIT")
-    if isKit then kit = kit + amt else uniq = uniq + 1 end
-    rows[#rows + 1] = { name = echo, tier = tierOf[echo], dmg = amt, kit = isKit,
-                        hits = hitsOf[echo] or 0, crit = critsOf[echo] or 0, mx = mxOf[echo] or 0 }
-  end
-  table.sort(rows, function(a, b) return a.dmg > b.dmg end)
-  return { rows = rows, total = total, dps = total / dur, dur = dur,
-           kitPct = total > 0 and math.floor(100 * kit / total + 0.5) or 0,
-           echoPct = total > 0 and math.floor(100 * (total - kit) / total + 0.5) or 0,
-           uniq = uniq, live = live, mode = (mode == "dps") and "dps" or "damage" }
 end
 
 function CM.Init()

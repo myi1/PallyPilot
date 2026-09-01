@@ -49,12 +49,17 @@ local function ActiveSealName()
   return SEAL
 end
 
--- Class-aware: a class's guide data can supply its own shot/spell priority
+-- Class-aware: a class's guide data supplies its own shot/spell priority
 -- (B.rotationPriority) and its "always keep this up" buff (B.rotationUpkeep --
--- the paladin's Seal, a hunter's Aspect). The baked Ret list stays the paladin
--- fallback; a class with neither gets no HUD.
+-- the paladin's Seal, a hunter's Aspect).
+--
+-- The class check is the whole point. PP.Build DEFAULTS to the paladin table
+-- (BuildData assigns it at load; Core only re-points it for a class that has
+-- its own module), so reading rotationPriority off PP.Build alone handed a
+-- warrior the Ret priority list and swore it was theirs. Only a registered
+-- module for the player's actual class gets a HUD.
 function RH.ActivePriority()
-  local B = PP.Build
+  local B = PP.Classes and PP.class and PP.Classes[PP.class]
   return (B and B.rotationPriority) or nil
 end
 
@@ -180,15 +185,12 @@ local function KeybindFor(spell)
   -- 3. Static slot -> binding map for the always-visible side bars.
   for slot = 1, 120 do
     if HasAction(slot) and SlotHasSpell(slot, spell, wantTex) then
+      -- SLOT_BIND only, deliberately. Off-page slots (73-120, and main-bar
+      -- pages 2+ at 13-24) map onto ActionButton1-12 ONLY while that page is
+      -- the one being displayed -- which step 2 above already checks. Deriving
+      -- an ACTIONBUTTON bind here instead reported a key that, pressed right
+      -- now, casts whatever is on the visible page: confidently wrong.
       local bind = SLOT_BIND[slot]
-      -- Bonus/stance bars (73-120) and main-bar pages 2+ (13-24) display on the
-      -- main ActionButton1-12, so their bind IS "ACTIONBUTTON<n>" -- but SLOT_BIND
-      -- only maps 1-72. Derive the physical button from the slot. This is the
-      -- Shadowform bar: a priest's shadow spells sit at 73+ (measured: Vampiric
-      -- Touch at slot 74 -> button 2 -> the "2" key), where the lookup returned nil.
-      if not bind and (slot > 72 or (slot >= 13 and slot <= 24)) then
-        bind = "ACTIONBUTTON" .. (((slot - 1) % 12) + 1)
-      end
       if bind then
         local key = GetBindingKey(bind)
         if key then return AbbrevKey(key) end
@@ -373,7 +375,7 @@ function RH.Init()
   keyFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 8, 4)
 
   frame:SetScript("OnUpdate", OnUpdate)
-  -- No HUD for a class whose guide has no rotation priority yet.
+  -- No HUD for a class with no module of its own -- see RH.ActivePriority.
   if not RH.ActivePriority() then PP.db.options.rotationHelper = false end
   if PP.db.options.rotationHelper then frame:Show() else frame:Hide() end
 end
