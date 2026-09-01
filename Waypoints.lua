@@ -57,7 +57,16 @@ local function SampleTrail()
     return
   end
   trail[#trail + 1] = { x = x, y = y, floor = floor }
-  if #trail > 1500 then table.remove(trail, 1) end
+  -- Amortised prune, not table.remove(trail, 1). This samples every 2s and only
+  -- inside a RAID zone, so once the trail filled it was shifting 1500 elements
+  -- down by one, every two seconds, for the entire raid -- the one place the
+  -- cost lands is the one place it is least welcome. Drop the oldest quarter in
+  -- one pass instead: same bound, 1/375th of the work per sample.
+  if #trail > 1500 then
+    local keep, out = 375, {}
+    for i = keep + 1, #trail do out[#out + 1] = trail[i] end
+    trail = out
+  end
 end
 
 -- Keep endpoints, floor changes, and real turns; cap the point count.

@@ -26,19 +26,40 @@ end
 local TIER_COLOR = { S = BRIGHT, A = ASH, B = DIM, F = EMBER }
 
 -- Collect echo names currently visible on screen (heuristic detection).
+--
+-- THIS IS THE MOST EXPENSIVE THING IN THE ADDON and it runs on a timer, so the
+-- shape of it matters more than anywhere else. Two things were wrong:
+--
+--   * `select(i, f:GetRegions())` re-invoked GetRegions on EVERY iteration of
+--     the loop, each call returning the frame's whole region list again. A
+--     frame with ten regions cost eleven GetRegions calls instead of one.
+--   * The visible-frame cap was 400, but a raid UI blows straight through that
+--     -- raid frames, nameplates, buff buttons, boss mods, a damage meter --
+--     so the sweep ran at full cost exactly where the frame budget is tightest,
+--     five times a second, looking for a dialog that cannot appear mid-fight.
+--
+-- Hoisted, capped on TOTAL frames walked (not just visible ones), and the
+-- caller skips it entirely in combat.
+local MAX_VISIBLE, MAX_WALK = 250, 3000
 local function VisibleEchoOptions()
   local set = BuildNameSet()
   local found, seen = {}, {}
-  local f, scanned = EnumerateFrames(), 0
-  while f and scanned < 400 do
+  local f, scanned, walked = EnumerateFrames(), 0, 0
+  while f and scanned < MAX_VISIBLE and walked < MAX_WALK do
+    walked = walked + 1
     if f.IsVisible and f:IsVisible() and f.GetRegions then
-      for i = 1, select("#", f:GetRegions()) do
-        local r = select(i, f:GetRegions())
-        if r and r.GetObjectType and r:GetObjectType() == "FontString" then
-          local txt = r:GetText()
-          if txt and set[txt] and not seen[txt] then
-            seen[txt] = true
-            found[#found + 1] = txt
+      -- ONE call, results held as a vararg.
+      local n = select("#", f:GetRegions())
+      if n > 0 then
+        local regions = { f:GetRegions() }
+        for i = 1, n do
+          local r = regions[i]
+          if r and r.GetObjectType and r:GetObjectType() == "FontString" then
+            local txt = r:GetText()
+            if txt and set[txt] and not seen[txt] then
+              seen[txt] = true
+              found[#found + 1] = txt
+            end
           end
         end
       end
@@ -103,6 +124,13 @@ function DH.Init()
     if self.t < 0.3 then return end
     self.t = 0
     if not (PP.db and PP.db.options.autoDraw) then if overlay then overlay:Hide() end return end
+    -- Never sweep in combat. An echo draw is a level-up or out-of-combat
+    -- dialog; it cannot appear during a boss fight, and this is precisely when
+    -- the screen is fullest and the frame budget tightest.
+    if UnitAffectingCombat and UnitAffectingCombat("player") then
+      if overlay then overlay:Hide() end
+      return
+    end
     local opts = VisibleEchoOptions()
     -- A real selection shows a few distinct choices at once. 2+ = likely a draw.
     if #opts >= 2 then

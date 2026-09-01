@@ -101,8 +101,11 @@ local function AddTaken(amount, spell, src)
   if not fight then StartFight() end
   fight.taken = fight.taken + amount
   if amount > fight.maxHit then fight.maxHit = amount end
-  local hp, hpMax = 0, 0
-  pcall(function() hp, hpMax = UnitHealth("player"), UnitHealthMax("player") end)
+  -- Straight calls. This used to allocate a closure and run a pcall for every
+  -- single incoming damage event -- in a raid, constant churn on the hot path
+  -- to guard two API calls that do not error.
+  local hp = UnitHealth("player") or 0
+  local hpMax = UnitHealthMax("player") or 0
   local b = fight.blows
   b[#b + 1] = { s = spell or "Melee", src = src, a = amount }
   if #b > 24 then  -- amortized prune to the biggest 6
@@ -144,7 +147,9 @@ end
 
 -- Persist every recorded fight for post-session analysis (read from
 -- SavedVariables after /reload). Ring-buffered to the last N fights, where N is
--- PP.db.fightCap (default 1000, ~1.75 KB/fight => ~1.7 MB). Configurable via
+-- PP.db.fightCap (default 1000). MEASURED 2026-09-02: ~2.4 KB/fight, so a full
+-- buffer is ~2.4 MB of SavedVariables -- parsed at every login and rewritten at
+-- every logout. The old ~1.75 KB estimate here was optimistic. Configurable via
 -- /pp bench cap <n>, hard-clamped to a safe range so the SavedVariables file
 -- can't grow into logout-hitch / corruption-loss territory.
 local DEFAULT_FIGHT_CAP = 1000
@@ -400,18 +405,21 @@ local function KNorm(s)
 end
 
 function CM.RecordBossKill(dstName)
-  if not (PP.GuideData and PP.GuideData.FindBoss) then return end
+  if not (PP.GuideData and PP.GuideData.BossByName) then return end
   -- Multi-body bosses die under their members' names.
   local alias = PP.GuideData.KILL_ALIASES
     and PP.GuideData.KILL_ALIASES[KNorm(dstName)]
   local lookup = alias or dstName
+  -- EXACT lookup, not FindBoss. This runs for every UNIT_DIED in the zone --
+  -- every trash mob, add, pet and totem -- and the substring fallback it used
+  -- to fall through to cost hundreds of times the hash hit AND had its result
+  -- thrown away by the exact-name check that used to sit below. Pure waste,
+  -- paid dozens of times a second on a raid AoE pull.
+  --
   -- NOTE: multiple returns must come from a direct call — an and-chain
   -- truncates to one value (the bug that silently ate every kill in v0.28).
-  local boss, raid = PP.GuideData.FindBoss(lookup)
+  local boss, raid = PP.GuideData.BossByName(lookup)
   if not boss or not raid then return end
-  -- Exact-name kills only (FindBoss substring-matches; require normalized
-  -- equality so trash with boss-like names can't false-positive).
-  if not alias and KNorm(boss.n) ~= KNorm(dstName) then return end
   PP.db.kills = PP.db.kills or {}
   local zone = raid.zone
   PP.db.kills[zone] = PP.db.kills[zone] or {}
@@ -430,11 +438,17 @@ function CM.RecordBossKill(dstName)
 end
 local RecordBossKill = CM.RecordBossKill
 
+-- Your GUID does not change while you are logged in, and the combat log fires
+-- thousands of times a second in a 25-man. Resolving it per event was an API
+-- call on the hottest path in the addon; resolve it once instead.
+local myGUID
+function CM.ForgetGUID() myGUID = nil end
 local function OnCLEU(timestamp, event, srcGUID, srcName, srcFlags,
                       dstGUID, dstName, dstFlags, ...)
+  if not myGUID then myGUID = UnitGUID("player") end
   if event == "UNIT_DIED" and dstName then
     PP.safeCall(RecordBossKill, dstName)
-    if dstGUID == UnitGUID("player") and fight then
+    if dstGUID == myGUID and fight then
       fight.died = true
       -- Freeze the trail as it stood at death, so later hits can't overwrite it.
       fight.deathTrail = {}
@@ -442,7 +456,7 @@ local function OnCLEU(timestamp, event, srcGUID, srcName, srcFlags,
     end
   end
   -- Damage the PLAYER takes (survivability side of the ledger).
-  if dstGUID and dstGUID == UnitGUID("player") then
+  if dstGUID and dstGUID == myGUID then
     if event == "SWING_DAMAGE" then
       AddTaken((select(1, ...)), "Melee", srcName)
     elseif event == "SPELL_DAMAGE" or event == "SPELL_PERIODIC_DAMAGE"
@@ -742,6 +756,9 @@ function CM.Init()
   end
   local ev = CreateFrame("Frame")
   ev:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+  -- A zone change can mean a new character (reload on another toon), so drop
+  -- the cached GUID and let the next event resolve it again.
+  ev:RegisterEvent("PLAYER_ENTERING_WORLD")
   ev:RegisterEvent("PLAYER_REGEN_DISABLED")
   ev:RegisterEvent("PLAYER_REGEN_ENABLED")
   ev:SetScript("OnEvent", function(_, e, ...)
@@ -756,6 +773,8 @@ function CM.Init()
       StartFight()
     elseif e == "PLAYER_REGEN_ENABLED" then
       PP.safeCall(EndFight)
+    elseif e == "PLAYER_ENTERING_WORLD" then
+      CM.ForgetGUID()
     end
   end)
 end

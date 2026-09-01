@@ -565,17 +565,36 @@ G.KILL_ALIASES = {
 }
 
 -- Flat lookup: normalized boss name -> { boss = entry, raid = raidEntry }.
-local index
+local index, sortedKeys
 local function Norm(s)
   return s and string.lower((s:gsub("’", "'"))) or nil
 end
 local function BuildIndex()
-  index = {}
+  index, sortedKeys = {}, {}
   for _, raid in ipairs(G.raids) do
     for _, boss in ipairs(raid.bosses) do
-      index[Norm(boss.n)] = { boss = boss, raid = raid }
+      local k = Norm(boss.n)
+      index[k] = { boss = boss, raid = raid }
+      sortedKeys[#sortedKeys + 1] = k
     end
   end
+  -- Sorted ONCE at build time. It used to be rebuilt and re-sorted on every
+  -- call, which mattered because the combat log calls this per mob death.
+  table.sort(sortedKeys)
+end
+
+-- EXACT lookup, O(1). Use this anywhere the caller only accepts an exact
+-- match -- above all the COMBAT LOG, which calls into here for every UNIT_DIED
+-- in the zone. In a raid that is every trash mob, add, pet and totem that
+-- dies, and every one of those is a miss that fell all the way through
+-- FindBoss's substring scan: a 61-key walk with up to 122 string.find calls,
+-- per death, for an answer the caller was going to reject anyway.
+function G.BossByName(name)
+  if not name or name == "" then return nil end
+  if not index then BuildIndex() end
+  local hit = index[Norm(name)]
+  if not hit then return nil end
+  return hit.boss, hit.raid
 end
 
 -- Exact, then substring match ("marrowgar" finds "Lord Marrowgar").
@@ -584,15 +603,15 @@ function G.FindBoss(name)
   if not index then BuildIndex() end
   local q = Norm(name)
   if index[q] then return index[q].boss, index[q].raid end
-  -- Deterministic substring fallback. pairs() order is undefined, so an
-  -- ambiguous query ("the") returned a DIFFERENT boss between sessions. Walk
-  -- sorted keys and prefer the closest match (shortest key that contains the
-  -- query) rather than whichever the hash happened to yield first.
-  local keys = {}
-  for key in pairs(index) do keys[#keys + 1] = key end
-  table.sort(keys)
+  -- Deterministic substring fallback, for a HUMAN-typed partial ("/ep boss
+  -- marrowgar"). pairs() order is undefined, so an ambiguous query returned a
+  -- different boss between sessions; walk the pre-sorted keys and prefer the
+  -- closest match (shortest key containing the query).
+  --
+  -- Anything on a hot path wants G.BossByName instead -- this walk is fine a
+  -- few times per session and ruinous a few times per second.
   local bestKey
-  for _, key in ipairs(keys) do
+  for _, key in ipairs(sortedKeys) do
     if string.find(key, q, 1, true) or string.find(q, key, 1, true) then
       if not bestKey or #key < #bestKey then bestKey = key end
     end

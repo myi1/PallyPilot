@@ -151,7 +151,14 @@ end
 -- the main-bar key even while a form had swapped the buttons to another page.
 -- What the player actually presses is whatever the on-screen button says, so
 -- read THAT first and treat the slot maths as a fallback.
-local function KeybindFor(spell)
+--
+-- CACHED, because the full search is ~300 iterations across four passes (seven
+-- bar prefixes x twelve buttons, then the live page, then slots 1-120, then the
+-- prefixes again) and the HUD asked for it about seven times a second. The
+-- answer only changes when the bars, the page, the form or the bindings change,
+-- and every one of those fires an event -- so recompute then, not on a timer.
+local bindCache = {}
+local function KeybindForUncached(spell)
   local wantTex = GetSpellTexture(spell)
 
   -- 1. Ground truth: an on-screen button currently holding this spell. Its
@@ -212,6 +219,35 @@ local function KeybindFor(spell)
     end
   end
   return nil
+end
+
+-- A miss is cached too, as `false`: "this spell is on no bar" is just as
+-- expensive to work out as a hit, and just as stable.
+local function KeybindFor(spell)
+  if not spell then return nil end
+  local hit = bindCache[spell]
+  if hit ~= nil then return hit or nil end
+  local key = KeybindForUncached(spell)
+  bindCache[spell] = key or false
+  return key
+end
+
+-- Exposed so the events below and the offline suite drop the cache the same
+-- way -- a test that clears it by hand would not prove the real path works.
+function RH.InvalidateBinds() bindCache = {} end
+
+-- Every event that can move a spell, repage a bar, or rebind a key. Anything
+-- not on this list cannot invalidate the answer.
+do
+  local watch = CreateFrame("Frame")
+  for _, e in ipairs({
+    "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
+    "UPDATE_BINDINGS", "PLAYER_ENTERING_WORLD", "UPDATE_SHAPESHIFT_FORM",
+    "ACTIONBAR_HIDEGRID",
+  }) do
+    pcall(function() watch:RegisterEvent(e) end)
+  end
+  watch:SetScript("OnEvent", function() RH.InvalidateBinds() end)
 end
 
 -- Diagnostic: /pp keyscan [spell] — dump where a spell sits on the bars and why

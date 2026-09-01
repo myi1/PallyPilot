@@ -124,10 +124,34 @@ assert(outOfForm == "4", "expected 4 out of form, got " .. tostring(outOfForm))
 --    returned "4" here -- the whole bug.
 bonusOffset, shapeshift = 1, 1
 SyncBtn4Hotkey()
+-- The lookup is CACHED (it is ~300 iterations and the HUD wants it seven times
+-- a second). In game, entering a form fires UPDATE_BONUS_ACTIONBAR and
+-- UPDATE_SHAPESHIFT_FORM, which run exactly this. The harness has no event
+-- dispatch, so call the same entry point the handler does.
+assert(RH.InvalidateBinds, "the bind cache must expose its invalidator")
+RH.InvalidateBinds()
 local inForm = hudKeyFor("Mind Blast")
 print("shadowform-> " .. tostring(inForm))
 assert(inForm == "s-4",
   "SHADOWFORM REGRESSION: expected s-4, got " .. tostring(inForm))
+
+-- 2b. THE CACHE ITSELF. Without invalidation the answer must not change, and
+--     it must not re-scan -- that is the whole point of caching it.
+bonusOffset, shapeshift = 0, 0
+SyncBtn4Hotkey()
+local stale = hudKeyFor("Mind Blast")
+assert(stale == "s-4",
+  "with no invalidation the cached answer must stand, got " .. tostring(stale))
+RH.InvalidateBinds()
+local fresh = hudKeyFor("Mind Blast")
+assert(fresh == "4",
+  "after invalidation it must re-resolve, got " .. tostring(fresh))
+print("cache     -> holds until invalidated, then re-resolves")
+
+-- Back into shadowform for the scan check below.
+bonusOffset, shapeshift = 1, 1
+SyncBtn4Hotkey()
+RH.InvalidateBinds()
 
 -- 3. The scan must record the live button -> slot mapping, since that is the
 --    evidence needed to debug this without the player pasting anything.
