@@ -306,12 +306,149 @@ function EF.ApplyPool(mode)
   end
 end
 
-local function FindTile(name)
+local FindTile  -- forward declaration; see EF.FindTile below
+
+-- Raw-text tile search: does this button's label read as `name`, regardless of
+-- whether we have a RATING for that echo?
+--
+-- EachTile only yields tiles whose text MatchDisplay can resolve, so an echo
+-- missing from our catalog is invisible to every consumer -- including the
+-- engine, which only needs to CLICK it. That is how a queue built from
+-- grantedPerks ("Stonefist Barrage") stalled on a tile the catalog only knows
+-- as "Paladin - Stonefist Barrage". Clicking must never require rating.
+-- The perk database names these "Paladin - Stonefist Barrage - Rare" while the
+-- journal tile just says "Stonefist Barrage". Compare on a stripped base so a
+-- class prefix or quality suffix on either side cannot cause a miss.
+local EF_CLASS_PREFIX = {
+  "warrior", "paladin", "hunter", "rogue", "priest",
+  "death knight", "shaman", "mage", "warlock", "druid",
+}
+local EF_QUALITY = { "common", "uncommon", "rare", "epic", "legendary", "artifact" }
+local function BaseName(s)
+  s = NormEF(s or "")
+  for _, q in ipairs(EF_QUALITY) do
+    local cut = string.match(s, "^(.-)%s*%-%s*" .. q .. "$")
+    if cut then s = cut; break end
+  end
+  for _, c in ipairs(EF_CLASS_PREFIX) do
+    local cut = string.match(s, "^" .. c .. "%s*%-%s*(.+)$")
+    if cut then s = cut; break end
+  end
+  return s
+end
+
+local function TileTextMatches(btn, wantNorm)
+  local ok, regions = pcall(function() return { btn:GetRegions() } end)
+  if not ok then return false end
+  for _, reg in ipairs(regions) do
+    if reg and reg.GetText and reg.GetObjectType and reg:GetObjectType() == "FontString" then
+      local t = reg:GetText()
+      if t and t ~= "" then
+        local n = BaseName(t)
+        if n == wantNorm then return true end
+        -- Tile labels truncate ("Stonefist Bar..."); accept a prefix match.
+        local prefix = string.match(n, "^(.-)%.%.%.$")
+        if prefix and prefix ~= ""
+           and string.sub(wantNorm, 1, string.len(prefix)) == prefix then
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
+-- Exposed for testing: the class-prefix/quality-suffix mismatch that stalled
+-- the engine is only provable by calling this directly.
+function EF.FindTile(name) return FindTile(name) end
+
+FindTile = function(name)
   local hit
   EachTile(RunRoot(), function(btn, display)
     if not hit and display == name then hit = btn end
   end)
-  return hit
+  if hit then return hit end
+
+  -- Fallback: match the button's own text, so an unrated echo is still
+  -- clickable. Walks the same tree EachTile does but without the rating gate.
+  local wantNorm = BaseName(name)
+  local root = RunRoot()
+  if not root then return nil end
+  local found
+  local function walk(f, depth)
+    if found or depth > 6 or not f.GetChildren then return end
+    if f.GetScrollChild then
+      local sc = f:GetScrollChild()
+      if sc then walk(sc, depth + 1) end
+    end
+    for _, c in ipairs({ f:GetChildren() }) do
+      if found then return end
+      local ok, ctype = pcall(c.GetObjectType, c)
+      if ok and (ctype == "Button" or ctype == "CheckButton")
+         and c:IsVisible() and TileTextMatches(c, wantNorm) then
+        found = c
+      end
+      if ok and not found then walk(c, depth + 1) end
+    end
+  end
+  pcall(walk, root, 0)
+  return found
+end
+
+-- The run panel scrolls, and only rendered tiles exist -- the same
+-- virtualization that made the catalog unreadable. When the queued echo is
+-- scrolled out of view the engine used to stall on "can't see X -- scroll your
+-- run list to it", which is the addon asking YOU to do the one thing it is
+-- perfectly able to do itself. Step the scroll looking for it.
+--
+-- Returns the tile if found. Restores the original position when it fails, so
+-- a miss does not silently leave the panel somewhere else.
+-- DISCOVER the run panel's scroll frame instead of assuming its name.
+-- RunRoot() itself falls through three candidate globals, so hardcoding one of
+-- them (as the first version of this did) silently no-ops when that name does
+-- not exist -- which looks exactly like "it isn't scrolling".
+local function RunScrollFrame()
+  local direct = _G["ProjectEbonholdEchoJournalMyRunScroll"]
+  if direct and direct.GetVerticalScrollRange then return direct, "named" end
+  local root = RunRoot()
+  if not root then return nil end
+  local found
+  local function walk(f, depth)
+    if found or depth > 6 or not f.GetChildren then return end
+    for _, c in ipairs({ f:GetChildren() }) do
+      if not found and type(c) == "table" and c.GetVerticalScrollRange
+         and c.SetVerticalScroll then
+        local ok, range = pcall(c.GetVerticalScrollRange, c)
+        if ok and range and range > 0 then found = c end
+      end
+      if not found then pcall(walk, c, depth + 1) end
+    end
+  end
+  pcall(walk, root, 0)
+  return found, found and "discovered" or nil
+end
+
+local function FindTileScrolling(name)
+  local hit = FindTile(name)
+  if hit then return hit end
+
+  local scroll = RunScrollFrame()
+  if not (scroll and scroll.GetVerticalScrollRange and scroll.SetVerticalScroll) then
+    return nil
+  end
+  local ok, range = pcall(scroll.GetVerticalScrollRange, scroll)
+  if not ok or not range or range <= 0 then return nil end
+  local start = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+
+  local pos, step = 0, 60
+  while pos <= range do
+    pcall(scroll.SetVerticalScroll, scroll, pos)
+    hit = FindTile(name)
+    if hit then return hit end
+    pos = pos + step
+  end
+  pcall(scroll.SetVerticalScroll, scroll, start)
+  return nil
 end
 
 -- Run-panel echoes carrying a given verdict (the Orb's working set).
@@ -457,6 +594,25 @@ local function RunNameSet()
   return set
 end
 
+-- The engine's live instruction, as plain text, so the rail can show it at the
+-- top instead of burying it. Phase-derived rather than a copy of the status
+-- string, so it says what YOU must do rather than what just happened.
+function EF.CurrentStepText()
+  if not (engine and engine.phase) then return nil end
+  local name = engine.queue and engine.queue[1] or "?"
+  local n = (engine.idx or 0) .. "/" .. (engine.total or 0)
+  if engine.phase == "DRAW" then
+    return n .. "  PICK ONE from the draw window."
+  elseif engine.phase == "ORB" then
+    return n .. "  opening the orb for " .. name .. "..."
+  elseif engine.phase == "TILE" then
+    return n .. "  selecting " .. name .. "..."
+  elseif engine.phase == "DIALOG" or engine.phase == "FORGET" then
+    return n .. "  spending orbs on " .. name .. "..."
+  end
+  return n .. "  working..."
+end
+
 function SetStatus(msg, color) -- assigns the forward-declared local
   if status then status:SetText((color or DIM) .. msg .. R) end
 end
@@ -514,6 +670,10 @@ local function StopEngine(msg)
   engine.phase = nil
   engine.fishing = false
   engine.queue = {}
+  -- Clear the hunt HERE, not only in the hunt's own exits. Otherwise clicking
+  -- Stop leaves it armed, and the next ordinary reroll silently resumes
+  -- hunting -- unattended spending nobody asked for.
+  engine.hunt = nil
   if msg then
     PP.print(msg)
     SetStatus(msg, EMBER)
@@ -735,12 +895,27 @@ local function EngineTick(elapsed)
       SetStatus("orb clicked — selecting " .. name)
     end
   elseif engine.phase == "TILE" then
-    local tile = FindTile(name)
+    -- Scroll for it rather than stalling. A tile that is merely off-screen is
+    -- not a failure state.
+    local tile = FindTileScrolling(name)
     if tile then
       SmartClick(tile)
       engine.phase = "DIALOG"; engine.waited = 0
-    elseif engine.waited > 2 then
-      SetStatus("can't see '" .. name .. "' — scroll your run list to it", EMBER)
+    elseif engine.waited > 4 then
+      -- Genuinely absent after a full scroll: skip it and move on instead of
+      -- sitting here forever. A queued echo can vanish (it was just consumed,
+      -- or a pick replaced it), and one bad entry must not wedge the queue.
+      SetStatus("'" .. name .. "' is not in the run any more — skipping", EMBER)
+      PP.print(EMBER .. "Skipped " .. name .. R .. DIM
+        .. " -- not in the run panel after scrolling it." .. R)
+      table.remove(engine.queue, 1)
+      if #engine.queue == 0 then
+        if not (engine.hunt and EF.HuntStep(nil)) then
+          StopEngine(nil)
+          SetStatus("queue empty — done", VERD)
+        end
+      end
+      engine.phase = "ORB"; engine.waited = 0
     end
   elseif engine.phase == "DIALOG" then
     local forget, slider = FindForgetDialog()
@@ -847,6 +1022,18 @@ local function EngineTick(elapsed)
       PP.print("(" .. engine.idx .. "/" .. engine.total .. ") got "
         .. BRIGHT .. display .. R .. " — " .. delta)
       RefreshBadges()
+      -- HUNT: goal-directed rolling. Ask after every completed roll whether to
+      -- continue, and re-pick the fodder each time (the weakest changes).
+      if engine.hunt and #engine.queue == 0 then
+        if EF.HuntStep(display) then
+          engine.phase = "ORB"; engine.waited = 0
+        end
+        -- Either way the hunt has spoken -- it queued another roll, or it
+        -- printed exactly why it stopped. Falling through to the generic
+        -- "Queue complete" below just prints a second, blander ending on top
+        -- of the real one.
+        return
+      end
       if #engine.queue == 0 then
         StopEngine(nil)
         SetStatus("done — " .. engine.idx .. " rerolled", VERD)
@@ -862,7 +1049,26 @@ end
 
 -- Every reroll spends the orbs/reroll toggle value (PP.db.options.rerollOrbs) —
 -- one source of truth, applied fresh at each dialog. No per-queue override.
+-- Hard ceiling on any queue, whatever the caller asked for.
+--
+-- EbonholdHub's auto-pick answers the draw for you, so a queue runs completely
+-- unattended -- there is no natural pause where a mistake becomes visible. A
+-- caller bug once queued 70 echoes on a finished build. A cap cannot make bad
+-- input good, but it bounds the damage to something recoverable, and saying
+-- WHICH echoes are queued beats saying how many.
+local QUEUE_CAP = 12
+
 local function StartQueue(list, label)
+  local asked = #list
+  if asked > QUEUE_CAP then
+    local trimmed = {}
+    for i = 1, QUEUE_CAP do trimmed[i] = list[i] end
+    list = trimmed
+    PP.print(EMBER .. "Capped at " .. QUEUE_CAP .. " of " .. asked .. "." .. R
+      .. DIM .. " Every item spends orbs and consumes an echo with no pause to "
+      .. "look at the result, so batches stay small. Run it again to continue."
+      .. R)
+  end
   engine.queue = list
   engine.total = #list
   engine.idx = 0
@@ -870,8 +1076,16 @@ local function StartQueue(list, label)
   engine.phase = "ORB"
   engine.waited = 0
   if rail and rail.rerollBtn then rail.rerollBtn:SetText("STOP") end
-  PP.print(label .. ": " .. #list .. " echoes queued, "
-    .. (PP.db.options.rerollOrbs or 1) .. " orb(s) each. Click STOP anytime.")
+  -- Name them when the list is short enough to read. "70 echoes queued" told
+  -- you a number; what you needed was WHICH.
+  local what
+  if #list <= 4 then
+    what = table.concat(list, ", ")
+  else
+    what = #list .. " echoes, starting " .. tostring(list[1])
+  end
+  PP.print(label .. ": " .. what .. " -- " .. (PP.db.options.rerollOrbs or 1)
+    .. " orb(s) each. Click STOP anytime.")
   SetStatus("starting — " .. engine.queue[1])
 end
 
@@ -904,22 +1118,223 @@ function EF.StartReroll()
   end
   -- The Orb only trades echoes in the CURRENT RUN — queue those, not the
   -- whole owned collection.
-  -- Junk first, but do NOT stop there. You choose what the orb consumes, so an
-  -- absence of rated junk just means your weakest echo is a better one -- it
-  -- never means rerolling is unavailable. Falling back to the weakest-first
-  -- fodder ranking is what keeps the endgame loop moving.
+  -- Junk is disposable, so the whole junk list is safe to queue.
   local list = RunJunk()
+  local label = "Reroll junk"
+
   if #list == 0 then
+    -- NO JUNK: fall back to the weakest KEEPER -- but exactly ONE of them.
+    --
+    -- This queued the ENTIRE fodder ranking once (70 echoes on a full build).
+    -- With EbonholdHub's auto-pick on, nothing pauses between items, so it
+    -- would have eaten most of a finished build unattended before anyone could
+    -- read the chat line. Feeding a keeper is a real cost and a real gamble;
+    -- it is a per-echo decision, never a batch. One roll, then you look at what
+    -- you got and decide again.
     local rank = PP.EchoAudit and PP.EchoAudit.FodderRank and PP.EchoAudit.FodderRank()
-    if rank then
-      for _, f in ipairs(rank) do list[#list + 1] = f.name end
+    local weakest = rank and rank[1]
+    if weakest then
+      list = { weakest.name }
+      label = "Reroll ONE (" .. weakest.name .. " [" .. weakest.tier .. "])"
     end
   end
+
   if #list == 0 then
     SetStatus("nothing in the run can be fed to the orb", VERD)
     return
   end
-  StartQueue(list, "Reroll queue")
+  StartQueue(list, label)
+end
+
+-- ---------------------------------------------------------------------------
+-- HUNT: roll toward the CHASE list, and stop the moment it lands.
+--
+-- EbonholdHub's auto-pick answers the draw, so the loop already runs unattended
+-- -- which is precisely why it needs a GOAL and a BUDGET rather than a long
+-- queue. Every stop condition below is a reason this can end without anyone
+-- watching it:
+--   * a target landed          -> the thing you wanted; stop immediately
+--   * the roll budget ran out  -> bounded cost, always
+--   * no fodder left           -> nothing safe to feed
+--   * the next fodder is too good -> never eat a CORE/S echo to chase another
+--   * you clicked Stop
+-- The fodder is re-picked every roll, because the weakest echo changes as the
+-- build does.
+local HUNT_TIER_FLOOR = { CORE = true, S = true }   -- never feed these
+
+-- Exposed: the rail shows these so you can see WHAT you are rolling for,
+-- not just how many.
+function EF.HuntTargets()
+  -- CHASE echoes that are NOT already in the run.
+  local out = {}
+  local st = PP.BisPlan and PP.BisPlan.Status and PP.BisPlan.Status()
+  if not st then return out end
+  for _, row in ipairs(st.list or {}) do
+    if row.state == "ROLL" or row.state == "FARM" then out[#out + 1] = row.name end
+  end
+  return out
+end
+
+local function NextHuntFodder()
+  local rank = PP.EchoAudit and PP.EchoAudit.FodderRank and PP.EchoAudit.FodderRank()
+  if not rank or #rank == 0 then return nil, "nothing left in the run can be fed" end
+  local f = rank[1]
+  if HUNT_TIER_FLOOR[f.tier] then
+    return nil, "the weakest echo left is " .. f.name .. " [" .. f.tier
+      .. "] -- too good to feed"
+  end
+  return f
+end
+
+-- Returns true if another roll was queued, false if the hunt is over.
+function EF.HuntStep(justGot)
+  local h = engine.hunt
+  if not h then return false end
+
+  -- 1. Did we just land something we were hunting?
+  if justGot then
+    local norm = NormEF(justGot)
+    if h.want[norm] then
+      StopEngine(nil)
+      PP.print(VERD .. "GOT IT: " .. R .. BRIGHT .. justGot .. R .. DIM
+        .. "  (" .. h.rolled .. " roll(s) spent)" .. R)
+      SetStatus("got " .. justGot .. " — stopped", VERD)
+      engine.hunt = nil
+      if rail then EF.RefreshRail() end
+      return false
+    end
+  end
+
+  -- 2. Budget.
+  if h.rolled >= h.budget then
+    StopEngine(nil)
+    PP.print(EMBER .. "Roll budget spent (" .. h.budget .. ")." .. R .. DIM
+      .. " Nothing landed. Run it again to keep going." .. R)
+    SetStatus("budget spent — stopped", EMBER)
+    engine.hunt = nil
+    if rail then EF.RefreshRail() end
+    return false
+  end
+
+  -- 3. Anything still worth hunting?
+  local targets = EF.HuntTargets()
+  if #targets == 0 then
+    StopEngine(nil)
+    PP.print(VERD .. "Every target is in the build." .. R)
+    engine.hunt = nil
+    if rail then EF.RefreshRail() end
+    return false
+  end
+
+  -- 4. Fodder, re-picked each roll.
+  local f, why = NextHuntFodder()
+  if not f then
+    StopEngine(nil)
+    PP.print(EMBER .. "Hunt stopped: " .. R .. DIM .. tostring(why) .. R)
+    engine.hunt = nil
+    if rail then EF.RefreshRail() end
+    return false
+  end
+
+  h.rolled = h.rolled + 1
+  engine.queue = { f.name }
+  engine.total = h.budget
+  SetStatus("hunt " .. h.rolled .. "/" .. h.budget .. " — feeding " .. f.name)
+  return true
+end
+
+-- budget: how many echoes you are willing to spend. Small on purpose.
+function EF.StartHunt(budget)
+  if engine.phase then StopEngine("Hunt stopped by you."); return end
+  budget = tonumber(budget) or 5
+  if budget < 1 then budget = 1 end
+  if budget > 12 then budget = 12 end
+
+  local targets = EF.HuntTargets()
+  if #targets == 0 then
+    PP.print(VERD .. "Nothing to hunt -- every target echo is already in the build." .. R)
+    return
+  end
+  local f, why = NextHuntFodder()
+  if not f then
+    PP.print(EMBER .. "Can't hunt: " .. R .. DIM .. tostring(why) .. R)
+    return
+  end
+
+  local want = {}
+  for _, n in ipairs(targets) do want[NormEF(n)] = true end
+  engine.hunt = { want = want, budget = budget, rolled = 0 }
+
+  -- Say exactly what this will cost and what it is for, BEFORE it starts.
+  local shown = {}
+  for i = 1, math.min(#targets, 4) do shown[i] = targets[i] end
+  PP.print(GOLD .. "HUNT: " .. R .. "up to " .. budget .. " roll(s) at "
+    .. (PP.db.options.rerollOrbs or 1) .. " orb(s) each, chasing "
+    .. table.concat(shown, ", ")
+    .. (#targets > 4 and (" +" .. (#targets - 4) .. " more") or "") .. ".")
+  PP.print(DIM .. "Feeds your weakest echo each roll, starting " .. R .. BRIGHT
+    .. f.name .. " [" .. f.tier .. "]" .. R .. DIM
+    .. ". Stops the moment one lands. Click STOP anytime." .. R)
+
+  engine.hunt.rolled = 1
+  engine.idx = 0
+  engine.junkStreak = 0
+  engine.queue = { f.name }
+  engine.total = budget
+  engine.phase = "ORB"
+  engine.waited = 0
+  if rail and rail.rerollBtn then rail.rerollBtn:SetText("STOP") end
+  SetStatus("hunt 1/" .. budget .. " — feeding " .. f.name)
+end
+
+-- ---------------------------------------------------------------------------
+-- Why did the engine not see a tile that is plainly on screen?
+--
+-- Three guesses have now been made about the run panel's frame names and how
+-- its tiles are matched. Stop guessing: record what is ACTUALLY there when it
+-- fails. Written to SavedVariables, read off disk -- no pasting.
+function EF.TileDiag(wanted)
+  PP.db = PP.db or {}
+  PP.db.scans = PP.db.scans or {}
+  local out = {}
+  local function add(s) out[#out + 1] = s end
+
+  add("wanted = " .. tostring(wanted))
+  for _, n in ipairs({ "ProjectEbonholdEchoJournal",
+                       "ProjectEbonholdEchoJournalMyRunScroll",
+                       "ProjectEbonholdEchoJournalMyRunInset",
+                       "ProjectEbonholdEchoJournalScroll" }) do
+    local f = _G[n]
+    add(("global %-42s %s%s"):format(n, f and "EXISTS" or "nil",
+      (f and f.IsVisible and f:IsVisible()) and " visible" or ""))
+  end
+
+  local sf, how = RunScrollFrame()
+  add("run scroll frame: " .. (sf and ("found (" .. tostring(how) .. ")") or "NONE"))
+  if sf then
+    local ok, range = pcall(sf.GetVerticalScrollRange, sf)
+    add("  range = " .. tostring(ok and range or "err"))
+  end
+
+  -- Every tile the walker can see in the run root, with the text it matched on.
+  local n = 0
+  EachTile(RunRoot(), function(btn, display, verdict)
+    n = n + 1
+    if n <= 60 then
+      add(("  tile %-32s verdict=%-7s visible=%s"):format(
+        tostring(display), tostring(verdict),
+        tostring(btn.IsVisible and btn:IsVisible())))
+    end
+  end)
+  add("tiles seen in RunRoot: " .. n)
+
+  -- And what the queue would ask for, so a mismatch is obvious side by side.
+  local junk = RunJunk()
+  add("RunJunk() = " .. #junk .. (junk[1] and (" -- first: " .. junk[1]) or ""))
+
+  PP.db.scans.tileDiag = out
+  PP.db.scans.tileDiagAt = date("%Y-%m-%d %H:%M")
+  PP.print("Tile diagnostic saved (" .. #out .. " lines). /reload and it's on disk.")
 end
 
 -- Public accessors so the Chase panel can show what WOULD be fed to the orb and
@@ -1010,9 +1425,11 @@ function EF.ResolveNextAction()
   local subEpic = (qt and #qt) or 0
 
   if missing > 0 and weakest then
-    return "Roll for " .. missing .. " missing",
-      "Feeds " .. weakest.name .. " [" .. weakest.tier .. "] -- your weakest echo.",
-      function() PP.safeCall(EF.StartReroll) end
+    local budget = PP.db.options.huntBudget or 5
+    return "Hunt " .. missing .. " missing (" .. budget .. " rolls)",
+      "Feeds your weakest each roll, starting " .. weakest.name .. " ["
+        .. weakest.tier .. "]. Stops the moment one lands.",
+      function() PP.safeCall(EF.StartHunt, budget) end
   end
   if subEpic > 0 then
     return "Quality fish (" .. subEpic .. ")",
@@ -1028,19 +1445,58 @@ function EF.ResolveNextAction()
     nil
 end
 
+-- Name what you are rolling for. During a hunt this is the hunt's own target
+-- set (frozen when it started); otherwise it is whatever is still missing.
+function EF.RefreshChaseLine()
+  if not (rail and rail.chaseFS) then return end
+  local names, cap = {}, 3
+  if engine and engine.hunt and engine.hunt.want then
+    -- The hunt froze its targets at the start; show those, not a live recount.
+    for _, n in ipairs(EF.HuntTargets() or {}) do
+      if engine.hunt.want[NormEF(n)] then names[#names + 1] = n end
+    end
+  else
+    for _, n in ipairs(EF.HuntTargets() or {}) do names[#names + 1] = n end
+  end
+  if #names == 0 then
+    rail.chaseFS:SetText("")
+    rail.chaseFS:SetHeight(1)
+    return
+  end
+  local shown = {}
+  for i = 1, math.min(#names, cap) do shown[i] = names[i] end
+  local more = (#names > cap) and (DIM .. "  +" .. (#names - cap) .. " more" .. R) or ""
+  rail.chaseFS:SetText(DIM .. "chasing: " .. R .. BRIGHT
+    .. table.concat(shown, DIM .. ", " .. R .. BRIGHT) .. R .. more)
+  rail.chaseFS:SetHeight(rail.chaseFS:GetStringHeight() + 2)
+end
+
 function EF.RefreshNextAction()
   if not (rail and rail.nextFS and rail.nextBtn) then return end
-  -- While the engine is running, the only useful action is stopping it.
+  -- While the engine is running, show WHAT TO DO NEXT -- not just "RUNNING".
+  --
+  -- The engine already narrates every step ("(2/5) X forgotten -- waiting for
+  -- the pick"), but that text lived in the status FontString pinned to the
+  -- BOTTOM of the rail, while the top said only "RUNNING -- each roll is still
+  -- your click". So after a pick closed and reopened the journal, the most
+  -- prominent line told you nothing and the useful one was off the bottom.
+  -- Promote the live step to the top; the Stop button keeps its place.
   if engine and engine.phase then
-    rail.nextFS:SetText(GOLD .. "RUNNING" .. R .. DIM
-      .. " -- each roll is still your click." .. R)
+    EF.RefreshChaseLine()
+    local step = EF.CurrentStepText and EF.CurrentStepText() or nil
+    rail.nextFS:SetText(GOLD .. "ROLLING" .. R
+      .. (step and ("\n" .. BRIGHT .. step .. R) or "")
+      .. "\n" .. DIM .. "Each roll stays your click." .. R)
+    rail.nextFS:SetHeight(rail.nextFS:GetStringHeight() + 2)
     rail.nextBtn:SetText("Stop")
+    rail.nextBtn:Show()
     rail.nextBtn:Enable()
     rail.nextBtn:SetScript("OnClick", function() PP.safeCall(EF.Stop) end)
     return
   end
   local ok, label, tip, handler = pcall(EF.ResolveNextAction)
   if not ok then return end
+  EF.RefreshChaseLine()
   rail.nextFS:SetText(GOLD .. "NEXT" .. R .. DIM .. "  " .. (tip or "") .. R)
   -- Pin the height from GetStringHeight so the button below lands under the
   -- wrapped text. GetHeight() is stale right after SetText -- the recurring
@@ -1075,6 +1531,15 @@ function EF.RefreshRail()
       rail.poolRaid:LockHighlight(); rail.poolFarm:UnlockHighlight()
     else
       rail.poolFarm:UnlockHighlight(); rail.poolRaid:UnlockHighlight()
+    end
+  end
+  -- Say it in WORDS as well as a highlight: which of two buttons is lit is
+  -- exactly the kind of state a colour-only cue fails to convey.
+  if rail.aimFS then
+    if mode then
+      rail.aimFS:SetText(DIM .. "active: " .. R .. GOLD .. string.upper(mode) .. R)
+    else
+      rail.aimFS:SetText(DIM .. "active: none -- pick one" .. R)
     end
   end
   -- THE NEXT ACTION, first and in-line. This is the thing you came to the
@@ -1160,16 +1625,55 @@ local function BuildRail()
   rail.nextBtn:SetPoint("TOPLEFT", rail.nextFS, "BOTTOMLEFT", 0, -4)
   rail.nextBtn:SetText("...")
 
+  -- WHAT you are rolling for. "Hunt 1 missing" tells you a count; the useful
+  -- thing is the name, so you know whether to keep spending on it.
+  rail.chaseFS = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.chaseFS:SetPoint("TOPLEFT", rail.nextBtn, "BOTTOMLEFT", 0, -5)
+  rail.chaseFS:SetWidth(182)
+  rail.chaseFS:SetJustifyH("LEFT"); rail.chaseFS:SetJustifyV("TOP")
+  rail.chaseFS:SetSpacing(1)
+
   rail.body = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  rail.body:SetPoint("TOPLEFT", rail.nextBtn, "BOTTOMLEFT", 0, -10)
+  rail.body:SetPoint("TOPLEFT", rail.chaseFS, "BOTTOMLEFT", 0, -10)
   rail.body:SetWidth(182)
   rail.body:SetJustifyH("LEFT"); rail.body:SetJustifyV("TOP")
   rail.body:SetSpacing(2)
 
-  -- Orb spend per reroll: [-] n [+]
+  -- ---------------------------------------------------------------------
+  -- The bottom cluster used to be five identical buttons in a block: "Tome
+  -- on/off", "Build score", "Farm pool", "Raid pool", "Quality fish". Same
+  -- size, same weight, no grouping, and nothing saying what any of them did or
+  -- WHEN you would want it. Grouped now, each group headed and captioned with
+  -- the one sentence that decides whether it applies to you right now.
+  local function Header(text, anchorTo, yOff)
+    local fs = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    fs:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, yOff)
+    fs:SetWidth(182); fs:SetJustifyH("LEFT")
+    fs:SetText(GOLD .. text .. R)
+    return fs
+  end
+  local function Caption(text, yOff)
+    local fs = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    fs:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, yOff)
+    fs:SetWidth(182); fs:SetJustifyH("LEFT"); fs:SetSpacing(1)
+    fs:SetText(DIM .. text .. R)
+    return fs
+  end
+
+  -- GROUP 1 (lowest): manual roll. The NEXT button up top is the usual way in;
+  -- this is the escape hatch when you want to drive it yourself.
+  rail.rerollBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
+  rail.rerollBtn:SetWidth(182); rail.rerollBtn:SetHeight(22)
+  rail.rerollBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 16)
+  rail.rerollBtn:SetText("Reroll junk")
+  rail.rerollBtn:SetScript("OnClick", function() PP.safeCall(EF.StartRerollSmart) end)
+  Caption("Manual roll -- clears junk, else fishes. The NEXT button "
+    .. "above is usually the better move.", 40)
+
+  -- GROUP 2: orbs per roll. This is a SPEND dial, so say what spending buys.
   local minus = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
   minus:SetWidth(22); minus:SetHeight(20)
-  minus:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 90)
+  minus:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 74)
   minus:SetText("-")
   local orbLabel = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   orbLabel:SetPoint("LEFT", minus, "RIGHT", 6, 0)
@@ -1178,10 +1682,9 @@ local function BuildRail()
   plus:SetPoint("LEFT", orbLabel, "RIGHT", 6, 0)
   plus:SetText("+")
   local function orbText()
-    orbLabel:SetText(DIM .. "orbs/reroll: " .. R .. GOLD
+    orbLabel:SetText(DIM .. "orbs/roll: " .. R .. GOLD
       .. (PP.db.options.rerollOrbs or 1) .. R .. DIM .. "  (shift +/-10)" .. R)
   end
-  -- Shift-click steps by 10 (1..100) so fishing values are reachable fast.
   minus:SetScript("OnClick", function()
     local step = IsShiftKeyDown() and 10 or 1
     PP.db.options.rerollOrbs = math.max(1, (PP.db.options.rerollOrbs or 1) - step); orbText()
@@ -1191,35 +1694,36 @@ local function BuildRail()
     PP.db.options.rerollOrbs = math.min(100, (PP.db.options.rerollOrbs or 1) + step); orbText()
   end)
   orbText()
+  Caption("More orbs = higher-quality draw. Crank to ~100 before fishing.", 98)
 
-  rail.rerollBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
-  rail.rerollBtn:SetWidth(182); rail.rerollBtn:SetHeight(22)
-  rail.rerollBtn:SetPoint("BOTTOM", rail, "BOTTOM", 0, 16)
-  rail.rerollBtn:SetText("Reroll junk")
-  rail.rerollBtn:SetScript("OnClick", function() PP.safeCall(EF.StartRerollSmart) end)
-
-  -- Run-start pool buttons: one click computes the plan, syncs the build
-  -- mode, and X-marks the disable tiles.
+  -- GROUP 3: which pool this run is building toward. Two buttons that look
+  -- like actions but are really a MODE, so the active one is named in words
+  -- (not just highlighted -- colour alone is not readable here).
   rail.poolFarm = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
   rail.poolFarm:SetWidth(88); rail.poolFarm:SetHeight(22)
-  rail.poolFarm:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 40)
-  rail.poolFarm:SetText("Farm pool")
+  rail.poolFarm:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 124)
+  rail.poolFarm:SetText("Farm")
   rail.poolFarm:SetScript("OnClick", function() PP.safeCall(EF.ApplyPool, "farm") end)
 
   rail.poolRaid = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
   rail.poolRaid:SetWidth(88); rail.poolRaid:SetHeight(22)
   rail.poolRaid:SetPoint("LEFT", rail.poolFarm, "RIGHT", 6, 0)
-  rail.poolRaid:SetText("Raid pool")
+  rail.poolRaid:SetText("Raid")
   rail.poolRaid:SetScript("OnClick", function() PP.safeCall(EF.ApplyPool, "raid") end)
 
-  -- Level-1 tome enable/disable advisor + build score. Both read the catalog
-  -- tiles, so the rail (only up while the Echoes window is open) is their home.
+  rail.aimFS = Caption("", 148)
+  Header("AIM", rail, 168)
+  Caption("Raid = breadth, the default. Farm = repeats uncapped, for "
+    .. "rank-ups. Sets the plan and syncs it to EBH.", 186)
+
+  -- GROUP 4 (top of the cluster): things that open a report, not things that
+  -- spend anything.
   rail.tomeBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
   rail.tomeBtn:SetWidth(88); rail.tomeBtn:SetHeight(22)
-  rail.tomeBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 64)
-  rail.tomeBtn:SetText("Tome on/off")
+  rail.tomeBtn:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 224)
+  rail.tomeBtn:SetText("Pool plan")
   rail.tomeBtn:SetScript("OnClick", function()
-    if PP.TomeManager then PP.safeCall(PP.TomeManager.Command, "") end
+    if PP.TomeManager then PP.safeCall(PP.TomeManager.Command, "bis") end
   end)
 
   rail.scoreBtn = CreateFrame("Button", nil, rail, "UIPanelButtonTemplate")
@@ -1229,6 +1733,15 @@ local function BuildRail()
   rail.scoreBtn:SetScript("OnClick", function()
     if PP.BuildScore then PP.safeCall(PP.BuildScore.Report) end
   end)
+
+  -- Live progress from the badge pass sits with the pool plan it belongs to.
+  rail.poolLeft = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rail.poolLeft:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 248)
+  rail.poolLeft:SetWidth(182); rail.poolLeft:SetJustifyH("LEFT")
+
+  Header("TOOLS", rail, 268)
+  Caption("Pool plan badges the tiles to toggle -- only applies at "
+    .. "LEVEL 1. Build score rates the run you have now.", 286)
 
   -- Live pool progress: counts what is badged on screen right now, so it ticks
   -- down as you click. No command, no chat line.

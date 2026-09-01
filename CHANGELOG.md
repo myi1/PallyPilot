@@ -4,6 +4,54 @@ Notable changes to PallyPilot. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versions match the GitHub
 releases and the `.toc`. Full commit-level history is in git.
 
+## [0.78.0] - 2026-09-01
+### Fixed
+- **A reroll queued 70 echoes.** The no-junk fallback queued the ENTIRE fodder
+  ranking, and since EbonholdHub's auto-pick answers the draw there is no pause
+  between items -- it would have fed most of a finished build to the orb
+  unattended. The keeper fallback now queues exactly ONE echo and names it, and
+  a hard cap of 12 bounds every queue from every caller.
+- **The engine stalled forever on a tile that was plainly on screen.** The perk
+  database calls an echo "Paladin - Stonefist Barrage - Rare" while the journal
+  tile reads "Stonefist Barrage", and tile discovery only yielded tiles the
+  catalog could RATE -- so an unrated echo was invisible to the one consumer
+  that just needed to click it. Clicking no longer requires a rating, and a
+  class prefix or quality suffix on either side no longer causes a miss. A tile
+  that genuinely is not there is skipped instead of wedging the queue.
+- **The Builds page reported "nothing is measured" while sitting on 907 logged
+  fights.** A migration deleted old-format capture rows but left `buildId` on
+  the fights pointing at them, and an id was treated as authoritative -- so a
+  dangling id suppressed name matching and orphaned hundreds of fights. Dead
+  ids are cleared on load, a dangling id now falls through to the name, and
+  builds that exist only as a tag on logged fights appear as real rows.
+- Rolling showed "RUNNING" at the top of the rail while the live instruction sat
+  pinned to the bottom, out of view.
+- Stopping mid-hunt left the hunt armed, so the next ordinary reroll silently
+  resumed it.
+
+### Added
+- **Hunt: goal-directed rolling.** Chases the CHASE list with a roll budget and
+  stops the moment one lands. Re-picks the weakest fodder each roll, refuses to
+  feed a CORE/S echo, and names every echo and target before it starts.
+  `/ep hunt [rolls]`, or the NEXT button.
+- **`/ep tilediag`** -- records what the engine can actually see in the run
+  panel, to SavedVariables, so a stall is diagnosed from disk rather than
+  guessed at.
+
+### Changed
+- **The Builds page is a ranked list, not a spreadsheet.** It was a metric x
+  build matrix that answered "what are all the numbers" when the question is
+  "which build should I run" -- and it led with predicted composition while the
+  measured damage sat below. Now: the answer in one sentence with the gap and
+  how much to trust it, then one card per build (rank, name, dps, evidence,
+  delta), with composition as a single quiet line.
+- **The journal rail is grouped and captioned.** Five identical buttons with no
+  indication of purpose became four labelled groups, each with the one sentence
+  that says whether it applies right now. "Tome on/off" is "Pool plan" and says
+  it only works at level 1; Farm/Raid name the active mode in words rather than
+  relying on a highlight.
+- The rail names **what you are chasing**, not just how many are missing.
+
 ## [0.77.0] - 2026-09-01
 ### Added
 - **`/ep now` and a NEXT button on the journal rail.** One answer, two lines:

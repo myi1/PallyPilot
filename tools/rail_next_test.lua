@@ -43,6 +43,8 @@ PP.HubSync = { Push = function() called = "sync" end }
 assert(loadfile("EchoFlow.lua"))()
 local EF = PP.EchoFlow
 EF.StartReroll = function() called = "reroll" end
+-- The roll button drives the bounded HUNT now, not a raw reroll queue.
+EF.StartHunt = function() called = "hunt" end
 EF.StartQualityFish = function() called = "fish" end
 assert(EF.ResolveNextAction, "EF.ResolveNextAction must be exposed")
 
@@ -70,8 +72,11 @@ assert(did == "sync", "levelling button must push the build, got " .. tostring(d
 label, tip, did = at(80, 3, 0, true)
 print(("lvl 80/a %-28s -> %s"):format(tostring(label), tostring(did)))
 assert(string.find(label, "3 missing"), "must count the missing: " .. label)
+assert(string.find(label, "rolls"), "the button must state its roll budget: " .. label)
 assert(string.find(tip, "Heavy Incantations"), "tooltip must name the fodder: " .. tip)
-assert(did == "reroll", "must start a reroll, got " .. tostring(did))
+assert(string.find(tip, "the moment one lands"),
+  "the tooltip must promise it stops on success: " .. tip)
+assert(did == "hunt", "must start a bounded hunt, got " .. tostring(did))
 
 -- 4. Nothing missing but keepers below Epic: fish.
 label, tip, did = at(80, 0, 12, true)
@@ -93,3 +98,10 @@ assert(label == nil, "with no fodder and nothing to fish the button must hide")
 assert(tip and #tip > 0, "it must still explain why")
 
 print("\nRAIL NEXT OK -- one action per state, no dead buttons.")
+
+-- While the engine is running the rail must still say WHAT TO DO, not just
+-- "RUNNING". The instruction used to live in a FontString pinned to the bottom
+-- of the rail while the prominent line said nothing useful.
+assert(EF.CurrentStepText, "EF.CurrentStepText must be exposed")
+assert(EF.CurrentStepText() == nil, "no engine running -> no step text")
+print("\nstep text with no engine: nil (ok)")

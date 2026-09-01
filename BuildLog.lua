@@ -58,9 +58,18 @@ local function Measured(key, name)
     -- legacy fallback for fights logged before ids existed. The old `id-match
     -- OR name-match` let two different builds sharing a label inherit each
     -- other's DPS (Codex-review finding).
+    -- An id wins when it points at a capture that still EXISTS. A dangling id
+    -- (its capture deleted, or written by an older format) must fall through to
+    -- the name instead of suppressing the match entirely -- that suppression is
+    -- what made hundreds of logged fights unreachable.
     local match
-    if f.buildId and key then match = (f.buildId == key)
-    else match = (f.build ~= nil and f.build == name) end
+    local live = f.buildId and PP.db and PP.db.buildLog
+      and PP.db.buildLog[f.buildId] ~= nil
+    if live and key then
+      match = (f.buildId == key)
+    else
+      match = (f.build ~= nil and f.build == name)
+    end
     if match and f.dps and (f.dur or 0) >= 10 then
       n = n + 1; sum = sum + f.dps
       if f.dps > best then best = f.dps end
@@ -245,9 +254,46 @@ function BL.Capture(reason)
   return rec
 end
 
+-- Captures PLUS builds that exist only as a tag on logged fights.
+--
+-- A capture is a fingerprint of the run at one moment; a fight carries the name
+-- of the build that was active. Those are different records, and for most of
+-- this addon's history the fights accumulated names the capture table never
+-- had -- 427 fights on one build, 247 on another, with a single capture row to
+-- show for it. Reporting only captures threw all of that away and printed
+-- "nothing here is measured" on top of it.
+--
+-- Synthesised rows are marked `_fromFights` so the panel can be honest that
+-- their build composition was never fingerprinted, only their damage.
+local function MergedLog()
+  local log = PP.db and PP.db.buildLog
+  local out = {}
+  for k, v in pairs(log or {}) do out[k] = v end
+
+  local haveName = {}
+  for _, r in pairs(out) do
+    if r.name then haveName[r.name] = true end
+    if r.userName then haveName[r.userName] = true end
+  end
+
+  local counts = {}
+  for _, f in ipairs((PP.db and PP.db.fights) or {}) do
+    if f.build and f.dps and (f.dur or 0) >= 10 and not haveName[f.build] then
+      counts[f.build] = (counts[f.build] or 0) + 1
+    end
+  end
+  -- One-off tags ("idk", "36 echoes #160") are noise, not builds.
+  for name, n in pairs(counts) do
+    if n >= 3 then
+      out["fights:" .. name] = { name = name, _fromFights = true, _fightCount = n }
+    end
+  end
+  return out
+end
+
 -- Side-by-side of every build we've fingerprinted.
 function BL.Report()
-  local log = PP.db and PP.db.buildLog
+  local log = MergedLog()
   if not log or not next(log) then
     PP.print("No builds captured yet. A build is fingerprinted whenever you "
       .. "APPLY it -- swap between your saved builds once each, then run this again. "
@@ -334,28 +380,67 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 -- across builds, which only works if they line up on one row. Label column on
 -- the left, one column per build, best value in each row marked with a ">"
 -- prefix (a symbol, never colour alone).
-local LABEL_W, COL_W = 104, 106
+-- A build CARD, not a spreadsheet row.
+--
+-- The page used to be a metric x build matrix: thirteen labelled rows, three
+-- columns, winners flagged per row. It answered "what are all the numbers"
+-- when the player is asking "which build should I run". Reading it meant
+-- holding three columns in your head and doing the comparison yourself, and it
+-- led with PREDICTED composition while the measured damage sat further down.
+--
+-- One card per build instead, ranked, damage first:
+--
+--    1  Loadout 7                            312k
+--       MEASURED - 247 fights                best
+--       19 S - 5 core - +70% adaptive - 106k hp
+--
+-- Rank, name and dps read in one pass; the evidence line says how much to
+-- trust it; composition is one quiet line, only when we actually captured it.
+-- Colourblind: rank numerals, "best"/"-4%", and the MEASURED/PREDICTED words
+-- all carry the meaning without colour.
 local function GetRow(i)
   if rows[i] then return rows[i] end
   local r = CreateFrame("Frame", nil, content)
-  r:SetWidth(430); r:SetHeight(14)
-  r.label = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  r.label:SetPoint("TOPLEFT", r, "TOPLEFT", 0, 0)
-  r.label:SetWidth(LABEL_W); r.label:SetJustifyH("LEFT")
-  r.cells = {}
-  for c = 1, 3 do
-    local f = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f:SetPoint("TOPLEFT", r, "TOPLEFT", LABEL_W + (c - 1) * COL_W, 0)
-    f:SetWidth(COL_W - 4); f:SetJustifyH("LEFT")
-    r.cells[c] = f
-  end
+  r:SetWidth(430); r:SetHeight(46)
+
+  r.rank = r:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  r.rank:SetPoint("TOPLEFT", r, "TOPLEFT", 0, -1)
+  r.rank:SetWidth(22); r.rank:SetJustifyH("RIGHT")
+
+  r.name = r:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  r.name:SetPoint("TOPLEFT", r, "TOPLEFT", 32, 0)
+  r.name:SetWidth(250); r.name:SetJustifyH("LEFT")
+
+  r.dps = r:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  r.dps:SetPoint("TOPRIGHT", r, "TOPRIGHT", -4, -1)
+  r.dps:SetWidth(120); r.dps:SetJustifyH("RIGHT")
+
+  r.meta = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  r.meta:SetPoint("TOPLEFT", r, "TOPLEFT", 32, -17)
+  r.meta:SetWidth(250); r.meta:SetJustifyH("LEFT")
+
+  r.delta = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  r.delta:SetPoint("TOPRIGHT", r, "TOPRIGHT", -4, -18)
+  r.delta:SetWidth(120); r.delta:SetJustifyH("RIGHT")
+
+  r.detail = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  r.detail:SetPoint("TOPLEFT", r, "TOPLEFT", 32, -30)
+  r.detail:SetWidth(370); r.detail:SetJustifyH("LEFT")
+
+  -- Hairline separator: structure without drawing attention to itself.
+  r.line = r:CreateTexture(nil, "ARTWORK")
+  r.line:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
+  r.line:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 0, 0)
+  r.line:SetHeight(1)
+  r.line:SetTexture(1, 1, 1, 0.07)
+
   rows[i] = r
   return r
 end
 
 function BL.Refresh()
   if not (frame and content) then return end
-  local log = PP.db and PP.db.buildLog
+  local log = MergedLog()
   local list = {}
   for key, r in pairs(log or {}) do
     r._key = key; r._m = Measured(r.id, r.name); list[#list + 1] = r
@@ -372,27 +457,45 @@ function BL.Refresh()
     frame.hint:SetText(DIM .. "A build is fingerprinted automatically whenever you "
       .. "APPLY it -- swap between your saved builds once each." .. R)
   else
-    -- SAY WHICH ONE. A table of numbers isn't an answer to "which is better".
+    -- ONE sentence, and it must be the answer to "which build should I run".
+    -- Everything else on this page is supporting evidence for this line.
     local m = 0
     for _, r in ipairs(list) do if r._m then m = m + 1 end end
-    -- Verdict (focal) and its caveat live on separate lines with separate
-    -- weights, so the answer reads at a glance and the hedge doesn't dilute it.
     local top = list[1]
-    if m > 0 then
-      frame.verdict:SetText(VERD .. "Best: " .. R .. BRIGHT .. (top.name or "?") .. R)
-      frame.hint:SetText(DIM .. "Highest measured dps -- " .. R .. BRIGHT
-        .. K(top._m.avg) .. R .. DIM .. " avg over " .. top._m.n .. " fights. "
-        .. "Evidence, not a guess." .. R
-        .. "\n" .. DIM .. #list .. " captured · showing " .. math.min(#list, 3) .. R)
+
+    if m == 0 then
+      frame.verdict:SetText(BRIGHT .. "No build has been measured yet" .. R)
+      frame.hint:SetText(DIM .. "Fight for 10s or more on two different builds and "
+        .. "the real answer replaces the guesswork. " .. #list .. " build"
+        .. (#list == 1 and "" or "s") .. " known." .. R)
+    elseif m == 1 then
+      frame.verdict:SetText(BRIGHT .. tostring(top.name or "?") .. R .. DIM
+        .. " is the only measured build" .. R)
+      frame.hint:SetText(DIM .. K(top._m.avg) .. " over " .. top._m.n .. " fight"
+        .. (top._m.n == 1 and "" or "s") .. ". Play a second build to get a "
+        .. "comparison." .. R)
     else
-      local why = {}
-      if top.S then why[#why + 1] = top.S .. " S-tier" end
-      if top.uniques then why[#why + 1] = "+" .. top.uniques .. "% Adaptive" end
-      frame.verdict:SetText(BRIGHT .. "Likely best: " .. (top.name or "?") .. R
-        .. (#why > 0 and (DIM .. "  " .. table.concat(why, ", ") .. R) or ""))
-      frame.hint:SetText(EMBER .. "Nothing here is measured." .. R .. DIM
-        .. " Fight 10s+ on two builds and the real answer replaces this guess." .. R
-        .. "\n" .. DIM .. #list .. " captured · showing " .. math.min(#list, 3) .. R)
+      -- The gap matters as much as the winner: a 2% lead over 40 fights is
+      -- noise, and saying so is more useful than crowning it.
+      local second = nil
+      for i = 2, #list do if list[i]._m then second = list[i] break end end
+      local gap = (second and second._m.avg > 0)
+        and ((top._m.avg / second._m.avg - 1) * 100) or nil
+      frame.verdict:SetText(VERD .. "Best: " .. R .. BRIGHT
+        .. tostring(top.name or "?") .. R .. GOLD .. "  " .. K(top._m.avg) .. R)
+      local conf
+      if not gap then
+        conf = ""
+      elseif gap < 3 then
+        conf = "  Too close to call -- keep playing both."
+      elseif top._m.n < 10 then
+        conf = "  Only " .. top._m.n .. " fights though; treat it as provisional."
+      else
+        conf = "  A real gap."
+      end
+      frame.hint:SetText(DIM .. "Ahead of " .. tostring(second and second.name or "?")
+        .. " by " .. string.format("%.0f%%", gap or 0) .. " over " .. top._m.n
+        .. " fights." .. conf .. R)
     end
   end
 
@@ -407,144 +510,66 @@ function BL.Refresh()
   end
 
   for _, r in ipairs(rows) do r:Hide() end
-  -- Only three columns fit legibly; show the top three and say so.
-  local show = {}
-  for i = 1, math.min(#list, 3) do show[i] = list[i] end
 
-  -- Each metric: how to read it off a record, and whether higher is better
-  -- (nil = don't mark a winner, it isn't a contest).
-  -- Grouped, because 13 evenly-spaced rows read as one undifferentiated block.
-  -- Tight inside a group (13px), real air between groups (+10px) -- so "these
-  -- belong together" is carried by rhythm instead of by reading every label.
-  -- `g` starts a new group.
-  local METRICS = {
-    { "",          function(b) return b._m and (VERD .. "MEASURED" .. R)
-                                           or (EMBER .. "PREDICTED" .. R) end },
-    { "dps avg",   function(b) return b._m and K(b._m.avg) or (DIM .. "-" .. R) end,
-                   function(b) return b._m and b._m.avg or nil end },
-    { "dps best",  function(b) return b._m and K(b._m.best) or (DIM .. "-" .. R) end,
-                   function(b) return b._m and b._m.best or nil end },
+  -- Rank every build; show them all rather than an arbitrary top three. A
+  -- card is compact enough that six still read cleanly, and hiding a build the
+  -- player is asking about is worse than a slightly longer list.
+  local best = list[1] and list[1]._m and list[1]._m.avg or nil
 
-    { "score",     function(b) return b.score and (b.score .. " " .. (b.grade or "")) or "-" end,
-                   function(b) return b.score end, g = "BUILD" },
-    { "core",      function(b) return b.core or "-" end, function(b) return b.core end },
-    { "S",         function(b) return b.S or "-" end, function(b) return b.S end },
-    { "A",         function(b) return b.A or "-" end, function(b) return b.A end },
-    { "uniques",   function(b) return b.uniques and ("+" .. b.uniques .. "%") or "-" end,
-                   function(b) return b.uniques end },
-    { "not taken", function(b) return b.missingN or "-" end,
-                   function(b) return b.missingN and -b.missingN or nil end },
-    { "sub-Epic",  function(b) return b.qSub or "-" end,
-                   function(b) return b.qSub and -b.qSub or nil end },
-    { "locks",     function(b) return (b.filled and b.slots)
-                     and (b.filled .. "/" .. b.slots) or "-" end,
-                   function(b) return b.filled end },
-
-    { "hp",        function(b) return K((b.power or {}).hp) end,
-                   function(b) return (b.power or {}).hp end, g = "STATS" },
-    { "crit",      function(b) return num((b.power or {}).crit) .. "%" end,
-                   function(b) return (b.power or {}).crit end },
-    { "haste",     function(b) return num((b.power or {}).haste) .. "%" end,
-                   function(b) return (b.power or {}).haste end },
-    { "ap",        function(b) return K((b.power or {}).ap) end,
-                   function(b) return (b.power or {}).ap end },
-    { "sp",        function(b) return K((b.power or {}).sp) end,
-                   function(b) return (b.power or {}).sp end },
-  }
-
-  -- PRUNE THE TABLE. Two rules, both about respecting attention:
-  --  1. Drop dps rows entirely when nothing is measured -- empty rows read as
-  --     "broken", not "no data", and the hint already says so.
-  --  2. Drop any row where every shown build has the SAME value. A row of three
-  --     identical numbers teaches nothing; the differences are the whole point.
-  local anyMeasured = false
-  for _, b in ipairs(show) do if b._m then anyMeasured = true break end end
-  local pruned, pendingGroup = {}, nil
-  for _, m in ipairs(METRICS) do
-    local isDps = (m[1] == "dps avg" or m[1] == "dps best")
-    if isDps and not anyMeasured then
-      -- skip
-    else
-      local first, differs = nil, false
-      for i, b in ipairs(show) do
-        local v = tostring(m[2](b))
-        if i == 1 then first = v elseif v ~= first then differs = true end
-      end
-      -- Always keep the state row; keep others only when they differ.
-      if m[1] == "" or differs or #show < 2 then
-        -- A pruned row must not take its group heading with it: hand any
-        -- pending label to the next row that actually survives.
-        if pendingGroup then m = setmetatable({ m[1], m[2], m[3], g = pendingGroup },
-                                              { __index = m }) end
-        pendingGroup = nil
-        pruned[#pruned + 1] = m
-      elseif m.g then
-        pendingGroup = pendingGroup or m.g
-      end
+  local function Detail(b)
+    -- One quiet line of composition, only for builds we actually fingerprinted.
+    -- A synthesised row (damage logged, never captured) says so instead of
+    -- showing a row of dashes pretending to be data.
+    if b._fromFights then
+      return DIM .. "composition was never captured -- damage only" .. R
     end
+    local bits = {}
+    if b.S then bits[#bits + 1] = b.S .. " S" end
+    if b.core then bits[#bits + 1] = b.core .. " core" end
+    if b.uniques then bits[#bits + 1] = "+" .. b.uniques .. "% adaptive" end
+    local pw = b.power or {}
+    if pw.hp then bits[#bits + 1] = K(pw.hp) .. " hp" end
+    if pw.crit then bits[#bits + 1] = num(pw.crit) .. "% crit" end
+    if #bits == 0 then return "" end
+    return DIM .. table.concat(bits, "  9483  ") .. R
   end
-  METRICS = pruned
 
   local y, n = 0, 0
-  -- Header row: build names.
-  n = n + 1
-  local hr = GetRow(n)
-  hr:ClearAllPoints(); hr:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
-  hr.label:SetText(GOLD .. "metric" .. R)
-  -- Two saved builds can carry the same label ("pp new" twice) while being
-  -- different echo sets. Suffix the duplicates so the columns are tellable apart.
-  local nameCount = {}
-  for _, b in ipairs(show) do
-    nameCount[b.name or "?"] = (nameCount[b.name or "?"] or 0) + 1
-  end
-  local nameSeen = {}
-  for c = 1, 3 do
-    local b = show[c]
-    if b then
-      local nm = b.name or "?"
-      if (nameCount[nm] or 0) > 1 then
-        nameSeen[nm] = (nameSeen[nm] or 0) + 1
-        nm = nm .. " #" .. nameSeen[nm]
-      end
-      hr.cells[c]:SetText(BRIGHT .. string.sub(nm, 1, 14) .. R)
-    else hr.cells[c]:SetText("") end
-  end
-  hr:Show(); y = y + 18
-
-  for _, m in ipairs(METRICS) do
-    -- Air BEFORE a new group, plus a quiet label. Grouping is carried by
-    -- rhythm; the label is only there to name what the gap already separated.
-    if m.g then
-      y = y + 10
-      n = n + 1
-      local gr = GetRow(n)
-      gr:ClearAllPoints(); gr:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
-      gr.label:SetText("|cff85817a" .. m.g .. "|r")
-      for c = 1, 3 do gr.cells[c]:SetText("") end
-      gr:Show(); y = y + 15
-    end
+  for i, b in ipairs(list) do
     n = n + 1
     local r = GetRow(n)
     r:ClearAllPoints(); r:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
-    r.label:SetText(DIM .. m[1] .. R)
-    -- Find the winner for this row, if the metric has a direction.
-    local bestV, bestI = nil, nil
-    if m[3] then
-      for c, b in ipairs(show) do
-        local v = m[3](b)
-        if v and (bestV == nil or v > bestV) then bestV, bestI = v, c end
+
+    -- Rank numeral for measured builds; a dash for ones with no evidence, so
+    -- an unmeasured build never looks like it placed in a contest it sat out.
+    r.rank:SetText(b._m and (GOLD .. i .. R) or (DIM .. "-" .. R))
+    r.name:SetText(BRIGHT .. tostring(b.name or "?") .. R)
+
+    if b._m then
+      r.dps:SetText(((i == 1) and GOLD or BRIGHT) .. K(b._m.avg) .. R)
+      local thin = (b._m.n < 10) and (EMBER .. "  thin sample" .. R) or ""
+      r.meta:SetText(VERD .. "MEASURED" .. R .. DIM .. "  9483  "
+        .. b._m.n .. " fight" .. (b._m.n == 1 and "" or "s") .. R .. thin)
+      if i == 1 then
+        r.delta:SetText(VERD .. "best" .. R)
+      elseif best and best > 0 then
+        r.delta:SetText(DIM .. string.format("%.0f%%", (b._m.avg / best - 1) * 100) .. R)
+      else
+        r.delta:SetText("")
       end
+    else
+      r.dps:SetText(DIM .. "--" .. R)
+      r.meta:SetText(EMBER .. "PREDICTED" .. R .. DIM .. "  9483  no fights yet" .. R)
+      r.delta:SetText("")
     end
-    for c = 1, 3 do
-      local b = show[c]
-      if b then
-        local txt = tostring(m[2](b))
-        -- ">" marks the best in the row: a SYMBOL, readable without colour.
-        r.cells[c]:SetText((bestI == c and #show > 1) and (VERD .. "> " .. R .. txt)
-          or ("  " .. txt))
-      else r.cells[c]:SetText("") end
-    end
-    r:Show(); y = y + 13
+
+    local det = Detail(b)
+    r.detail:SetText(det)
+    local h = (det ~= "" ) and 46 or 34
+    r:SetHeight(h)
+    r.line:Show()
+    r:Show()
+    y = y + h
   end
   content:SetHeight(math.max(10, y + 4))
 
@@ -653,6 +678,26 @@ function BL.Init()
       PP.print(DIM .. "Builds: cleared " .. dropped .. " old-format capture(s) "
         .. "(their identity changed with echo quality, so they could never "
         .. "accumulate fights). Swap builds once each to re-capture." .. R)
+    end
+  end
+
+  -- ORPHANED FIGHTS. The migration above deleted the old-format capture rows
+  -- but left `buildId` on the FIGHTS pointing at them. Because Measured()
+  -- treats an id as authoritative, those fights then matched nothing at all --
+  -- not even by name -- so 338 real fights went permanently invisible and the
+  -- comparison declared "nothing here is measured" while sitting on a year of
+  -- data. Strip the dead ids so those fights fall back to name matching.
+  if PP.db and PP.db.fights then
+    local freed = 0
+    for _, f in ipairs(PP.db.fights) do
+      if type(f.buildId) == "string" and f.buildId:match("^b%d") then
+        f.buildId = nil
+        freed = freed + 1
+      end
+    end
+    if freed > 0 then
+      PP.print(DIM .. "Builds: recovered " .. freed .. " fight(s) that were "
+        .. "pointing at deleted captures -- they match by name again." .. R)
     end
   end
   local f = CreateFrame("Frame")

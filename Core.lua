@@ -838,6 +838,16 @@ SlashCmdList["EBONPILOT"] = function(line)
   -- (The old `cmd == "reroll"` -> EchoFlow.StartReroll branch here was DEAD:
   -- "reroll" is consumed earlier by the chase handler, so this never ran and
   -- the engine silently lost its slash command. It lives on as "rolljunk".)
+  elseif cmd == "tilediag" then
+    -- Records what the reroll engine can actually see in the run panel, so a
+    -- "can't see that tile" stall can be diagnosed from disk instead of guessed.
+    if PP.EchoFlow.TileDiag then PP.safeCall(PP.EchoFlow.TileDiag, arg) end
+  elseif cmd == "hunt" then
+    -- Goal-directed rolling: chase the CHASE list, stop the moment one lands.
+    -- Budget is capped inside StartHunt; the default is deliberately small.
+    if PP.EchoFlow.StartHunt then
+      PP.safeCall(PP.EchoFlow.StartHunt, tonumber(arg))
+    end
   elseif cmd == "rolljunk" then
     if PP.EchoFlow.StartReroll then PP.safeCall(PP.EchoFlow.StartReroll) end
   elseif cmd == "qualityfish" or cmd == "fish" then
