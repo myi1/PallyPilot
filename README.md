@@ -22,7 +22,10 @@ what the best move is and gets out of the way.
 - **Soul Ash advisor** (`/pp ash`) — a real next-best-buy optimizer that reads
   your live tree. It's **prestige-loop aware**: once your permanent enablers are
   bought, it leads with the AoE farm-survival rebuild you need after each reset,
-  so you can start farming ash without dying.
+  so you can start farming ash without dying. Plan a build up front in the
+  **[Ash Tree planner](https://myi1.github.io/PallyPilot/)** — click nodes, watch
+  the permanent vs temporary cost add up, copy the string, then `/pp ash import`
+  and `/pp ash next` walks you through buying it node by node.
 - **Combat meter + build comparison** — `/pp dps` and `/pp report` break your
   damage down by echo (procs roll up to their parent echo). Fights **auto-tag
   with the saved echo build that was active**, so `/pp bench compare` gives you a
@@ -62,6 +65,7 @@ what the best move is and gets out of the way.
 | `/pp gems` | missing enchants / gems / glyphs |
 | `/pp upgrades` | gear-health / next-upgrade finder |
 | `/pp ash` | Soul Ash next-best-buy advisor (prestige-loop aware) |
+| `/pp ash import` / `/pp ash next` | load a build from the [Ash Tree planner](https://myi1.github.io/PallyPilot/), then buy it node by node |
 | `/pp dps` / `/pp report` | combat breakdown by echo |
 | `/pp bench compare` | compare your saved builds from logged fights |
 | `/pp bench cap <n>` | set how many fights to keep (default 1000) |
