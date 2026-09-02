@@ -178,5 +178,52 @@ assert(#levelling < #atCap,
   "the levelling rail must be SHORTER than the level-80 one, not padded with gaps")
 print(("levelling  : %d elements, both toolsets hidden"):format(#levelling))
 
+-- 5. THE CEILING. The rail is as tall as the journal and no taller. Top-down
+--    placement with no clamp walked straight off the bottom, and the LAST
+--    widget placed is the reroll/fish button -- so a long lock list did not
+--    shrink anything, it made the button you came for disappear.
+local RAIL_H = 420
+local function simulateClamped(bodyText, railH)
+  -- Mirrors LayoutRail: measure the fixed furniture, give the body what is
+  -- left, clip the body rather than losing a control.
+  rail.body:SetText(bodyText)
+  local fixed = 14
+  for _, step in ipairs(ORDER) do
+    if step[1] ~= "body" then
+      local w = rail[step[1]]
+      if not w.__ppOff then
+        local h = w.__isBtn and w:GetHeight() or w:GetStringHeight()
+        if not w.__isBtn and w.__text == "" then h = 0 end
+        if h > 0 then fixed = fixed + h + step[2] end
+      end
+    end
+  end
+  local bodyH = rail.body:GetStringHeight()
+  local avail = railH - fixed - 14
+  local clamped = (avail < bodyH) and math.max(0, avail) or bodyH
+  return fixed + clamped + 14, clamped, bodyH
+end
+
+rail.tomeBtn.__ppOff, rail.orbMinus.__ppOff, rail.rerollBtn.__ppOff = false, false, false
+rail.toolCap:SetText("Badges every tile you need to right-click.")
+rail.poolLeft:SetText("pool: 3 OFF, 12 ON left here")
+
+local huge = long .. "\n" .. long .. "\n" .. long
+local total, clamped, wanted = simulateClamped(huge, RAIL_H)
+print(("overflow   : body wanted %dpx, clamped to %dpx, total %dpx (rail %d)")
+  :format(wanted, clamped, total, RAIL_H))
+assert(clamped < wanted, "an over-tall body must be clipped, not allowed to run on")
+assert(total <= RAIL_H,
+  ("everything must fit inside the rail: %dpx of %dpx"):format(total, RAIL_H))
+-- No floor: a floor that does not fit just moves the overflow back onto the
+-- button. The body gives way entirely before a control does.
+assert(clamped >= 0, "the clamp must never go negative")
+
+-- And a body that already fits must NOT be touched.
+local fitTotal, fitClamped, fitWanted = simulateClamped("BUILD: RAID (breadth)", RAIL_H)
+assert(fitClamped == fitWanted, "a body that fits must be left alone")
+print(("no overflow: body %dpx untouched, total %dpx"):format(fitClamped, fitTotal))
+
 print("\nRAIL LAYOUT OK -- sequential measured placement, no overlap at any")
-print("length, and hidden tools take their gap with them.")
+print("length, hidden tools take their gap with them, and nothing is ever")
+print("pushed off the bottom.")

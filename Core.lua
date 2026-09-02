@@ -815,8 +815,15 @@ SlashCmdList["EBONPILOT"] = function(line)
     -- "I farmed a tome, now what?" -- owned + rated but not yet in the run.
     if PP.EchoAudit.WantReport then PP.safeCall(PP.EchoAudit.WantReport) end
   elseif cmd == "buildcode" or cmd == "export" then
-    -- Shareable EBH1 loadout string for this class's curated build.
-    if PP.HubSync.ShowExport then PP.safeCall(PP.HubSync.ShowExport) end
+    -- Two different strings, and people mean the second one when they ask how
+    -- to share a build:
+    --   /ep buildcode      the class's CURATED build (same for everyone)
+    --   /ep buildcode run  the build you are ACTUALLY running right now
+    if string.find(arg, "run", 1, true) then
+      if PP.HubSync.ShowRunExport then PP.safeCall(PP.HubSync.ShowRunExport) end
+    else
+      if PP.HubSync.ShowExport then PP.safeCall(PP.HubSync.ShowExport) end
+    end
   elseif cmd == "locks" then
     local n = tonumber(arg)
     if n and n >= 1 and n <= 12 then

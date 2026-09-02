@@ -1566,20 +1566,63 @@ end
 -- of RefreshRail, once all the text is set -- FontString heights are only
 -- meaningful after SetText, which is exactly the trap that produced the
 -- overlapping mess this replaces.
+--
+-- THE RAIL HAS A CEILING. Its height is the journal's height, and top-down
+-- placement with no clamp simply walked off the bottom once the content grew:
+-- the LAST widget placed is the reroll/fish button, so a long lock list plus a
+-- long NEXT line pushed the button you came for clean off the panel. It did not
+-- move or shrink, it vanished, which reads as a broken addon rather than a full
+-- one. The body is the elastic part, so it is what gives.
 function EF.LayoutRail()
   if not rail then return end
   local X, W = 14, 182
   local y = 14
 
-  local function place(fs, gap)
+  -- What the fixed furniture below the body needs. Measured, not guessed, so
+  -- this stays honest when the text changes.
+  local railH = (rail.GetHeight and rail:GetHeight()) or 0
+  if railH and railH > 0 then
+    local need = 14 + 20                              -- top pad + title
+    for _, fs in ipairs({ rail.nextFS, rail.chaseFS, rail.aimFS, rail.aimCap,
+                          rail.toolCap, rail.poolLeft, rail.statusFS }) do
+      if fs and fs.GetText and (fs:GetText() or "") ~= "" then
+        need = need + (fs:GetStringHeight() or 12) + 6
+      end
+    end
+    for _, b in ipairs({ rail.nextBtn, rail.poolFarm, rail.tomeBtn, rail.rerollBtn }) do
+      if b and not b.__ppOff then need = need + (b:GetHeight() or 22) + 6 end
+    end
+    if not rail.orbMinus.__ppOff then
+      need = need + (rail.orbMinus:GetHeight() or 20) + 10
+    end
+    local bodyH = (rail.body:GetText() or "") ~= ""
+      and (rail.body:GetStringHeight() or 0) or 0
+    -- CONTROLS BEAT PROSE. Whatever is left after the furniture is what the
+    -- body gets -- with no floor, because a floor that does not fit just moves
+    -- the overflow back onto the button. If nothing is left the body goes
+    -- entirely; a summary you cannot read is a smaller loss than a button you
+    -- cannot click.
+    local avail = railH - need - 14
+    if bodyH > 0 and avail < bodyH then
+      rail.body:SetHeight(math.max(0, avail))
+      rail.__bodyClipped = true
+    else
+      rail.__bodyClipped = false
+    end
+  end
+
+  local function place(fs, gap, clampedH)
     if not fs then return end
     local txt = fs.GetText and fs:GetText()
     if not txt or txt == "" then fs:Hide(); return end
     fs:Show()
     fs:ClearAllPoints()
     fs:SetPoint("TOPLEFT", rail, "TOPLEFT", X, -y)
-    fs:SetHeight(fs:GetStringHeight() + 1)
-    y = y + fs:GetStringHeight() + 1 + (gap or 6)
+    -- clampedH wins where the ceiling logic above shortened this element;
+    -- re-measuring here would silently undo the clamp.
+    local h = clampedH or (fs:GetStringHeight() + 1)
+    fs:SetHeight(h)
+    y = y + h + (gap or 6)
   end
   local function placeBtn(b, gap, indentX, w)
     if not b then return end
@@ -1613,7 +1656,7 @@ function EF.LayoutRail()
   placeBtn(rail.nextBtn, 4, X, W)
   place(rail.chaseFS, 8)
 
-  place(rail.body, 8)
+  place(rail.body, 8, rail.__bodyClipped and rail.body:GetHeight() or nil)
 
   place(rail.aimFS, 4)
   pair(rail.poolFarm, rail.poolRaid, 3)
@@ -1640,6 +1683,7 @@ function EF.LayoutRail()
 
   rule(2)
   placeBtn(rail.rerollBtn, 6, X, W)
+  place(rail.statusFS, 4)
 end
 
 function EF.RefreshRail()
@@ -1725,7 +1769,13 @@ function EF.RefreshRail()
     else
       t[#t+1] = GOLD .. "LOCK NOW" .. R .. DIM .. " -- "
         .. (#picks - #todo) .. " of " .. #picks .. " done" .. R
-      for _, p in ipairs(todo) do t[#t+1] = "  " .. p.name end
+      -- Capped at four. The rail has a fixed height, and an uncapped list is
+      -- what pushed the button at the bottom off the panel entirely. You can
+      -- only click one at a time anyway.
+      for i = 1, math.min(#todo, 4) do t[#t+1] = "  " .. todo[i].name end
+      if #todo > 4 then
+        t[#t+1] = DIM .. "  +" .. (#todo - 4) .. " more" .. R
+      end
     end
     local inRun = #RunJunk()
     local qt = PP.EchoAudit.RunQualityTargets and PP.EchoAudit.RunQualityTargets()
@@ -1857,10 +1907,14 @@ local function BuildRail()
   rail.poolLeft:SetWidth(182)
   rail.poolLeft:SetJustifyH("LEFT")
 
+  -- Placed by LayoutRail like everything else. This was anchored BOTTOMLEFT at
+  -- a fixed 116px -- the last widget still using the bottom-up system that made
+  -- the rail overlap in the first place, so it drifted into whatever the
+  -- top-down flow happened to put there.
   status = rail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  status:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 14, 116)
   status:SetWidth(182)
   status:SetJustifyH("LEFT")
+  rail.statusFS = status
 
   -- Refresh badges AND the rail while the journal is open. The rail used to
   -- refresh only on OnShow, so with the window left open (which is exactly what

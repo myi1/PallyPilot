@@ -308,7 +308,83 @@ function HS.ExportString()
          nil, #parts, missing
 end
 
+-- THE BUILD YOU ARE ACTUALLY RUNNING, as an EBH1 string.
+--
+-- HS.ExportString above shares the addon's CURATED recommendation for your
+-- class -- useful, but it is the same string for everyone playing that class,
+-- and it is not what people mean when they ask how to share their build. This
+-- reads the live run instead, so what you post is what you are playing.
+--
+-- Tier per echo comes from our own rating (so the receiving auto-pick knows
+-- what to prioritise); anything unrated ships as B rather than being dropped,
+-- because it IS in the build and omitting it would misrepresent it.
+function HS.ExportRunString()
+  local EO = EbonholdHub and EbonholdHub.EchoOwnership
+  if not (EO and EO.CollectOwnedSets) then
+    return nil, "Need EbonholdHub loaded to read your run."
+  end
+  local ok, owned = pcall(EO.CollectOwnedSets)
+  if not (ok and type(owned) == "table") then
+    return nil, "Couldn't read your run -- are you level 80 and in a run?"
+  end
+
+  local best = BestIdByName()
+  if not next(best) then
+    return nil, "Can't read the server's echo database yet -- log in fully, then retry."
+  end
+
+  local classify = PP.EchoAudit and PP.EchoAudit.ClassifyName
+  local parts, seen, n, missing = {}, {}, 0, 0
+  for lower in pairs(owned) do
+    -- CollectOwnedSets keys carry quality suffixes ("Pandemic - Epic"), and
+    -- BestIdByName is keyed on the bare name, so strip before looking up.
+    local base = Norm(lower)
+    local stripped = string.match(base, "^(.-)%s*%-%s*%a+$")
+    if stripped and best[stripped] then base = stripped end
+    if base ~= "" and not seen[base] then
+      seen[base] = true
+      local hit = best[base]
+      if hit then
+        -- CORE is our top rating and CODE_FOR_TIER has no entry for it, so
+        -- without this line the build-defining echoes fell through to the
+        -- default and shipped as B -- the receiving auto-pick would then rank
+        -- them below every A. The curated exporter dodges this by routing
+        -- locks through "S" explicitly; this path has no such backstop.
+        local tier = classify and classify(base) or nil
+        if tier == "CORE" then tier = "S" end
+        local code = CODE_FOR_TIER[tier or ""] or 1     -- unrated ships as B
+        parts[#parts + 1] = hit.id .. "." .. code .. ".1"
+        n = n + 1
+      else
+        missing = missing + 1
+      end
+    end
+  end
+  if n == 0 then
+    return nil, "No echo in your run resolved to a spell id."
+  end
+  table.sort(parts)
+  local class = PP.class or select(2, UnitClass("player")) or "PALADIN"
+  local title = "EbonPilot-run-" .. n
+  return "EBH1:" .. table.concat(parts, ",") .. ":" .. class .. ":" .. title,
+         nil, n, missing
+end
+
 -- Show the string in a copy box (reuses the ash advisor's paste/copy popup).
+function HS.ShowRunExport()
+  local str, err, n, missing = HS.ExportRunString()
+  if not str then PP.print(err or "Couldn't build a string.") return end
+  local box = PP.AshAdvisor and PP.AshAdvisor.ShowBuildBox
+  if box then
+    box("Your CURRENT run (EBH1 -- paste into EbonholdHub Import)", str, false)
+  else
+    PP.print(str)
+  end
+  PP.print("Your run: " .. n .. " echoes"
+    .. (missing > 0 and (" (" .. missing .. " couldn't be resolved to an id)") or "")
+    .. ".")
+end
+
 function HS.ShowExport()
   local str, err, n, missing = HS.ExportString()
   if not str then PP.print(err or "Couldn't build a string.") return end

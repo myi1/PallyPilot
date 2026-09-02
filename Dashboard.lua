@@ -401,6 +401,9 @@ function D.Init()
     -- logged-in class has no echo data yet.
     { "Best build", function() if PP.HubSync and PP.HubSync.Push then PP.HubSync.Push() end end },
     { "Copy build code", function() if PP.HubSync and PP.HubSync.ShowExport then PP.HubSync.ShowExport() end end },
+    -- The one people actually want to share: what they are running, not the
+    -- curated list that is identical for everyone of this class.
+    { "Share my run", function() if PP.HubSync and PP.HubSync.ShowRunExport then PP.HubSync.ShowRunExport() end end },
     { "Tome on/off", function() if PP.TomeManager then PP.TomeManager.Command("") end end },
     { "Rotation HUD", function() if PP.RotationHelper then PP.RotationHelper.Toggle() end end },
     { "Talents", function() if PP.Talents then PP.Talents.Guide() end end },
