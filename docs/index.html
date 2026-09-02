@@ -329,16 +329,30 @@ const ICONDATA = /*__ICONS__*/{"map":{"1":"spell_nature_undyingstrength","2":"in
     cv.style.width = r.width+"px"; cv.style.height = r.height+"px";
     draw();
   }
+  // Has a fit ever landed against a real, measured stage? Until one has, any
+  // size change retries it -- see the observer at the bottom of this file.
+  let fitted = false;
   function fit(){
+    const r = stage.getBoundingClientRect();
+    // A zero-or-tiny stage is the PRE-LAYOUT state, not a small window, and the
+    // maths below cannot survive it: (width - 2*pad) goes negative, so `scale`
+    // comes out negative, the tree draws mirrored off-canvas, and all you get
+    // is a ~110px smudge in the top-left corner until you click Fit by hand.
+    // Refuse the measurement rather than compute rubbish from it.
+    if(r.width < 80 || r.height < 80) return false;
     let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
     for(const n of nodes){ if(n.x<minx)minx=n.x; if(n.x>maxx)maxx=n.x; if(n.y<miny)miny=n.y; if(n.y>maxy)maxy=n.y; }
-    const r = stage.getBoundingClientRect();
-    const pad = 90;
-    const sx = (r.width-pad*2)/(maxx-minx), sy=(r.height-pad*2)/(maxy-miny);
-    scale = Math.min(sx, sy);
+    const spanx = Math.max(1, maxx-minx), spany = Math.max(1, maxy-miny);
+    // Give up padding before inverting the sum, so a genuinely narrow viewport
+    // still gets a sane positive scale.
+    const pad = Math.min(90, r.width/6, r.height/6);
+    const sx = (r.width-pad*2)/spanx, sy = (r.height-pad*2)/spany;
+    scale = Math.max(0.02, Math.min(sx, sy));
     ox = r.width/2 - (minx+maxx)/2*scale;
     oy = r.height/2 - (miny+maxy)/2*scale;
+    fitted = true;
     draw();
+    return true;
   }
   const sx = x => x*scale + ox, sy = y => y*scale + oy;
 
@@ -590,6 +604,19 @@ const ICONDATA = /*__ICONS__*/{"map":{"1":"spell_nature_undyingstrength","2":"in
   // Re-fit once layout/fonts settle, in case the first measure was 0-sized.
   requestAnimationFrame(()=>{ resize(); fit(); });
   window.addEventListener("load", ()=>{ resize(); fit(); });
+  // ...and keep trying. Every one of the three attempts above can still measure
+  // an unlaid-out stage -- web fonts, flex settling, or a pane that gets its
+  // real size after load -- which is exactly what shipped: the page opened with
+  // the tree crushed into the corner and only recovered if you found the Fit
+  // button. Retry on real size changes, then STOP: once a fit has landed, a
+  // later resize must not re-frame a view the reader has panned or zoomed.
+  if(typeof ResizeObserver === "function"){
+    const ro = new ResizeObserver(function(){
+      resize();
+      if(!fitted && fit()) ro.disconnect();
+    });
+    ro.observe(stage);
+  }
 })();
 </script>
 </body>
