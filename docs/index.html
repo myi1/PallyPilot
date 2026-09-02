@@ -329,9 +329,14 @@ const ICONDATA = /*__ICONS__*/{"map":{"1":"spell_nature_undyingstrength","2":"in
     cv.style.width = r.width+"px"; cv.style.height = r.height+"px";
     draw();
   }
-  // Has a fit ever landed against a real, measured stage? Until one has, any
-  // size change retries it -- see the observer at the bottom of this file.
-  let fitted = false;
+  // Has the READER taken control of the view (panned, zoomed, or scrolled)?
+  //
+  // Until they have, the view is ours to manage and every resize re-frames the
+  // tree. "Fit once then stop" was not good enough: the first successful fit
+  // can be computed against a size that changes moments later (a pane that
+  // settles, a window that opens maximised, fonts landing), and the reader is
+  // then stuck with a view framed for a stage that no longer exists.
+  let userAdjusted = false;
   function fit(){
     const r = stage.getBoundingClientRect();
     // A zero-or-tiny stage is the PRE-LAYOUT state, not a small window, and the
@@ -350,7 +355,6 @@ const ICONDATA = /*__ICONS__*/{"map":{"1":"spell_nature_undyingstrength","2":"in
     scale = Math.max(0.02, Math.min(sx, sy));
     ox = r.width/2 - (minx+maxx)/2*scale;
     oy = r.height/2 - (miny+maxy)/2*scale;
-    fitted = true;
     draw();
     return true;
   }
@@ -453,7 +457,7 @@ const ICONDATA = /*__ICONS__*/{"map":{"1":"spell_nature_undyingstrength","2":"in
     if(down){
       const dx=e.clientX-lastx, dy=e.clientY-lasty;
       if(Math.abs(e.clientX-downx)+Math.abs(e.clientY-downy)>4) moved=true;
-      ox+=dx; oy+=dy; lastx=e.clientX; lasty=e.clientY; draw();
+      ox+=dx; oy+=dy; lastx=e.clientX; lasty=e.clientY; userAdjusted=true; draw();
       tip.classList.remove("on");
     } else {
       const n=pick(px,py);
@@ -476,17 +480,18 @@ const ICONDATA = /*__ICONS__*/{"map":{"1":"spell_nature_undyingstrength","2":"in
     const wx=(px-ox)/scale, wy=(py-oy)/scale;
     const f = e.deltaY<0 ? 1.15 : 1/1.15;
     scale = Math.max(0.05, Math.min(3, scale*f));
-    ox = px - wx*scale; oy = py - wy*scale; draw();
+    ox = px - wx*scale; oy = py - wy*scale; userAdjusted=true; draw();
   }, {passive:false});
 
   function zoomBtn(f){
     const r=stage.getBoundingClientRect(), px=r.width/2, py=r.height/2;
     const wx=(px-ox)/scale, wy=(py-oy)/scale;
-    scale=Math.max(0.05,Math.min(3,scale*f)); ox=px-wx*scale; oy=py-wy*scale; draw();
+    scale=Math.max(0.05,Math.min(3,scale*f)); ox=px-wx*scale; oy=py-wy*scale; userAdjusted=true; draw();
   }
   document.getElementById("zin").onclick=()=>zoomBtn(1.3);
   document.getElementById("zout").onclick=()=>zoomBtn(1/1.3);
-  document.getElementById("zfit").onclick=fit;
+  // Fit hands control back to us: after an explicit Fit, resizes re-frame again.
+  document.getElementById("zfit").onclick=function(){ userAdjusted=false; fit(); };
 
   // ---- selection + stats ----
   function toggle(n){ if(sel.has(n.i)) sel.delete(n.i); else sel.add(n.i); afterChange(); }
@@ -604,16 +609,19 @@ const ICONDATA = /*__ICONS__*/{"map":{"1":"spell_nature_undyingstrength","2":"in
   // Re-fit once layout/fonts settle, in case the first measure was 0-sized.
   requestAnimationFrame(()=>{ resize(); fit(); });
   window.addEventListener("load", ()=>{ resize(); fit(); });
-  // ...and keep trying. Every one of the three attempts above can still measure
-  // an unlaid-out stage -- web fonts, flex settling, or a pane that gets its
-  // real size after load -- which is exactly what shipped: the page opened with
-  // the tree crushed into the corner and only recovered if you found the Fit
-  // button. Retry on real size changes, then STOP: once a fit has landed, a
-  // later resize must not re-frame a view the reader has panned or zoomed.
+  // ...and keep watching. Every one of the three attempts above can measure an
+  // unlaid-out stage -- web fonts, flex settling, a pane that gets its real
+  // size after load -- which is what shipped: the page opened with the tree
+  // crushed into the corner and only recovered if you found the Fit button.
+  //
+  // The observer stays connected for the life of the page. While the reader has
+  // not taken over, every size change re-frames the tree, so no single bad
+  // measurement can strand the view; the moment they pan or zoom, we stop
+  // touching it and only keep the canvas backing store in step.
   if(typeof ResizeObserver === "function"){
     const ro = new ResizeObserver(function(){
       resize();
-      if(!fitted && fit()) ro.disconnect();
+      if(!userAdjusted) fit();
     });
     ro.observe(stage);
   }
