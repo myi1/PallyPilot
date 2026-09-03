@@ -778,6 +778,20 @@ SlashCmdList["EBONPILOT"] = function(line)
     PP.safeCall(PP.Snapshot)
   elseif cmd == "orbpreview" or cmd == "orb" then
     if PP.EchoFlow and PP.EchoFlow.OrbPreview then PP.safeCall(PP.EchoFlow.OrbPreview) end
+  elseif cmd == "orbs" then
+    -- Exact orbs-per-roll, for values between the rail's ladder rungs.
+    -- Bare `/ep orbs` reports the current setting instead of erroring.
+    if PP.EchoFlow and PP.EchoFlow.SetOrbs then
+      if arg == nil or arg == "" then
+        PP.print("orbs/roll is " .. ((PP.db.options.rerollOrbs) or 1)
+          .. ". Set it with |cffe0b352/ep orbs <1-100>|r, or use the rail's -/+ "
+          .. "(shift-click jumps to 1 or 100). Quality scales with orbs spent.")
+      else
+        local n = PP.EchoFlow.SetOrbs(arg)
+        if n then PP.print("orbs/roll set to " .. n .. ".")
+        else PP.print("|cffd9694a" .. tostring(arg) .. "|r is not a number. Use /ep orbs <1-100>.") end
+      end
+    end
   elseif cmd == "ash" then
     if PP.AshAdvisor and PP.AshAdvisor.Command then PP.safeCall(PP.AshAdvisor.Command, arg)
     elseif PP.AshAdvisor and PP.AshAdvisor.Report then PP.safeCall(PP.AshAdvisor.Report) end

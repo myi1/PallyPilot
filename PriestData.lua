@@ -335,7 +335,10 @@ do
     "Spirit Surge", "Inner Light",   -- survival proc (both spellings)
     "Ironhide", "Enduring Flesh", "Thick Hide",
   }
-  for i = 1, 18 do B.slotTargets[i] = common end
+  -- 1..19 covers Shirt (4) and Tabard (19) too: an EPIC shirt/tabard takes an
+  -- affix on Ebonhold, and GearAudit only grades those slots when what is
+  -- equipped is Epic. Stopping at 18 silently withheld the tabard verdict.
+  for i = 1, 19 do B.slotTargets[i] = common end
   -- Weapon/wand: Vulnerability + Venom + Affliction first (community), then armor.
   local wep = { "Vulnerability", "Venom", "Affliction", "Spell Mastery",
     "Keen Strikes", "Keen Strike", "Relentless Crits" }
