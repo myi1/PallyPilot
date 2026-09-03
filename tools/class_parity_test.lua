@@ -30,6 +30,7 @@ end
 load("BuildData.lua")
 load("HunterData.lua")
 load("PriestData.lua")
+load("MageData.lua")
 
 local FIELDS = {
   { "statPriority", "table" }, { "bis", "table" }, { "slotTargets", "table" },
