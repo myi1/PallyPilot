@@ -4,6 +4,56 @@ Notable changes to PallyPilot. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versions match the GitHub
 releases and the `.toc`. Full commit-level history is in git.
 
+## [0.80.0] - 2026-09-03
+### Added
+- **MAGE is the fourth supported class** (`MageData.lua`, `PP.Classes.MAGE`) at
+  the same parity bar as Paladin/Hunter/Priest -- a solo Fire mage guide for the
+  hardcore climb. Almost none of it is retail theorycraft:
+  - **Talents are 47 Arcane / 49 Fire, DECODED rather than chosen.** Rellex's
+    "600M DPS" guide in #mage links a talent-calculator string; it decodes
+    against the client's own `Talent.dbc` + custom `Spell.dbc`. 47 Arcane is a
+    hard floor because Arcane row 9 needs 45 in-tree points and holds Spell
+    Power 2/2 (+50% spell crit damage) -- iorek's thread reaches the same number
+    independently.
+  - **Echoes are decoded from two published EBH1 loadouts** (79 and 80 echoes,
+    zero unresolved ids). The 76 that appear in BOTH are the high-conviction
+    core. The lock list is Zedd's published six, in his order, plus Adaptive
+    Power as the ranked seventh.
+  - **The stat line is a crit wall, then haste** -- not spell power. The
+    community target is 100% spell crit (Hot Streak only procs off crits), and
+    the reference build gems haste, not SP.
+  - **The survival engine is class-unique.** The "Pain" affixes scale spell
+    power off damage TAKEN, so a mage facetanks on purpose; Ice Block then
+    clears the 60-minute lockout debuffs that Demonic Awakening and Reaper's
+    Reprieve leave behind, which no other class can do, re-arming both.
+- **Echo effects are now read from the client's custom `Spell.dbc`** (echo
+  spellIds live at 200000+; Description is field 170) instead of from community
+  prose. That is what established that Armor Mastery literally reads "You can
+  equip all armor types" -- which is why the reference build wears plate legs
+  and a shield, and why that echo holds a permanent lock slot: the whole gear
+  plan stops being equippable without it. It also corrected Brittle Armor (a
+  +crit / -armor TRADE, not the pure loss it was described as), Demonic
+  Awakening (leech, not a flat heal) and Reaper's Reprieve (60 min lockout, and
+  it spends no Cheat Death charge).
+
+### Changed
+- `validate_echoes.js` and `validate_talents.js` now cover MAGE (talent tabs
+  81/41/61). Without this the new file would have been shipped unchecked --
+  which is how two community names slipped in as phantoms and were caught:
+  "Temporal Vortex" is really Tempest Vortex, "Calvary Instincts" is Cavalry
+  Instincts.
+- Molten Armor is kept up through the generic `B.rotationUpkeep` path, so
+  RotationHelper gains no new hardcoded class branch.
+- `GearOpt` is deliberately NOT generalised per class. Its enchant/gem/glyph
+  tables are Retribution-specific, the existing guard already prints a
+  text-marked "NOT FOR MAGE", and the mage's gems, glyphs and weapon enchant
+  live in `MageData` -- generalising would create two sources of truth for the
+  same advice.
+
+### Note
+- Releases 0.79.0 through 0.79.4 shipped without CHANGELOG entries; their
+  commit subjects are the record. This entry does not attempt to backfill them.
+
 ## [0.78.1] - 2026-09-01
 ### Fixed
 - **The journal rail overlapped itself into an unreadable mess.** It mixed two
