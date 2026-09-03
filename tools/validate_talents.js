@@ -38,6 +38,7 @@ for (let r = 0; r < T.rows; r++) {
 // 3.3.5 TalentTab ids per class.
 const CLASS_TABS = {
   PALADIN: [382, 383, 381], HUNTER: [361, 363, 362], PRIEST: [201, 202, 203],
+  MAGE: [81, 41, 61],   // Arcane / Fire / Frost
 };
 
 // Load the class data files (pure tables).
@@ -56,7 +57,8 @@ function templatesOf(file) {
   }
   return out;
 }
-const FILES = { PALADIN: "BuildData.lua", HUNTER: "HunterData.lua", PRIEST: "PriestData.lua" };
+const FILES = { PALADIN: "BuildData.lua", HUNTER: "HunterData.lua", PRIEST: "PriestData.lua",
+                MAGE: "MageData.lua" };
 
 let bad = 0;
 for (const [cls, file] of Object.entries(FILES)) {

@@ -73,7 +73,7 @@ function curated(file, prefix) {
   return { names: out, missed };
 }
 const FILES = { PALADIN: ["BuildData.lua", "B"], HUNTER: ["HunterData.lua", "H"],
-                PRIEST: ["PriestData.lua", "B"] };
+                PRIEST: ["PriestData.lua", "B"], MAGE: ["MageData.lua", "B"] };
 
 let problems = 0;
 console.log(`perk DB: ${dbCount} distinct echo names\n`);

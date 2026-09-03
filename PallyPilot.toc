@@ -9,6 +9,7 @@ Core.lua
 BuildData.lua
 HunterData.lua
 PriestData.lua
+MageData.lua
 Dashboard.lua
 FarmQueue.lua
 EchoAudit.lua
