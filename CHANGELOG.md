@@ -4,6 +4,35 @@ Notable changes to PallyPilot. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versions match the GitHub
 releases and the `.toc`. Full commit-level history is in git.
 
+## [0.82.0] - 2026-09-04
+### Fixed
+- **The item tooltip only ever talked about affixes.** Hovering a ring with a
+  5/6 affix AND an empty red socket printed one line about the affix and nothing
+  about the socket -- and an item whose affix was already VI printed nothing at
+  all, which reads as "this item is done" when it still had an empty gem slot and
+  no enchant. The Gear page knew all of this; the tooltip just never said it.
+
+  Tooltips now cover all three axes -- **affix, gems, enchant** -- naming the
+  specific gem (from the class's own `gemRec`) and the specific enchant plus
+  where to get it. Silence still means finished; it just means it truthfully now.
+- **Off-class characters were never told to gem anything.** `GearOpt.SlotReport`
+  returned *nothing* for a non-paladin, because its enchant table is
+  Retribution-specific (Strength/AP plate) and a wrong "missing enchant" flag is
+  worse than silence. But that threw out the factual half with the opinionated
+  half: an empty socket is an empty socket on any class.
+
+  It now separates the two. Item level and sockets are reported for everyone;
+  only the enchant *recommendation* stays gated. Off-class there is still no
+  enchant flag and no enchant check in the gear score -- but empty sockets are
+  now counted and advised, using the class's own gem recommendation. Priest,
+  Hunter and Mage gear scores will move as a result.
+
+### Added
+- `tooltip_advice_test`, pinning the reported case (affix rank *and* empty socket
+  on one ring), the silent-when-finished rule, the off-class split (gem line yes,
+  enchant line no), and that every line leads with a WORD rather than relying on
+  colour. 26 tests green.
+
 ## [0.81.0] - 2026-09-03
 ### Fixed
 - **The gear advisor was hiding a free affix slot.** Shirt and Tabard were
