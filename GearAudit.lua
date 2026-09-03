@@ -68,9 +68,11 @@ local function ScanSlot(slot)
     local txt = fsL and fsL:GetText()
     if txt and txt ~= "" then lines[#lines + 1] = txt end
   end
-  local name, _, _, ilvl = GetItemInfo(link)
-  -- GetItemInfo's 4th return is item level in 3.3.5.
-  return { name = name, ilvl = ilvl, lines = lines }
+  local name, _, quality, ilvl = GetItemInfo(link)
+  -- GetItemInfo in 3.3.5: 3rd return is quality (rarity), 4th is item level.
+  -- Quality is needed to tell an Epic shirt (which DOES take an affix here)
+  -- from a plain one (which does not) -- see COSMETIC in GA.Compute.
+  return { name = name, quality = quality, ilvl = ilvl, lines = lines }
 end
 
 -- One slot's verdict: status is "ok" | "rank" | "swap" | "missing".
@@ -102,14 +104,24 @@ local function Judge(slot, item)
   return out
 end
 
+-- Item quality (GetItemInfo 3rd return): 0 Poor .. 4 Epic, 5 Legendary.
+local EPIC = 4
+
 function GA.Compute()
   local results = {}
-  -- Slots 4 (shirt) and 19 (tabard) carry no stats and cannot take an affix,
-  -- so grading them produced red "no affix" dots on the paperdoll and a
-  -- tooltip telling you to re-roll an affix onto your tabard.
+  -- Slots 4 (shirt) and 19 (tabard) are USUALLY cosmetic -- no stats, no affix --
+  -- and grading them blindly used to produce red "no affix" dots on the paperdoll
+  -- and a tooltip telling you to re-roll an affix onto your tabard.
+  --
+  -- But that is only true below Epic. On Ebonhold an EPIC shirt (e.g. the Epic
+  -- Purple Shirt) DOES take an affix, so skipping the slot outright hid a real,
+  -- free affix slot -- the opposite failure, and a silent one. Gate on quality
+  -- instead of on the slot: cosmetic slots are graded only when what is actually
+  -- equipped there is Epic or better.
   local COSMETIC = { [4] = true, [19] = true }
   for slot = 1, 19 do
-    local item = not COSMETIC[slot] and ScanSlot(slot) or nil
+    local item = ScanSlot(slot)
+    if item and COSMETIC[slot] and (item.quality or 0) < EPIC then item = nil end
     if item then
       local j = Judge(slot, item)
       if j then results[#results + 1] = j end
@@ -135,8 +147,11 @@ GA.BIS = {}
 local ASH = "|cff9db3bd"
 local gearRows, expandedSlot, showAll = {}, nil, false
 
--- Paperdoll display order (skip shirt 4 / tabard 19).
-local PD_ORDER = { 1, 2, 3, 15, 5, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17, 18 }
+-- Paperdoll display order. Shirt (4) and Tabard (19) sit after Chest, where the
+-- real paperdoll puts them. They only ever produce a row when GA.Compute graded
+-- them -- i.e. when what is equipped there is Epic and so can carry an affix --
+-- so a plain shirt still costs nothing and shows nothing.
+local PD_ORDER = { 1, 2, 3, 15, 5, 4, 19, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17, 18 }
 
 -- Merge affix verdicts (Compute) with enchant/gem gaps (GearOpt.SlotReport).
 local function CollectRows()

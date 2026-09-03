@@ -1389,6 +1389,57 @@ function EF.StartRerollSmart()
   if #RunJunk() > 0 then EF.StartReroll() else EF.StartQualityFish() end
 end
 
+-- Orbs per roll. The number that matters here is BIG: an orb reroll's quality
+-- boost scales with orbs spent (~100 orbs ~= ~100% higher), so the useful range
+-- is 1 -> 100. Stepping by one meant ~99 clicks to reach a roll worth making,
+-- and the rail's own NEXT line ("crank orbs/reroll up first") was asking for
+-- something the buttons made tedious. The +/- buttons now walk this ladder, so
+-- any setting is at most six clicks, and `/ep orbs <n>` sets an exact value for
+-- anything in between. Declared here (module scope, above the rail builder that
+-- uses it) because a file-local referenced above its `local` compiles to a
+-- global lookup and is nil at runtime.
+local ORB_LADDER = { 1, 5, 10, 25, 50, 75, 100 }
+
+-- Next rung in `dir` (-1 down, +1 up). Works from an OFF-ladder value too, so a
+-- number typed via /ep orbs still steps sensibly instead of snapping to 1.
+local function NextOrbRung(cur, dir)
+  cur = cur or 1
+  if dir < 0 then
+    local best = ORB_LADDER[1]
+    for _, v in ipairs(ORB_LADDER) do if v < cur then best = v end end
+    return best
+  end
+  for _, v in ipairs(ORB_LADDER) do if v > cur then return v end end
+  return ORB_LADDER[#ORB_LADDER]
+end
+
+-- Set an exact orbs-per-roll value. Returns the clamped value, or nil if `n`
+-- was not a number, so the caller can report a bad argument rather than
+-- silently doing nothing. Safe before the rail exists (__orbText is nil then).
+function EF.SetOrbs(n)
+  n = tonumber(n)
+  if not n then return nil end
+  n = math.max(1, math.min(100, math.floor(n)))
+  PP.db.options.rerollOrbs = n
+  if EF.__orbText then EF.__orbText() end
+  return n
+end
+
+-- One rung along the ladder (dir -1/+1), or straight to the end when `toEnd`.
+-- Public and UI-free so the stepping is testable without building the rail --
+-- the -/+ handlers are thin wrappers over this.
+function EF.StepOrbs(dir, toEnd)
+  local n
+  if toEnd then
+    n = (dir < 0) and ORB_LADDER[1] or ORB_LADDER[#ORB_LADDER]
+  else
+    n = NextOrbRung(PP.db.options.rerollOrbs, dir)
+  end
+  PP.db.options.rerollOrbs = n
+  if EF.__orbText then EF.__orbText() end
+  return n
+end
+
 -- Quality fish (mechanics confirmed 2026-08-26): an orb reroll forgets your
 -- LOWEST-quality stack and opens a RANDOM 3-echo draw from the enabled pool
 -- at boosted quality (~100 orbs = ~100% higher). So it can't target one
@@ -1883,15 +1934,13 @@ local function BuildRail()
       .. (PP.db.options.rerollOrbs or 1) .. R)
   end
   EF.__orbText = orbText
+  -- Click walks the ORB_LADDER; shift-click jumps straight to the end, because
+  -- 1 and 100 are the two settings anyone actually wants in a hurry.
   rail.orbMinus:SetScript("OnClick", function()
-    local step = IsShiftKeyDown() and 10 or 1
-    PP.db.options.rerollOrbs = math.max(1, (PP.db.options.rerollOrbs or 1) - step)
-    orbText()
+    EF.StepOrbs(-1, IsShiftKeyDown()); orbText()
   end)
   rail.orbPlus:SetScript("OnClick", function()
-    local step = IsShiftKeyDown() and 10 or 1
-    PP.db.options.rerollOrbs = math.min(100, (PP.db.options.rerollOrbs or 1) + step)
-    orbText()
+    EF.StepOrbs(1, IsShiftKeyDown()); orbText()
   end)
   orbText()
 

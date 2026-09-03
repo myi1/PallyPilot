@@ -4,6 +4,45 @@ Notable changes to PallyPilot. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versions match the GitHub
 releases and the `.toc`. Full commit-level history is in git.
 
+## [0.81.0] - 2026-09-03
+### Fixed
+- **The gear advisor was hiding a free affix slot.** Shirt and Tabard were
+  skipped outright, on the assumption that they carry no stats and cannot take
+  an affix. That is true of a plain shirt -- and skipping them is what stopped
+  the advisor telling you to re-roll an affix onto your tabard -- but it is NOT
+  true of an **Epic** one, which on Ebonhold takes an affix like any other slot.
+  So the one case where the slot was worth something was the one case that was
+  invisible.
+
+  The gate is now the item's **quality**, not the slot number: cosmetic slots are
+  graded only when what is equipped there is Epic or better. A plain shirt still
+  shows nothing; an Epic Purple Shirt with no affix now shows up as a FIX with
+  the affix to chase. Expect your gear score to dip slightly and your fix count
+  to go up by one -- that is a real gap becoming visible, not a regression.
+- `PriestData` only defined affix targets for slots 1-18, so a priest would have
+  had no verdict on an Epic tabard even after the above. All four classes now
+  cover 1-19.
+
+### Changed
+- **Orbs per roll walks a ladder instead of counting to 100.** An orb reroll's
+  quality boost scales with the orbs you spend (~100 orbs is roughly double), and
+  the rail's own NEXT line tells you to crank it up first -- but the `-`/`+`
+  buttons stepped by **one**, so taking that advice meant about 99 clicks. They
+  now step 1 / 5 / 10 / 25 / 50 / 75 / 100, so any setting is at most six clicks,
+  and **shift-click jumps straight to 1 or 100**.
+- New **`/ep orbs <n>`** sets an exact value between the rungs; bare `/ep orbs`
+  reports the current setting. It clamps to 1-100, floors fractions and rejects
+  non-numbers rather than writing junk into SavedVariables -- a nil or a float
+  there would have broken every later reroll line that formats it.
+
+### Added
+- `orb_ladder_test` and `cosmetic_affix_test`. The ladder one asserts the thing
+  the change exists for (1 to 100 in <= 6 clicks) and the case a naive
+  find-the-index implementation gets wrong: stepping from an off-ladder value
+  typed via `/ep orbs`. The affix one pins BOTH directions -- an Epic shirt is
+  graded, a plain shirt is still silent -- so neither bug can come back alone.
+  25 tests green.
+
 ## [0.80.0] - 2026-09-03
 ### Added
 - **MAGE is the fourth supported class** (`MageData.lua`, `PP.Classes.MAGE`) at
