@@ -494,6 +494,71 @@ local function AdviceFor(itemName)
   return nil
 end
 
+-- Which equipped slot is this item in? Needed because gem/enchant advice is
+-- keyed by SLOT while a tooltip only hands us a name. Cached on the same 10s
+-- cadence as the affix results -- OnTooltipSetItem fires on every mouseover, so
+-- this must not walk 19 slots each time.
+local slotCache, slotCacheAt, optCache = nil, 0, nil
+local function EquippedIndex()
+  local now = GetTime and GetTime() or 0
+  if not slotCache or (now - slotCacheAt) > 10 then
+    slotCache, slotCacheAt = {}, now
+    for slot = 1, 19 do
+      local link = GetInventoryItemLink("player", slot)
+      if link then
+        local n = GetItemInfo(link)
+        -- First slot wins, so a duplicate name (two identical rings) advises on
+        -- one of them rather than flickering between the two.
+        if n and slotCache[n] == nil then slotCache[n] = slot end
+      end
+    end
+    optCache = (PP.GearOpt and PP.GearOpt.SlotReport and PP.GearOpt.SlotReport()) or {}
+  end
+  return slotCache, optCache
+end
+
+-- Everything worth saying about one equipped item: affix, gems, enchant.
+-- Returns an array of {text, r, g, b}; empty when the item is fully kitted --
+-- a tooltip that repeats "all good" on every mouseover is noise.
+-- Colorblind: every line leads with a WORD ("no affix", "empty socket", "no
+-- enchant"), so colour is only ever a redundant hint.
+function GA.TooltipLines(itemName)
+  local lines = {}
+  if not itemName then return lines end
+  local r = AdviceFor(itemName)
+  if r then
+    if r.status == "missing" then
+      lines[#lines + 1] = { "EbonPilot: no affix -- add " .. tostring(r.want), 0.85, 0.25, 0.15 }
+    elseif r.status == "swap" then
+      lines[#lines + 1] = { "EbonPilot: re-affix to " .. tostring(r.want), 0.85, 0.41, 0.29 }
+    elseif r.status == "rank" then
+      lines[#lines + 1] = { "EbonPilot: raise affix to VI (now " .. (r.rank or "?")
+        .. "/" .. (r.target or 6) .. ")", 0.96, 0.85, 0.53 }
+    end
+  end
+  local byName, opt = EquippedIndex()
+  local slot = byName[itemName]
+  local g = slot and opt[slot]
+  if g then
+    local empty = g.emptyGems or 0
+    if empty > 0 then
+      -- What to gem with is CLASS data, so this line is right on every class.
+      local rec = (PP.Build and PP.Build.gemRec) or "your class's gem"
+      lines[#lines + 1] = { "EbonPilot: " .. empty .. " empty socket"
+        .. (empty > 1 and "s" or "") .. " -- gem " .. rec, 0.85, 0.41, 0.29 }
+    end
+    -- encRec is nil off-class on purpose (the table is Retribution-specific),
+    -- so a non-paladin simply gets no enchant line instead of plate advice.
+    if g.encMiss and g.encRec then
+      lines[#lines + 1] = { "EbonPilot: no enchant -- " .. g.encRec, 0.85, 0.25, 0.15 }
+      if g.encSrc then
+        lines[#lines + 1] = { "   from " .. g.encSrc, 0.71, 0.65, 0.53 }
+      end
+    end
+  end
+  return lines
+end
+
 function GA.HookUI()
   if PaperDollFrame and not GA.__pdHooked then
     GA.__pdHooked = true
@@ -503,18 +568,12 @@ function GA.HookUI()
     GA.__ttHooked = true
     GameTooltip:HookScript("OnTooltipSetItem", function(tip)
       PP.safeCall(function()
-        local name = tip:GetItem()
-        local r = AdviceFor(name)
-        if not r then return end
-        if r.status == "missing" then
-          tip:AddLine("EbonPilot: no affix — add " .. r.want, 0.85, 0.25, 0.15)
-        elseif r.status == "swap" then
-          -- Not "survival plan" any more: the affix targets moved to the
-          -- crit/haste damage list when Ret's Ebonhold meta was pinned down.
-          tip:AddLine("EbonPilot: re-affix to " .. r.want, 0.85, 0.41, 0.29)
-        elseif r.status == "rank" then
-          tip:AddLine("EbonPilot: raise affix to VI (now " .. (r.rank or "?") .. "/" .. (r.target or 6) .. ")", 0.96, 0.85, 0.53)
-        end
+        -- All three axes now, not just the affix: an item with a perfect affix
+        -- and an empty socket used to say nothing at all, which read as "this
+        -- item is done". Silence still means done -- it just means it for real.
+        local lines = GA.TooltipLines(tip:GetItem())
+        if #lines == 0 then return end
+        for _, l in ipairs(lines) do tip:AddLine(l[1], l[2], l[3], l[4]) end
         tip:Show()
       end)
     end)

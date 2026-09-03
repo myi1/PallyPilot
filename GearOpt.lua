@@ -240,15 +240,25 @@ local BASE_SRC = {
 -- slot: { ilvl, encMiss, encRec, encSrc, enchantable, sockets, emptyGems }.
 function GO.SlotReport()
   local out = {}
-  -- Return nothing off-class: GearAudit renders these as MISSING/gap markers on
-  -- the paperdoll, and a wrong "missing enchant" flag is worse than silence.
-  if not AdviceApplies() then return out end
+  -- FACTS vs ADVICE. This used to return nothing at all off-class, because a
+  -- wrong "missing enchant" flag is worse than silence. But that threw out the
+  -- factual half with the opinionated half: an EMPTY SOCKET is an empty socket
+  -- on any class, and suppressing it meant a priest/hunter/mage was never told
+  -- to gem an item at all.
+  --
+  -- So: item level and sockets are reported for everyone; only the ENCHANT
+  -- recommendation stays gated to the class its table was written for
+  -- (Retribution, Strength/AP plate). Off-class, `rec` is nil, so encMiss is
+  -- false and `enchantable` is false -- no enchant flag on the paperdoll and no
+  -- enchant check in the gear score, exactly as before. What to GEM with is
+  -- class data (PP.Build.gemRec), so the caller has that per class already.
+  local advice = AdviceApplies()
   for slot = 1, 18 do
     local link = GetInventoryItemLink("player", slot)
     if link then
       local _, _, _, ilvl = GetItemInfo(link)
       local it = ParseLink(link)
-      local rec = ENCH[slot]
+      local rec = advice and ENCH[slot] or nil
       local encMiss = it and rec and not rec.optional and (it.enchant or 0) == 0 or false
       local sockets = SocketCount(link)
       local slotted = 0
