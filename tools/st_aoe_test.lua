@@ -48,9 +48,11 @@ PP.BuildLog = {}
 PP.EchoAudit = { LockSlots = function() return 6 end }
 PP.db = { buildLog = {}, fights = {} }
 
-local function fight(build, dps, tgts)
+-- lvl defaults to 80 (the player's level in this harness) so the existing cases
+-- keep their meaning; pass a lower one to represent a levelling fight.
+local function fight(build, dps, tgts, lvl)
   PP.db.fights[#PP.db.fights + 1] =
-    { build = build, dps = dps, dur = 30, tgts = tgts }
+    { build = build, dps = dps, dur = 30, tgts = tgts, lvl = lvl or 80 }
 end
 
 assert(loadfile("BuildLog.lua"))()
@@ -194,6 +196,63 @@ assert(string.find(page, "provisional", 1, true),
   "and it must be flagged as provisional:\n" .. page)
 print("10. all-thin still answers, flagged provisional")
 
+-- 11. LEVELLING FIGHTS MUST NOT COUNT. Straight from the real log: build labels
+--     span the whole climb ("Loadout 7" covers levels 1-80) and the pollution
+--     is UNEQUAL -- 55% of one build's fights were logged while levelling
+--     against 15% of another's. Filtered to 80, the build the page called worst
+--     more than doubled its single-target number (60k -> 137k).
+PP.db.fights = {}
+PP.db.buildLog = { ["a"] = { name = "Climber", id = "a" },
+                   ["b"] = { name = "Endgame", id = "b" } }
+-- Climber is strong at 80 but most of its log is low-level junk.
+for _ = 1, 10 do fight("Climber", 200000, 1, 80) end
+for _ = 1, 40 do fight("Climber", 9000, 1, 62) end
+-- Endgame is weaker at 80 but was only ever played there.
+for _ = 1, 10 do fight("Endgame", 150000, 1, 80) end
+BL.CurrentKey = function() return nil, nil end
+written = {}
+PP.safeCall(BL.Refresh)
+page = table.concat(written, "\n")
+local iSt3 = string.find(page, "Single target:", 1, true)
+assert(iSt3, "a single-target winner must be named:\n" .. page)
+local win = string.sub(page, iSt3, iSt3 + 90)
+assert(string.find(win, "Climber", 1, true),
+  "at level 80 Climber (200k) beats Endgame (150k); its levelling fights must "
+  .. "not drag it down: " .. win)
+print("11. levelling fights excluded -- like-for-like on level")
+
+-- 12. EXACTLY ONE [RUNNING NOW], even when three captures share a name. The
+--     real log has three rows called "Bis build"; matching by name lit the
+--     marker on all of them while the header quoted a different row's numbers.
+PP.db.fights = {}
+PP.db.buildLog = {
+  ["k1"] = { name = "Bis build", id = "k1", S = 25 },
+  ["k2"] = { name = "Bis build", id = "k2", S = 28 },
+  ["k3"] = { name = "Bis build", id = "k3", S = 33 },
+}
+for _ = 1, 10 do fight("Bis build", 100000, 1, 80) end
+BL.CurrentKey = function() return "k2", "Bis build" end
+written = {}
+PP.safeCall(BL.Refresh)
+page = table.concat(written, "\n")
+local marks = select(2, string.gsub(page, "RUNNING NOW", ""))
+print("12. three rows share a name -> " .. marks .. " marked live")
+assert(marks == 1, "exactly one row may be marked live, got " .. marks)
+
+-- 13. ...and the rows must be tellable apart, or the page is unreadable.
+assert(string.find(page, "25 S", 1, true) and string.find(page, "33 S", 1, true),
+  "rows sharing a name must be disambiguated by what differs:\n" .. page)
+print("13. colliding names disambiguated by composition")
+
+-- 14. An AMBIGUOUS name with no key match marks nothing rather than guessing.
+BL.CurrentKey = function() return nil, "Bis build" end
+written = {}
+PP.safeCall(BL.Refresh)
+page = table.concat(written, "\n")
+assert(not string.find(page, "RUNNING NOW", 1, true),
+  "with three candidates and no key, guessing one is worse than marking none")
+print("14. ambiguous name marks nothing")
+
 print("\nST/AoE OK -- each bucket answered on its own evidence, no percentage")
-print("claim spans two fight mixes, sample size gates the crown, and the live")
-print("build is named.")
+print("claim spans two fight mixes, sample size gates the crown, levelling")
+print("fights are excluded, and exactly one row is ever live.")

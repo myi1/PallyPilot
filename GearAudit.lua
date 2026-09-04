@@ -31,6 +31,9 @@ local SLOT_NAMES = {
 local SLOT_TARGETS = {}
 
 local ROMAN = { I=1, II=2, III=3, IV=4, V=5, VI=6, VII=7, VIII=8, IX=9, X=10 }
+-- Rank -> numeral, for advice text. Affixes are spoken about in numerals in
+-- game and on Discord ("Pain 3-6" is really III-VI), so print them that way.
+local ROMAN_OF = { [0] = "?", "I", "II", "III", "IV", "V", "VI" }
 
 -- Ebonhold survival/offense affixes cap at VI (6). B.affixDamage lists the
 -- endgame targets as "6/5/4" — VI is the ceiling, so anything below VI still
@@ -75,7 +78,29 @@ local function ScanSlot(slot)
   return { name = name, quality = quality, ilvl = ilvl, lines = lines }
 end
 
--- One slot's verdict: status is "ok" | "rank" | "swap" | "missing".
+-- THE STACKING RULE, and why this cannot be judged one slot at a time.
+--
+-- Verified on the Ebonhold Discord 2026-09-04 (#players-forum "Question about
+-- affixes", 2026-08-28), and corroborated twice:
+--
+--   Rinzler: "If you stack let's say a 'Fortified by Pain V' with another one,
+--   you will only get the benefits of one. 'Stacking' them efficiently would be
+--   getting VI, V, IV, III, etc"
+--   FernagioxXx: "Its the same for every affixes, only different tiers can stack"
+--
+-- So the SAME affix at the SAME rank does not stack -- the duplicate is dead
+-- weight -- but the same affix at DIFFERENT ranks does. The target is a LADDER
+-- of distinct ranks, not rank VI everywhere.
+--
+-- Rellex's 600M mage guide writes exactly that: "Pain 3-6 ... Relentless 4-6",
+-- meaning four items carrying Fortified by Pain at ranks III/IV/V/VI, and
+-- "TAKE OUT A RELENTLESS STRIKE OR 2" to shed crit -- i.e. drop rungs.
+--
+-- This module used to grade each slot on its own and want VI on all of them,
+-- which is the worst possible advice under this rule: follow it to completion
+-- and every duplicate past the first does nothing at all.
+--
+-- One slot's verdict: status is "ok" | "rank" | "dupe" | "swap" | "missing".
 local function Judge(slot, item)
   -- Class-aware: use the logged-in class's own affix targets (every class ships
   -- them in PP.Build.slotTargets). SLOT_TARGETS is {} on purpose (see above), so
@@ -96,12 +121,75 @@ local function Judge(slot, item)
   end
   for _, t in ipairs(targets) do
     if affix == t then
+      -- Provisional. The ladder pass in GA.Compute has to see every slot before
+      -- it can tell an upgrade from a wasted duplicate, so "is this rank below
+      -- VI" is only the starting point.
       out.status = (rank and rank < AFFIX_MAX_RANK) and "rank" or "ok"
       return out
     end
   end
   out.status = "swap"
   return out
+end
+
+-- LADDER PASS. Runs once over the whole equipped set, because a rank is only
+-- wasted RELATIVE to the other items -- nothing about a single slot can tell
+-- you. For each wanted affix, the first item at a given rank counts and every
+-- later one at that SAME rank is dead weight.
+--
+-- Highest rank first, so when two items collide the one flagged is the one with
+-- no unique contribution rather than an arbitrary pick.
+local function MarkLadder(results)
+  local byAffix = {}
+  for _, r in ipairs(results) do
+    if r.affix and r.affix ~= "?" and r.status ~= "swap" and r.status ~= "missing" then
+      byAffix[r.affix] = byAffix[r.affix] or {}
+      table.insert(byAffix[r.affix], r)
+    end
+  end
+  for affix, list in pairs(byAffix) do
+    table.sort(list, function(a, b)
+      if (a.rank or 0) ~= (b.rank or 0) then return (a.rank or 0) > (b.rank or 0) end
+      return (a.slot or 0) < (b.slot or 0)          -- stable, so advice is stable
+    end)
+    local seenRank, taken = {}, {}
+    for _, r in ipairs(list) do
+      r.copies = #list
+      if seenRank[r.rank] then
+        -- A second item at a rank you already have contributes NOTHING.
+        r.status = "dupe"
+        r.dupeOf = seenRank[r.rank]
+      else
+        seenRank[r.rank] = r.slot
+        taken[r.rank] = true
+      end
+    end
+    -- What each still-useful rung should become. The free rungs are the ranks
+    -- nobody holds, highest first -- that is the actual upgrade path, not "VI".
+    local free = {}
+    for want = AFFIX_MAX_RANK, 1, -1 do
+      if not taken[want] then free[#free + 1] = want end
+    end
+    local nextFree = 1
+    for _, r in ipairs(list) do
+      if r.status == "dupe" then
+        -- Re-roll a duplicate onto the highest rank nobody is holding. If every
+        -- rank is taken it is genuinely surplus: say so instead of inventing a
+        -- target that cannot exist.
+        r.ladderTarget = free[nextFree]
+        if r.ladderTarget then nextFree = nextFree + 1 end
+      elseif r.status == "rank" then
+        -- Only worth raising if a HIGHER rung is actually free; otherwise this
+        -- rung is doing its job and "upgrade to VI" would just create a clash.
+        local up
+        for _, f in ipairs(free) do
+          if f > (r.rank or 0) then up = f break end
+        end
+        if up then r.ladderTarget = up else r.status = "ok" end
+      end
+    end
+  end
+  return results
 end
 
 -- Item quality (GetItemInfo 3rd return): 0 Poor .. 4 Epic, 5 Legendary.
@@ -127,7 +215,7 @@ function GA.Compute()
       if j then results[#results + 1] = j end
     end
   end
-  return results
+  return MarkLadder(results)
 end
 
 -- ---------------------------------------------------------------------------
@@ -163,7 +251,12 @@ local function CollectRows()
     local a, g = affix[slot], gaps[slot]
     if a or g then
       local ilvl = (a and a.ilvl) or (g and g.ilvl) or 0
-      local affixGap = (a and (a.status == "missing" or a.status == "swap")) or false
+      -- A duplicate rank is a GAP, not a minor shortfall: the affix is there,
+      -- looks right, and contributes nothing because another item already holds
+      -- that rank. Scoring it as "mostly kitted" would hide the most expensive
+      -- mistake on the page.
+      local affixDupe = (a and a.status == "dupe") or false
+      local affixGap = (a and (a.status == "missing" or a.status == "swap")) or affixDupe
       local affixLow = (a and a.status == "rank") or false
       local encMiss = (g and g.encMiss) or false
       local empty = (g and g.emptyGems) or 0
@@ -182,6 +275,7 @@ local function CollectRows()
         slot = slot, name = SLOT_NAMES[slot] or ("slot " .. slot),
         item = a and a.item, ilvl = ilvl,
         affix = a and a.affix, rank = a and a.rank, affixStatus = a and a.status,
+        ladderTarget = a and a.ladderTarget, copies = a and a.copies,
         want = a and a.want, target = a and a.target,
         affixGap = affixGap, affixLow = affixLow,
         encMiss = encMiss, encRec = g and g.encRec, encSrc = g and g.encSrc,
@@ -220,9 +314,12 @@ local function NeedsText(r)
   -- Keep the row short: the affix NAME/target lives in the expanded detail.
   local t = {}
   if r.affixGap then
-    t[#t + 1] = (r.affixStatus == "swap") and "wrong affix" or "no affix"
+    if r.affixStatus == "dupe" then t[#t + 1] = "duplicate rank"
+    elseif r.affixStatus == "swap" then t[#t + 1] = "wrong affix"
+    else t[#t + 1] = "no affix" end
   elseif r.affixLow then
-    t[#t + 1] = "affix " .. (r.rank or 0) .. "/" .. (r.target or AFFIX_MAX_RANK)
+    -- The rung it should reach, not a flat /VI: only different ranks stack.
+    t[#t + 1] = "affix " .. (r.rank or 0) .. " -> " .. (r.ladderTarget or r.rank or 0)
   end
   if r.encMiss then t[#t + 1] = "enchant" end
   if (r.empty or 0) > 0 then t[#t + 1] = r.empty .. (r.empty > 1 and " gems" or " gem") end
@@ -322,11 +419,18 @@ function GA.Refresh()
           if r.slot == 6 then txt = txt .. DIM .. "  + Eternal Belt Buckle" .. R end
           act("Gem", EMBER .. txt .. R)
         end
-        if r.affixGap then
+        if r.affixStatus == "dupe" then
+          act("Affix", EMBER .. "DUPLICATE " .. (r.affix or "") .. " "
+            .. (r.rank or "?") .. R .. DIM .. " -- another item already holds "
+            .. "that rank, so this one does nothing. " .. R
+            .. (r.ladderTarget
+                and (EMBER .. "Re-roll to " .. r.ladderTarget .. R)
+                or (EMBER .. "Every rank is held -- re-affix or drop it" .. R)))
+        elseif r.affixGap then
           act("Affix", EMBER .. "re-roll to " .. (r.want or "?") .. R)
         elseif r.affixLow then
           act("Affix", ASH .. "raise " .. (r.affix or "") .. " to "
-            .. (r.target or AFFIX_MAX_RANK) .. R)
+            .. (r.ladderTarget or r.target or AFFIX_MAX_RANK) .. R)
         end
         local b = ((PP.Build and PP.Build.bis) or GA.BIS)[r.slot]
         if b then
@@ -439,10 +543,15 @@ local SLOT_BUTTON = {
 -- Colour AND a letter. Three shades of orange-red is not a distinction a
 -- colourblind reader can make, and the paperdoll has no legend to consult:
 --   X = no affix at all   S = wrong affix, swap it   R = right affix, low rank
+-- Colour AND a letter, because colour alone says nothing here.
+--   X = no affix   S = wrong affix   R = rank can go up   D = duplicate rank
+-- D is the one that costs you silently: the item looks correctly affixed and
+-- contributes nothing, because something else already holds that rank.
 local DOT_MARK = {
   missing = { 0.85, 0.25, 0.15, "X" },
   swap    = { 0.85, 0.41, 0.29, "S" },
   rank    = { 0.96, 0.85, 0.53, "R" },
+  dupe    = { 0.85, 0.33, 0.55, "D" },
 }
 
 local cache, cacheAt = nil, 0
@@ -531,9 +640,20 @@ function GA.TooltipLines(itemName)
       lines[#lines + 1] = { "EbonPilot: no affix -- add " .. tostring(r.want), 0.85, 0.25, 0.15 }
     elseif r.status == "swap" then
       lines[#lines + 1] = { "EbonPilot: re-affix to " .. tostring(r.want), 0.85, 0.41, 0.29 }
+    elseif r.status == "dupe" then
+      -- The expensive one to miss: correctly affixed, contributing nothing.
+      local fix = r.ladderTarget
+        and ("re-roll it to " .. ROMAN_OF[r.ladderTarget])
+        or "every rank is already held -- re-affix or drop it"
+      lines[#lines + 1] = { "EbonPilot: DUPLICATE " .. tostring(r.affix) .. " "
+        .. ROMAN_OF[r.rank or 0] .. " -- same rank as another item, so this one "
+        .. "does nothing. " .. fix, 0.85, 0.33, 0.55 }
     elseif r.status == "rank" then
-      lines[#lines + 1] = { "EbonPilot: raise affix to VI (now " .. (r.rank or "?")
-        .. "/" .. (r.target or 6) .. ")", 0.96, 0.85, 0.53 }
+      -- NOT "raise to VI": only different RANKS stack, so the target is the
+      -- highest rung nobody else is holding.
+      local up = r.ladderTarget or r.target or 6
+      lines[#lines + 1] = { "EbonPilot: raise affix to " .. ROMAN_OF[up]
+        .. " (now " .. ROMAN_OF[r.rank or 0] .. ")", 0.96, 0.85, 0.53 }
     end
   end
   local byName, opt = EquippedIndex()

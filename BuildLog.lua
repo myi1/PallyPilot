@@ -68,9 +68,26 @@ local function Bucket(f)
   return nil
 end
 
+-- ONLY COMPARE FIGHTS AT YOUR CURRENT LEVEL.
+--
+-- Measured on the real log 2026-09-04: build labels span the whole climb --
+-- "Loadout 7" covers levels 1-80, "Bis build" 61-80 -- and a level-61 fight
+-- lands in the same average as a level-80 one. That alone would be bad; what
+-- makes it ruinous is that the pollution is UNEQUAL. 55% of "Bis build" fights
+-- were logged while levelling against 15% of "Loadout 7", so the comparison was
+-- mostly measuring which label happened to cover more of the climb.
+--
+-- Filtered to 80 the same build goes from 60k single-target to 137k. The page
+-- was reporting it as the worst thing in the list; it is second.
+local function LevelNow()
+  local l = UnitLevel and UnitLevel("player")
+  return (type(l) == "number" and l > 0) and l or nil
+end
+
 local function Measured(key, name)
   local best, sum, n = 0, 0, 0
   local stSum, stN, aoeSum, aoeN = 0, 0, 0, 0
+  local lvl, skippedLvl = LevelNow(), 0
   for _, f in ipairs((PP.db and PP.db.fights) or {}) do
     -- ID is authoritative when BOTH sides have one; name matching is ONLY the
     -- legacy fallback for fights logged before ids existed. The old `id-match
@@ -88,6 +105,13 @@ local function Measured(key, name)
     else
       match = (f.build ~= nil and f.build == name)
     end
+    -- A fight below your current level is not evidence about a build, it is
+    -- evidence about being under-levelled. Records with no level predate the
+    -- field and are kept rather than silently dropped.
+    if match and lvl and f.lvl and f.lvl ~= lvl then
+      skippedLvl = skippedLvl + 1
+      match = false
+    end
     if match and f.dps and (f.dur or 0) >= 10 then
       n = n + 1; sum = sum + f.dps
       if f.dps > best then best = f.dps end
@@ -97,7 +121,7 @@ local function Measured(key, name)
     end
   end
   if n == 0 then return nil end
-  return { n = n, avg = sum / n, best = best,
+  return { n = n, avg = sum / n, best = best, offLevel = skippedLvl,
            st = (stN > 0) and (stSum / stN) or nil, stN = stN,
            aoe = (aoeN > 0) and (aoeSum / aoeN) or nil, aoeN = aoeN }
 end
@@ -288,6 +312,10 @@ end
 --
 -- Synthesised rows are marked `_fromFights` so the panel can be honest that
 -- their build composition was never fingerprinted, only their damage.
+-- Which bucket the rows are ranked on. Defaults to single target: that is the
+-- boss number, and the one people mean by "which build is better".
+BL.sortBucket = BL.sortBucket or "st"
+
 local function MergedLog()
   local log = PP.db and PP.db.buildLog
   local out = {}
@@ -449,9 +477,28 @@ function BL.Refresh()
   for key, r in pairs(log or {}) do
     r._key = key; r._m = Measured(r.id, r.name); list[#list + 1] = r
   end
+  -- RANK ON THE BUCKET YOU ARE READING, not a blended average.
+  --
+  -- The page used to sort on `avg` and then tell the reader, in its own caveat
+  -- line, that the blend "mixes both" -- ranking by a number it admitted was
+  -- misleading. AoE fights run an order of magnitude higher than single-target
+  -- here (median 394k vs 77k), so the blend mostly ranked whichever build had
+  -- fought more trash.
+  --
+  -- Sort key: AoE when the reader is looking at AoE, else single-target, with
+  -- the blend only as a last resort for rows that have neither bucket (old
+  -- records with no target count). BL.sortBucket is set by the page's toggle.
+  local function SortVal(m)
+    if not m then return nil end
+    if BL.sortBucket == "st" then return m.st or m.avg end
+    if BL.sortBucket == "aoe" then return m.aoe or m.avg end
+    return m.st or m.aoe or m.avg
+  end
   table.sort(list, function(a, b)
-    if (a._m ~= nil) ~= (b._m ~= nil) then return a._m ~= nil end
-    if a._m and b._m then return a._m.avg > b._m.avg end
+    local av, bv = SortVal(a._m), SortVal(b._m)
+    if (av ~= nil) ~= (bv ~= nil) then return av ~= nil end
+    if av and bv and av ~= bv then return av > bv end
+    if av and bv then return (a.name or "") < (b.name or "") end
     return (a.score or 0) > (b.score or 0)
   end)
 
@@ -554,8 +601,13 @@ function BL.Refresh()
         local thin = (#weak > 0)
           and ("  No build has " .. MIN_SAMPLE .. "+ " .. table.concat(weak, " or ")
                .. " fights yet -- provisional.") or ""
-        frame.hint:SetText(DIM .. note .. thin .. "  Rows below are ranked on the "
-          .. "blended average, which mixes both." .. R)
+        -- Say which ranking is live, in words. The old line admitted the rows
+        -- were sorted on a blend that "mixes both" -- i.e. told the reader the
+        -- ordering they were looking at was not to be trusted.
+        local bucketWord = (BL.sortBucket == "aoe") and "AoE" or "single target"
+        frame.hint:SetText(DIM .. note .. thin .. "  Rows below are ranked on "
+          .. R .. BRIGHT .. bucketWord .. R .. DIM
+          .. " -- use the Boss / Trash buttons to switch." .. R)
       end
     end
   end
@@ -602,24 +654,71 @@ function BL.Refresh()
 
   -- The build you are actually running. CurrentKey fingerprints the live run
   -- by its echo CONTENT, which is the same identity the rows are keyed on.
+  -- SHARED NAMES ARE THE NORM, NOT AN EDGE CASE. The real log has THREE
+  -- captures all called "Bis build" (c80/c81/c84, saved 1-3 Sep as the build
+  -- evolved: 25 S -> 28 S -> 33 S). Rendering them as three identical rows made
+  -- the page unreadable, and matching the live build BY NAME lit [RUNNING NOW]
+  -- on all of them at once while the header quoted a different row's numbers.
+  --
+  -- Disambiguate by what actually differs -- the composition -- and fall back
+  -- to the capture date. Never show two rows the reader cannot tell apart.
+  local nameCount = {}
+  for _, b in ipairs(list) do
+    if b.name then nameCount[b.name] = (nameCount[b.name] or 0) + 1 end
+  end
+  for _, b in ipairs(list) do
+    if b.name and (nameCount[b.name] or 0) > 1 then
+      local tag
+      if b.S then tag = b.S .. " S"
+      elseif b.uniques then tag = b.uniques .. " uniq"
+      elseif b.when then tag = tostring(b.when):sub(6, 10) end
+      b._label = b.name .. (tag and (DIM .. "  (" .. tag .. ")" .. R) or "")
+    else
+      b._label = b.name
+    end
+  end
+
   local liveKey, liveName
   if BL.CurrentKey then
     local ok, k, nm = pcall(BL.CurrentKey)
     if ok then liveKey, liveName = k, nm end
   end
 
+  -- Resolve the live row ONCE. The key is the echo-content fingerprint and is
+  -- unique; the NAME is not, so a name match is only a fallback and only when
+  -- no key matched anywhere. Doing this per row is what lit [RUNNING NOW] on
+  -- all three rows called "Bis build".
+  local liveRow
+  if liveKey then
+    for _, b in ipairs(list) do
+      if b._key == liveKey then liveRow = b break end
+    end
+  end
+  if not liveRow and liveName then
+    local hits = 0
+    for _, b in ipairs(list) do
+      if b.name == liveName then hits = hits + 1 end
+    end
+    -- Only trust the name when it is unambiguous. Guessing between three rows
+    -- with the same label is worse than marking none of them.
+    if hits == 1 then
+      for _, b in ipairs(list) do
+        if b.name == liveName then liveRow = b break end
+      end
+    end
+  end
+
   local y, n = 0, 0
   for i, b in ipairs(list) do
     n = n + 1
-    local isLive = (liveKey and b._key == liveKey)
-      or (liveName and b.name == liveName) or false
+    local isLive = (liveRow ~= nil and b == liveRow)
     local r = GetRow(n)
     r:ClearAllPoints(); r:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
 
     -- Rank numeral for measured builds; a dash for ones with no evidence, so
     -- an unmeasured build never looks like it placed in a contest it sat out.
     r.rank:SetText(b._m and (GOLD .. i .. R) or (DIM .. "-" .. R))
-    r.name:SetText(BRIGHT .. tostring(b.name or "?") .. R
+    r.name:SetText(BRIGHT .. tostring(b._label or b.name or "?") .. R
       .. (isLive and (VERD .. "   [RUNNING NOW]" .. R) or ""))
 
     if b._m then
@@ -723,6 +822,27 @@ function BL.Init2()
   score:SetScript("OnClick", function()
     if PP.BuildScore then PP.safeCall(PP.BuildScore.Report) end
   end)
+
+  -- WHICH QUESTION AM I ASKING? Single-target and AoE have different winners
+  -- on this character, so the page cannot answer both at once with one ranking.
+  -- The toggle picks which, and the rows re-sort. Two buttons, and the active
+  -- one is stated in WORDS on the caveat line -- a highlighted button is a
+  -- colour cue and colour carries nothing here.
+  local stBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  stBtn:SetWidth(54); stBtn:SetHeight(20)
+  stBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -32, -64)
+  stBtn:SetText("Boss")
+  local aoeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  aoeBtn:SetWidth(54); aoeBtn:SetHeight(20)
+  aoeBtn:SetPoint("RIGHT", stBtn, "LEFT", -4, 0)
+  aoeBtn:SetText("Trash")
+  stBtn:SetScript("OnClick", function()
+    BL.sortBucket = "st"; PP.safeCall(BL.Refresh)
+  end)
+  aoeBtn:SetScript("OnClick", function()
+    BL.sortBucket = "aoe"; PP.safeCall(BL.Refresh)
+  end)
+  frame.stBtn, frame.aoeBtn = stBtn, aoeBtn
 
   local scroll = CreateFrame("ScrollFrame", "EbonPilotBuildsScroll", frame,
     "UIPanelScrollFrameTemplate")
