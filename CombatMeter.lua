@@ -162,6 +162,63 @@ function CM.FightCap()
   return n
 end
 CM.FIGHT_CAP_MIN, CM.FIGHT_CAP_MAX = FIGHT_CAP_MIN, FIGHT_CAP_MAX
+-- WHAT WAS I HOLDING, AND HOW FAST DID IT SWING?
+--
+-- 94% of this character's damage is echo procs and only 3.6% is white swings,
+-- so the weapon is a proc-delivery device: swing RATE matters far more than
+-- weapon damage. Testing that needs no manual bench tagging -- record the
+-- weapons on every fight and the analysis groups by them afterwards.
+--
+-- Captured ONCE per fight, never per event. Roughly a dozen API calls at the
+-- moment a fight ends, against thousands of combat-log events during it.
+--
+-- Speeds come from UnitAttackSpeed, which reports the HASTED swing timer, so
+-- it already folds in haste procs and buffs -- that is the number that decides
+-- proc rate, not the weapon's base speed on the tooltip.
+local function WeaponSnapshot()
+  local w = {}
+  pcall(function()
+    local mh, oh = UnitAttackSpeed("player")
+    -- Round: these are floats and go straight into SavedVariables, where full
+    -- precision is just noise in a file we already keep 1000 of.
+    if mh then w.mhSpeed = math.floor(mh * 100 + 0.5) / 100 end
+    if oh then w.ohSpeed = math.floor(oh * 100 + 0.5) / 100 end
+  end)
+  pcall(function()
+    local lo, hi, olo, ohi = UnitDamage("player")
+    if lo and hi then w.mhDmg = math.floor((lo + hi) / 2) end
+    if olo and ohi and ohi > 0 then w.ohDmg = math.floor((olo + ohi) / 2) end
+  end)
+  -- Item identity per hand. Name and ilvl are enough to group by; the link is
+  -- not stored because 1000 of them would bloat the file for no analytic gain.
+  for slot, key in pairs({ [16] = "mh", [17] = "oh" }) do
+    pcall(function()
+      local link = GetInventoryItemLink("player", slot)
+      if not link then return end
+      local name, _, _, ilvl, _, _, subType = GetItemInfo(link)
+      w[key] = name
+      w[key .. "Ilvl"] = ilvl
+      w[key .. "Type"] = subType      -- "Daggers", "One-Handed Swords", ...
+    end)
+  end
+  -- The stats that move proc rate and proc size, so a weapon comparison is not
+  -- confounded by a gear swap that happened at the same time.
+  pcall(function() w.crit = math.floor(((GetCritChance and GetCritChance()) or 0) * 10 + 0.5) / 10 end)
+  pcall(function()
+    -- GetMeleeHaste returns nil on this client; the combat rating is the
+    -- reliable read (CR_HASTE_MELEE = 18). Same fallback Core's scan uses.
+    local pct = (GetMeleeHaste and GetMeleeHaste())
+      or (GetCombatRatingBonus and GetCombatRatingBonus(18))
+    if pct then w.haste = math.floor(pct * 10 + 0.5) / 10 end
+  end)
+  pcall(function()
+    local b, pos, neg = UnitAttackPower("player")
+    w.ap = math.floor((b or 0) + (pos or 0) + (neg or 0))
+  end)
+  if not next(w) then return nil end
+  return w
+end
+
 local function SaveFight(f)
   PP.db.fights = PP.db.fights or {}
   local log = PP.db.fights
@@ -254,6 +311,9 @@ local function SaveFight(f)
     died = f.died or nil,
     -- Chronological last-8 with HP after each -- the only way to tell a one-shot
     -- from attrition, or to prove the lethal hit was never captured.
+    -- Weapons + the stats that drive swing rate, so "which setup was this?"
+    -- is answerable from the log with no bench tag typed at any point.
+    weap = WeaponSnapshot(),
     deathTrail = f.deathTrail,
     instakill = f.instakill,       -- a SPELL_INSTAKILL that bypassed damage events
   }
