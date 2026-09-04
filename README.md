@@ -94,5 +94,14 @@ to SavedVariables for troubleshooting — you won't need them day to day.
 2. Extract the `PallyPilot` folder into `World of Warcraft\Interface\AddOns\`.
 3. `/reload` (or restart) — type `/pp` in-game to open the console.
 
+## The systems reference
+
+[**docs/EBONHOLD-SYSTEM.md**](docs/EBONHOLD-SYSTEM.md) is the research this addon
+is built on -- how echoes, orbs, tomes, item affixes, Soul Ash and prestige
+actually work on Ebonhold, with every claim cited to its source (the server's own
+client code, the Discord, or in-game observation) and an explicit list of what is
+still unverified. Corrections welcome; it is a living document and it has been
+wrong before.
+
 See [CHANGELOG.md](CHANGELOG.md) for the per-version history. Client-side only;
 not affiliated with the Project Ebonhold team.

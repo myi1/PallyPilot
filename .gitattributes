@@ -1,0 +1,15 @@
+# Keep the RELEASE ZIP to what WoW actually loads.
+#
+# The zip is cut with `git archive`, which honours export-ignore, so anything
+# marked here stays on the branch (GitHub Pages still serves docs/) but never
+# lands in someone's Interface\AddOns folder.
+#
+# Measured at v0.84.0: the zip was 512 KB, and 347 KB of that was the Ash Tree
+# planner page -- a web page the game cannot use, shipped to every installer.
+# Neither docs/ nor tools/ appears in the .toc, so the addon loads none of it.
+docs/       export-ignore
+tools/      export-ignore
+.gitattributes export-ignore
+
+# The 3.3.5 client reads Lua as bytes; keep line endings stable in the repo.
+*.lua text eol=lf
